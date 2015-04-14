@@ -1,0 +1,65 @@
+#!/bin/bash
+
+#
+# starts installimage in a new screen session
+# and reboots the system on success
+#
+# originally written by Florian Wicke and David Mayr
+# (c) 2007-2015, Hetzner Online AG
+#
+
+
+
+TIMEOUT=20
+INSTALLIMAGE="/root/.oldroot/nfs/install/installimage"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+case $1 in
+
+  start)
+    # start installimage script and reboot if successful
+    #
+    shift
+    until false ; do
+
+      $INSTALLIMAGE $@ ; EXITCODE=$?
+
+      if [ $EXITCODE -eq 0 ] ; then
+        echo -e "\n\n\n===>  Erfolgreich beendet.\n"
+        echo -e "Der Computer wird in $TIMEOUT Sekunden neu gestartet !"
+        echo -en "Druecken sie jetzt eine beliebige Taste, um den Neustart zu verhindern: "
+        for i in $(seq 1 $TIMEOUT) ; do
+          echo -n "."
+          read -n1 -t1 key
+          if [ "$key" ] ; then
+            echo -e "\n\nEs wird nicht neu gestartet.\n\n"
+            exec /bin/bash
+            exit 0
+          fi
+        done
+        echo -e "\n\nDer Computer wird jetzt neu gestartet ...\n"
+        reboot
+        sleep 60
+      else
+        echo -e "\n\n\n===>  Es sind Fehler aufgetreten.\n"
+        echo -e "Es wird eine Sub-Shell gestartet ..."
+        echo -e "Nach beenden der Sub-Shell wird installimage erneut ausgefuehrt.\n"
+        /bin/bash
+      fi
+    
+    done
+  ;;
+
+  *)
+    # if we were called without the parameter 'start', restart ourself in a new screen
+    #
+    echo -e "\n\nHINWEIS:\n-------" >>/etc/motd
+    echo -e "installimage wurde nach dem booten in einer screen-session gestartet." >>/etc/motd
+    echo -e "Um sich mit der screen-session zu verbinden, 'screen -x' eingeben ...\n" >>/etc/motd
+    screen -AS installimage $0 start $@
+  ;;
+
+esac
+

@@ -1,0 +1,30 @@
+# set the HOSTNAME like this:
+# HOSTNAME wwwXXX.cpt1.host-h.net
+HOSTNAME 
+
+### SA IMAGE:
+#IMAGE ftp://managedbuilds:PASSWD@bootserver/masterbuild64wheezy.jnb1.host-h.net.tar.gz
+
+### DE IMAGE:
+### IMAGE ftp://demaster:PASSWD@imagemaster.nur4.host-h.net/masterbuild64.flk1.host-h.net.tar.gz
+IMAGE ftp://demaster:PASSWD@imagemaster.nur4.host-h.net/masterbuild64wheezy.jnb1.host-h.net.tar.gz
+
+
+DRIVE1 /dev/sda
+DRIVE2 /dev/sdb
+
+SWRAID 1 
+SWRAIDLEVEL 1
+
+BOOTLOADER grub
+
+PART /boot  ext3      256
+PART lvm    vg        all
+
+LV vg   root     /          ext4  15G
+LV vg   swap     swap       swap   4G
+LV vg   tmp      /tmp       ext4   5G
+LV vg   usr      /usr       ext4  60G
+LV vg   var      /var       ext4  60G
+LV vg   vartmp   /var/tmp   ext4   6G
+

@@ -1,0 +1,16 @@
+
+DRIVE1 /dev/sda
+DRIVE2 /dev/sdb
+
+SWRAID 1
+SWRAIDLEVEL 1
+
+BOOTLOADER grub
+
+HOSTNAME Debian-78-wheezy-64-minimal
+
+PART swap swap 2G
+PART /    ext4 all
+
+IMAGE /root/images/Debian-78-wheezy-64-minimal.tar.gz
+

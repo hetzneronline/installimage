@@ -1,0 +1,71 @@
+#!/bin/bash
+
+#
+# Proxmox Virtualization Environment installer script
+#   based on Debian Squeeze
+#
+
+
+PROXMOX_KERNEL_VERSION="2.6.32"
+
+
+echo -e "\n----- Add Proxmox Repo to APT sources -----\n"
+
+echo -e "\n\n# PVE packages provided by proxmox.com" >>/etc/apt/sources.list
+echo -e "deb http://mirror.hetzner.de/debian/pve squeeze pve\n" >>/etc/apt/sources.list
+echo -e "deb http://download.proxmox.com/debian squeeze pve\n" >>/etc/apt/sources.list
+wget -q -O- "http://download.proxmox.com/debian/key.asc" | apt-key add -
+   
+
+#echo -e "\n----- Remove default kernel -----\n"
+#aptitude -y remove $(dpkg -l | grep "^ii  linux-image" | tr -s " " | cut -d " " -f2)
+
+
+echo -e "\n----- Update and upgrade system, please wait ... -----\n"
+
+export LANG="en_US.UTF-8"
+export LC_ALL="C"
+
+
+aptitude update >/dev/null
+aptitude -y safe-upgrade
+
+echo -e "\n----------------- Deinstallieren des Linux-Firmware-Realtek-Paketes ------------------\n"
+
+firmware="$(dpkg -l | grep -i 'firmware')"
+
+if [ -n "$firmware" ]; then
+  aptitude -q -y purge firmware-realtek firmware-linux firmware-linux-free firmware-linux-nonfree
+else
+  echo "kein firmware Paket vorhanden"
+fi
+
+echo -e "\n----- Install Proxmox packages -----\n"
+
+cat <<EOF | debconf-set-selections
+postfix postfix/mailname           string $(cat /etc/hostname)
+postfix postfix/destinations       string $(cat /etc/hostname), proxmox, localhost.localdomain, localhost
+postfix postfix/chattr             boolean false
+postfix postfix/mailbox_limit      string 0
+postfix postfix/main_mailer_type   select Local only
+postfix postfix/mynetworks         string 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+postfix postfix/protocols          select all
+postfix postfix/recipient_delim    string +
+postfix postfix/rfc1035_violation  boolean false
+EOF
+
+
+#/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' install proxmox-ve-$PROXMOX_KERNEL_VERSION
+aptitude --without-recommends -y install postfix proxmox-ve-$PROXMOX_KERNEL_VERSION
+update-grub
+service postfix stop
+service apache2 stop
+service nfs-common stop
+service portmap stop 
+service pvedaemon stop
+service pve-cluster stop
+service pvestatd stop
+service rrdcached stop
+
+echo -e "\n----- Done installing Proxmox VE -----\n"
+
