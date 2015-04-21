@@ -746,11 +746,11 @@ validate_vars() {
   fi
   
   # test if $DRIVE1 is not busy
-  CHECK="$(hdparm -z $DRIVE1 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
-  if [ "$CHECK" ]; then
-    graph_error "ERROR: DRIVE1 is busy - cannot access device $DRIVE1 "
-    return 1
-  fi
+#  CHECK="$(hdparm -z $DRIVE1 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
+#  if [ "$CHECK" ]; then
+#    graph_error "ERROR: DRIVE1 is busy ($CHECK) - cannot access device $DRIVE1 "
+#    return 1
+#  fi
   
   # test if $SWRAID has not 0 or 1 as parameter
   if [ "$SWRAID" != "0" -a "$SWRAID" != "1" ]; then
@@ -3540,7 +3540,7 @@ function isVServer() {
     *) 
       debug "# Systype: $SYSTYPE"
       case "$SYSMFC" in
-	QEMU)
+      	QEMU)
           debug "# Manufacturer: $SYSMFC"
           return 0;;
         *)
