@@ -31,11 +31,12 @@ setup_network_config() {
       echo -e "auto  $1" >> $CONFIGFILE
       echo -e "iface $1 inet static" >> $CONFIGFILE
       echo -e "  address   $3" >> $CONFIGFILE
-      echo -e "  broadcast $4" >> $CONFIGFILE
       echo -e "  netmask   $5" >> $CONFIGFILE
       echo -e "  gateway   $6" >> $CONFIGFILE
-      echo -e "  # default route to access subnet" >> $CONFIGFILE
-      echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
+      if ! is_private_ip "$3"; then 
+        echo -e "  # default route to access subnet" >> $CONFIGFILE
+        echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
+      fi
     fi
 
     if [ "$8" -a "$9" -a "${10}" ]; then

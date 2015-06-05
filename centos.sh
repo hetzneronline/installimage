@@ -32,9 +32,11 @@ setup_network_config() {
 
     echo -e "### Hetzner Online AG - installimage" > $CONFIGFILE 2>>$DEBUGFILE
     echo -e "#" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "# Note for customers who want to create bridged networking for virtualisation:" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "# Gateway is set in separate file" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "# Do not forget to change interface in file route-$1 and rename this file" >> $CONFIGFILE 2>>$DEBUGFILE
+    if ! is_private_ip "$3"; then 
+      echo -e "# Note for customers who want to create bridged networking for virtualisation:" >> $CONFIGFILE 2>>$DEBUGFILE
+      echo -e "# Gateway is set in separate file" >> $CONFIGFILE 2>>$DEBUGFILE
+      echo -e "# Do not forget to change interface in file route-$1 and rename this file" >> $CONFIGFILE 2>>$DEBUGFILE
+    fi
     echo -e "#" >> $CONFIGFILE 2>>$DEBUGFILE
     echo -e "# device: $1" >> $CONFIGFILE 2>>$DEBUGFILE
     echo -e "DEVICE=$1" >> $CONFIGFILE 2>>$DEBUGFILE
@@ -44,14 +46,19 @@ setup_network_config() {
     if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
       echo -e "HWADDR=$upper_mac" >> $CONFIGFILE 2>>$DEBUGFILE
       echo -e "IPADDR=$3" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "NETMASK=255.255.255.255" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "SCOPE=\"peer $6\"" >> $CONFIGFILE 2>>$DEBUGFILE
+      if is_private_ip "$3"; then 
+        echo -e "NETMASK=$5" >> $CONFIGFILE 2>>$DEBUGFILE
+        echo -e "GATEWAY=$6" >> $CONFIGFILE 2>>$DEBUGFILE
+      else
+        echo -e "NETMASK=255.255.255.255" >> $CONFIGFILE 2>>$DEBUGFILE
+        echo -e "SCOPE=\"peer $6\"" >> $CONFIGFILE 2>>$DEBUGFILE
 
-      echo -e "### Hetzner Online AG - installimage" > $ROUTEFILE 2>>$DEBUGFILE
-      echo -e "# routing for eth0" >> $ROUTEFILE 2>>$DEBUGFILE
-      echo -e "ADDRESS0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
-      echo -e "NETMASK0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
-      echo -e "GATEWAY0=$6" >> $ROUTEFILE 2>>$DEBUGFILE
+        echo -e "### Hetzner Online AG - installimage" > $ROUTEFILE 2>>$DEBUGFILE
+        echo -e "# routing for eth0" >> $ROUTEFILE 2>>$DEBUGFILE
+        echo -e "ADDRESS0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
+        echo -e "NETMASK0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
+        echo -e "GATEWAY0=$6" >> $ROUTEFILE 2>>$DEBUGFILE
+      fi
     fi
 
     if [ "$8" -a "$9" -a "${10}" ]; then
@@ -151,26 +158,34 @@ generate_new_ramdisk() {
 setup_cpufreq() {
   if [ "$1" ]; then
     if isVServer; then
-	return 0
+      debug "no powersaving on virtual machines"
+    	return 0
     fi 
-    #https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Deployment_Guide/sec-Persistent_Module_Loading.html
-    CPUFREQCONF="$FOLD/hdd/etc/sysconfig/modules/cpufreq.modules"
-    echo -e "" > $CPUFREQCONF 2>>$DEBUGFILE
-    echo -e "#!/bin/sh" > $CPUFREQCONF 2>>$DEBUGFILE
-    echo -e "### Hetzner Online AG - installimage" >> $CPUFREQCONF 2>>$DEBUGFILE
-    echo -e "# cpu frequency scaling" >> $CPUFREQCONF 2>>$DEBUGFILE
-    echo -e "# this gets started by /etc/rc.sysinit" >> $CPUFREQCONF 2>>$DEBUGFILE
-    if [ "$(check_cpu)" = "intel" ]; then
-      debug "# Setting: cpufreq modprobe to intel"
-      echo -e "modprobe acpi-cpufreq >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
-    else
-      debug "# Setting: cpufreq modprobe to amd"
-      echo -e "modprobe powernow-k8 >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
-    fi
-    echo -e "cpufreq-set -g $1 -r >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
-    chmod a+x $CPUFREQCONF >>$DEBUGFILE
+    if [ $IMG_VERSION -ge 70 ] ; then
+      #https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/System_Administrators_Guide/sec-Persistent_Module_Loading.html
+      #local CPUFREQCONF="$FOLD/hdd/etc/modules-load.d/cpufreq.conf"
+      debug "no cpufreq configuration necessary"
+    else 
+      #https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Deployment_Guide/sec-Persistent_Module_Loading.html
+      local CPUFREQCONF="$FOLD/hdd/etc/sysconfig/modules/cpufreq.modules"
+      echo -e "" > $CPUFREQCONF 2>>$DEBUGFILE
+      echo -e "#!/bin/sh" > $CPUFREQCONF 2>>$DEBUGFILE
+      echo -e "### Hetzner Online AG - installimage" >> $CPUFREQCONF 2>>$DEBUGFILE
+      echo -e "# cpu frequency scaling" >> $CPUFREQCONF 2>>$DEBUGFILE
+      echo -e "# this gets started by /etc/rc.sysinit" >> $CPUFREQCONF 2>>$DEBUGFILE
+      if [ "$(check_cpu)" = "intel" ]; then
+        debug "# Setting: cpufreq modprobe to intel"
+        echo -e "modprobe intel_pstate >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
+        echo -e "modprobe acpi-cpufreq >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
+      else
+        debug "# Setting: cpufreq modprobe to amd"
+        echo -e "modprobe powernow-k8 >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
+      fi
+      echo -e "cpupower frequency-set --governor $1 >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
+      chmod a+x $CPUFREQCONF >>$DEBUGFILE
 
     return 0
+    fi
   fi
 }
 

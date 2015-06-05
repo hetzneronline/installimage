@@ -39,9 +39,11 @@ setup_network_config() {
       echo -e "Gateway=$6" >> $CONFIGFILE
       echo -e "" >> $CONFIGFILE
 
-      echo -e "[Route]" >> $CONFIGFILE
-      echo -e "Destination=$7/$CIDR" >> $CONFIGFILE
-      echo -e "Gateway=$6" >> $CONFIGFILE
+      if ! is_private_ip "$3"; then 
+        echo -e "[Route]" >> $CONFIGFILE
+        echo -e "Destination=$7/$CIDR" >> $CONFIGFILE
+        echo -e "Gateway=$6" >> $CONFIGFILE
+      fi
     fi
 
     execute_chroot_command "systemctl enable systemd-networkd.service"

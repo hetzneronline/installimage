@@ -93,7 +93,6 @@ generate_menu() {
   elif [ "$1" = "Virtualization" ]; then
     RAWLIST=""
     RAWLIST=`ls -1 $IMAGESPATH | grep -i -e "^CoreOS"`
-    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Squeeze"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Wheezy"
   elif [ "$1" = "old_images" ]; then
     RAWLIST=`ls -1 $OLDIMAGESPATH`
@@ -134,7 +133,6 @@ generate_menu() {
   case $IMAGENAME in 
     Proxmox-Virtualization-Environment*)
       case "$IMAGENAME" in
-        Proxmox-Virtualization-Environment-on-Debian-Squeeze) export PROXMOX_VERSION="2" ;;
         Proxmox-Virtualization-Environment-on-Debian-Wheezy) export PROXMOX_VERSION="3" ;;
       esac
       cp $SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION /post-install
@@ -245,7 +243,7 @@ create_config() {
      fi
 
      local set_level=""
-     local avail_level="0"
+     local avail_level=""
      # check for possible raidlevels
      for level in $raid_levels ; do
        # set raidlevel to given opt raidlevel
@@ -253,13 +251,21 @@ create_config() {
          [ $OPT_SWRAIDLEVEL -eq $level ] && set_level="$level"
        fi
 
-       # create list of all possible raidlevels
-       [ $level -ne 0 ] && avail_level="$avail_level | $level"
+       # no raidlevel 5 if less then 3 hdds
+       [ $level -eq 5 -a $COUNT_DRIVES -lt 3 ] && continue
 
-       # no raidlevel 5 if just two hdds
-       [ $level -eq 1 -a $COUNT_DRIVES -eq 2 ] && break
-       # no raidlevel 6 or 10 if just three hdds
-       [ $level -eq 5 -a $COUNT_DRIVES -eq 3 ] && break
+       # no raidlevel 6 if less then 4 hdds
+       [ $level -eq 6 -a $COUNT_DRIVES -lt 4 ] && continue
+
+       # no raidlevel 10 if less then 2 hdds
+       [ $level -eq 10 -a $COUNT_DRIVES -lt 2 ] && continue
+
+       # create list of all possible raidlevels
+       if [ -z "$avail_level" ] ; then
+         avail_level="$level"
+       else
+         avail_level="$avail_level | $level"
+       fi
      done
      [ -z "$set_level" ] && set_level="$default_level"
 
@@ -694,7 +700,7 @@ if [ "$1" ]; then
   NEWHOSTNAME=$(grep -m1 -e ^HOSTNAME $1 | awk '{print $2}')
 
   GOVERNOR="`grep -m1 -e ^GOVERNOR $1 |awk '{print \$2}'`"
-  if [ "$GOVERNOR" = "" ]; then GOVERNOR="ondemand"; fi
+  if [ "$GOVERNOR" = "" ]; then GOVERNOR="powersave"; fi
 
   SYSTEMDEVICE="$DRIVE1"
   SYSTEMREALDEVICE="$DRIVE1"
@@ -748,7 +754,7 @@ validate_vars() {
   # test if $DRIVE1 is not busy
 #  CHECK="$(hdparm -z $DRIVE1 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
 #  if [ "$CHECK" ]; then
-#    graph_error "ERROR: DRIVE1 is busy ($CHECK) - cannot access device $DRIVE1 "
+#    graph_error "ERROR: DRIVE1 is busy - cannot access device $DRIVE1 "
 #    return 1
 #  fi
   
@@ -816,7 +822,7 @@ validate_vars() {
     elif [ "$SWRAIDLEVEL" = "6" -a "$COUNT_DRIVES" -lt "4" ]; then
       graph_error "ERROR: Not enough disks for RAID level 6"
       return 1
-    elif [ "$SWRAIDLEVEL" = "10" -a "$COUNT_DRIVES" -lt "4" ]; then
+    elif [ "$SWRAIDLEVEL" = "10" -a "$COUNT_DRIVES" -lt "2" ]; then
       graph_error "ERROR: Not enough disks for RAID level 10"
       return 1
     fi
@@ -1064,7 +1070,7 @@ validate_vars() {
   fi
   
 
-  CHECK="`echo $GOVERNOR |grep -i -e "^performance$\|^ondemand$"`"
+  CHECK=$(echo $GOVERNOR |grep -i -e "^powersave$\|^performance$\|^ondemand$")
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: No valid GOVERNOR"
    return 1  
@@ -1437,7 +1443,7 @@ function get_end_of_extended() {
   done
   rest=$(echo "$DRIVE_SIZE - ($sum * 1024 * 1024)" | bc)
 
-  end=$(blockdev --getsz $DEV)
+  end=$[$DRIVE_SIZE / $SECTORSIZE]
 
   if [ $DRIVE_SIZE -lt $LIMIT ]; then
     echo "$[$end-1]"
@@ -1462,9 +1468,9 @@ function get_end_of_partition {
   local LIMIT=2199023255040
   local SECTORSIZE=$(blockdev --getss $DEV)
   local SECTORLIMIT=$[($LIMIT / $SECTORSIZE) - 1]
-  local END_EXTENDED="$(parted -s $DEV unit s print | grep extended | awk '{print $3}' | sed -e 's/s//')"
+  local END_EXTENDED="$(parted -s $DEV unit b print | grep extended | awk '{print $3}' | sed -e 's/s//')"
   local DEVSIZE=$(blockdev --getsize64 $DEV)
-
+  START=$[START * $SECTORSIZE]
   # use the smallest hdd as reference when using swraid
   # to determine the end of a partition
   local smallest_hdd=$(smallest_hd)
@@ -1473,29 +1479,29 @@ function get_end_of_partition {
     DEV=$smallest_hdd
   fi
   
-  local LAST=$(blockdev --getsz $DEV)
-
+  local LAST=$(blockdev --getsize64 $DEV)
   # make the partition at least 1 MiB if all else fails
-  local END=[$START+2048]
+  local END=[$START+1048576]
 
   if [ "`echo ${PART_SIZE[$NR]} |tr [:upper:] [:lower:]`" = "all" ]; then
     # leave 1MiB space at the end (may be needed for mdadm or for later conversion to GPT)
-    END=$[$LAST-2048]
+    END=$[$LAST-1048576]
   else
-    END="$(echo "$START+(${PART_SIZE[$NR]}* 1024 * 1024 / $SECTORSIZE)" | bc)"
+    END="$(echo "$START+(${PART_SIZE[$NR]}* 1024 * 1024)" | bc)"
     # trough alignment the calculated end could be a little bit over drive size
     # or too close to the end. Always leave 1MiB space 
     # (may be needed for mdadm or for later conversion to GPT)
-    if [ $END -ge $LAST ] || [ $[$LAST - $END] -lt 2048 ]; then
-      END=$[$LAST-2048]
+    if [ $END -ge $LAST ] || [ $[$LAST - $END] -lt 1048576 ]; then
+      END=$[$LAST-1048576]
     fi
   fi
   # check if end of logical partition is over the end extended partition
   if [ $PCOUNT -gt 4 ] && [ $END -gt $END_EXTENDED ]; then
     # leave 1MiB space at the end (may be needed for mdadm or for later conversion to GPT)
-    END=$[$END_EXTENDED-2048]
+    END=$[$END_EXTENDED-1048576]
   fi
 
+  END=$[$END / $SECTORSIZE]
   echo $END
 }
 
@@ -1504,6 +1510,8 @@ function get_end_of_partition {
 # create_partitions "DRIVE"
 create_partitions() {
  if [ "$1" ]; then
+  local SECTORSIZE=$(blockdev --getss $1)
+
   # write standard entries to fstab
   echo "proc /proc proc defaults 0 0" > $FOLD/fstab
   # add fstab entries for devpts, sys and shm in CentOS as they are not
@@ -1562,7 +1570,7 @@ create_partitions() {
    if [ $GPT -eq 1 ]; then
 
      # start at 2MiB so we have 1 MiB left for BIOS Boot Partition
-     START=4096
+     START=$[2097152/$SECTORSIZE]
      if [ $i -gt 1 ]; then
        START=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
      fi
@@ -1576,8 +1584,9 @@ create_partitions() {
      local gpt_part_type="${SFDISKTYPE}00"
 
      if [ $i -eq $PART_COUNT ]; then
+       local bios_grub_start=$[1048576/$SECTORSIZE]
        echo "Creating BIOS_GRUB partition" | debugoutput
-       sgdisk --new $i:2048:+1M -t $i:EF02 $1 | debugoutput
+       sgdisk --new $i:$bios_grub_start:+1M -t $i:EF02 $1 2>&1 | debugoutput
      else
        if [ -z $SFDISKSIZE ] && [ $i -gt 1 ]; then
          sgdisk --largest-new $i -t $i:$gpt_part_type $1 | debugoutput
@@ -1590,7 +1599,8 @@ create_partitions() {
 
    else
      # part without GPT
-     START=2048
+     START=$[1048576/$SECTORSIZE]
+
      TYPE="primary"
      PCOUNT="$i"
 
@@ -1615,7 +1625,7 @@ create_partitions() {
        PCOUNT=$[$PCOUNT+1]
 
        TYPE="logical"
-       START=$[$START + 2048]
+       START=$[$START + (1048576 / $SECTORSIZE) ]
 
        END=$(get_end_of_partition $1 $START $i)
      fi
@@ -1760,7 +1770,7 @@ make_swraid() {
     METADATA="--metadata=1.2"
 
     #centos 6.x metadata
-    if [ "$IAM" = "centos" ]; then
+    if [ "$IAM" = "centos" -a "$IMG_VERSION" -lt 70 ]; then
       if [ "$IMG_VERSION" -ge 60 ]; then
         METADATA="--metadata=1.0"
       else
@@ -2469,7 +2479,7 @@ set_hostname() {
     check_fqdn "$sethostname"
     [ $? -eq 1 ] && shortname="$sethostname" || shortname="$(hostname -s )"
 
-    if [ -f $hostnamefile ]; then
+    if [ -f $hostnamefile -o "$IAM" = "arch" ]; then
       echo "$shortname" > $hostnamefile
       debug "# set new hostname '$shortname' in $hostnamefile"
     fi
@@ -3040,8 +3050,10 @@ write_lilo() {
 }
 
 generate_ntp_config() {
-  CFGNTP="/etc/ntp.conf"
-  CFGCHRONY="/etc/chrony/chrony.conf"
+  local CFGNTP="/etc/ntp.conf"
+  local CFGCHRONY="/etc/chrony/chrony.conf"
+  local CFGTIMESYNCD="/etc/systemd/timesyncd.conf"
+  local CFG="$CFGNTP"
 
   # find out versions
   local debian_version=0
@@ -3051,17 +3063,24 @@ generate_ntp_config() {
   [ "$IAM" = 'ubuntu' ] && ubuntu_version="$IMG_VERSION"
   [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
 
-  if [ -f "$FOLD/hdd/$CFGNTP" -o -f "$FOLD/hdd/$CFGCHRONY" ] ; then
-    if [ -f "$FOLD/hdd/$CFGNTP" ]; then
+  if [ -f "$FOLD/hdd/$CFGNTP" -o -f "$FOLD/hdd/$CFGCHRONY" -o -f "$FOLD/hdd/$CFGTIMESYNCD" ] ; then
+    if [ -f "$FOLD/hdd/$CFGTIMESYNCD" ]; then
+      local cfgdir="$FOLD/hdd/$CFGTIMESYNCD.d"
+      local cfgparam='NTP'
+      [ "$IAM" = "debian" ] && cfgparam='Servers'
+      mkdir -p "$cfgdir" | debugoutput
+      CFG="$cfgdir/hetzner.conf"
+      echo -e "[Time]\n$cfgparam=ntp1.hetzner.de ntp2.hetzner.com ntp3.hetzner.net\n" > "$CFG" | debugoutput
+    elif [ -f "$FOLD/hdd/$CFGCHRONY" ]; then
+      echo "using chrony" | debugoutput
+      CFG="$CFGCHRONY"
+      execute_chroot_command 'echo -e "\n\n# hetzner ntp servers \nserver ntp1.hetzner.de offline minpoll 8\nserver ntp2.hetzner.com offline minpoll 8\nserver ntp3.hetzner.net offline minpoll 8\n" >> '"$CFG" | debugoutput
+    else
       CFG="$CFGNTP"
       echo "using ntp.conf" | debugoutput
       execute_chroot_command 'sed -e "s/^server \(.*\)$/## server \1   ## see end of file/" -i '"$CFG" | debugoutput
       execute_chroot_command 'echo -e "\n\n# hetzner ntp servers \nserver ntp1.hetzner.de iburst\nserver ntp2.hetzner.com iburst\nserver ntp3.hetzner.net iburst\n" >> '"$CFG" | debugoutput
       [ "$IAM" = "suse" ] && execute_chroot_command 'echo -e "\n# local clock\nserver 127.127.1.0" >> '"$CFG" | debugoutput
-    else
-      CFG="$CFGCHRONY"
-      echo "using chrony" | debugoutput
-        execute_chroot_command 'echo -e "\n\n# hetzner ntp servers \nserver ntp1.hetzner.de offline minpoll 8\nserver ntp2.hetzner.com offline minpoll 8\nserver ntp3.hetzner.net offline minpoll 8\n" >> '"$CFG" | debugoutput
     fi
   else
     msg="ntp config '$CFG' not found, ignoring"
@@ -3793,4 +3812,42 @@ suse_netdev_fix() {
     sed -i  's/eth\([0-9]\)/net\1/g' $FOLD/hdd$UDEVPFAD/70-persistent-net.rules
 }
 
-
+is_private_ip() {
+ if [ "$1" ]; then
+   local first="$(echo $1 | cut -d '.' -f 1)"
+   local second="$(echo $1 | cut -d '.' -f 2)"
+   local third="$(echo $1 | cut -d '.' -f 3)"
+   case "$first" in
+     10)
+       debug "detected private ip ($first.$second.x)"
+       return 0
+       ;;
+     100)
+       if [ "$second" -ge 64 -a "$second" -lt 128 ]; then
+         debug "detected private ip ($first.$second.x)"
+         return 0
+       else
+         return 1
+       fi
+       ;;
+     172)
+       if [ "$second" -ge 16 -a "$second" -lt 32 ]; then
+         debug "detected private ip ($first.$second.x)"
+         return 0
+       else
+         return 1
+       fi
+       ;;
+     192)
+       if [ "$second" -eq 168 ]; then
+         debug "detected private ip ($first.$second.x)"
+         return 0
+       else
+         return 1
+       fi
+       ;;
+   esac
+ else
+  return 1
+ fi
+}
