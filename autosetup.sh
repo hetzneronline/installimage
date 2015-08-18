@@ -4,7 +4,7 @@
 # skip menu - use "autosetup" file
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2008-2015, Hetzner Online AG
+# (c) 2008-2015, Hetzner Online GmbH
 #
 
 

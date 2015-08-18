@@ -3,7 +3,7 @@
 # CentOS specific functions 
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2008-2015, Hetzner Online AG
+# (c) 2008-2015, Hetzner Online GmbH
 
 
 
@@ -16,21 +16,21 @@ setup_network_config() {
     else
       UDEVFILE="/dev/null"
     fi
-    echo -e "### Hetzner Online AG - installimage" > $UDEVFILE
+    echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
     echo -e "# device: $1" >> $UDEVFILE
     echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
     local upper_mac="$(echo "$2" | awk '{ print toupper($0) }')"
 
     NETWORKFILE="$FOLD/hdd/etc/sysconfig/network"
-    echo -e "### Hetzner Online AG - installimage" > $NETWORKFILE 2>>$DEBUGFILE
+    echo -e "### Hetzner Online GmbH - installimage" > $NETWORKFILE 2>>$DEBUGFILE
     echo -e "# general networking" >> $NETWORKFILE 2>>$DEBUGFILE
     echo -e "NETWORKING=yes" >> $NETWORKFILE 2>>$DEBUGFILE
 
     CONFIGFILE="$FOLD/hdd/etc/sysconfig/network-scripts/ifcfg-$1"
     ROUTEFILE="$FOLD/hdd/etc/sysconfig/network-scripts/route-$1"
 
-    echo -e "### Hetzner Online AG - installimage" > $CONFIGFILE 2>>$DEBUGFILE
+    echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE 2>>$DEBUGFILE
     echo -e "#" >> $CONFIGFILE 2>>$DEBUGFILE
     if ! is_private_ip "$3"; then 
       echo -e "# Note for customers who want to create bridged networking for virtualisation:" >> $CONFIGFILE 2>>$DEBUGFILE
@@ -53,7 +53,7 @@ setup_network_config() {
         echo -e "NETMASK=255.255.255.255" >> $CONFIGFILE 2>>$DEBUGFILE
         echo -e "SCOPE=\"peer $6\"" >> $CONFIGFILE 2>>$DEBUGFILE
 
-        echo -e "### Hetzner Online AG - installimage" > $ROUTEFILE 2>>$DEBUGFILE
+        echo -e "### Hetzner Online GmbH - installimage" > $ROUTEFILE 2>>$DEBUGFILE
         echo -e "# routing for eth0" >> $ROUTEFILE 2>>$DEBUGFILE
         echo -e "ADDRESS0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
         echo -e "NETMASK0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
@@ -107,7 +107,7 @@ generate_new_ramdisk() {
       # previously we added an alias for eth0 based on the niclist (static
       # pci-id->driver mapping) of the old rescue. But the new rescue mdev/udev
       # So we only add aliases for the controller
-      echo -e "### Hetzner Online AG - installimage" > $MODULESFILE 2>>$DEBUGFILE
+      echo -e "### Hetzner Online GmbH - installimage" > $MODULESFILE 2>>$DEBUGFILE
       echo -e "# load all modules" >> $MODULESFILE 2>>$DEBUGFILE
       echo -e "" >> $MODULESFILE 2>>$DEBUGFILE
 
@@ -123,7 +123,7 @@ generate_new_ramdisk() {
     elif [ $IMG_VERSION -ge 60 ] ; then 
       # blacklist some kernel modules due to bugs and/or stability issues or annoyance
       local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
-      echo -e "### Hetzner Online AG - installimage" > $blacklist_conf
+      echo -e "### Hetzner Online GmbH - installimage" > $blacklist_conf
       echo -e "### silence any onboard speaker" >> $blacklist_conf
       echo -e "blacklist pcspkr" >> $blacklist_conf
       echo -e "### i915 driver blacklisted due to various bugs" >> $blacklist_conf
@@ -170,7 +170,7 @@ setup_cpufreq() {
       local CPUFREQCONF="$FOLD/hdd/etc/sysconfig/modules/cpufreq.modules"
       echo -e "" > $CPUFREQCONF 2>>$DEBUGFILE
       echo -e "#!/bin/sh" > $CPUFREQCONF 2>>$DEBUGFILE
-      echo -e "### Hetzner Online AG - installimage" >> $CPUFREQCONF 2>>$DEBUGFILE
+      echo -e "### Hetzner Online GmbH - installimage" >> $CPUFREQCONF 2>>$DEBUGFILE
       echo -e "# cpu frequency scaling" >> $CPUFREQCONF 2>>$DEBUGFILE
       echo -e "# this gets started by /etc/rc.sysinit" >> $CPUFREQCONF 2>>$DEBUGFILE
       if [ "$(check_cpu)" = "intel" ]; then
@@ -230,7 +230,7 @@ generate_config_grub() {
     rm -rf "$FOLD/hdd/boot/grub/*" >> /dev/null 2>&1
 
     echo "#" > $BFILE 2>> $DEBUGFILE
-    echo "# Hetzner Online AG - installimage" >> $BFILE 2>> $DEBUGFILE
+    echo "# Hetzner Online GmbH - installimage" >> $BFILE 2>> $DEBUGFILE
     echo "# GRUB bootloader configuration file" >> $BFILE 2>> $DEBUGFILE
     echo "#" >> $BFILE 2>> $DEBUGFILE
     echo >> $BFILE 2>> $DEBUGFILE

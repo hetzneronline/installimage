@@ -4,7 +4,7 @@
 # set all necessary vars and functions
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2007-2015, Hetzner Online AG
+# (c) 2007-2015, Hetzner Online GmbH
 #
 
 
@@ -54,7 +54,7 @@ DEFAULTGOVERNOR="powersave"
 V6ONLY="0"
 
 # dialog settings
-DIATITLE='Hetzner Online AG'
+DIATITLE='Hetzner Online GmbH'
 OSMENULIST='Debian (official) '
 OSMENULIST=$OSMENULIST'Ubuntu (official) '
 OSMENULIST=$OSMENULIST'CentOS (official) '

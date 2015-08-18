@@ -4,7 +4,7 @@
 # Archlinux specific functions 
 #
 # originally written by Markus Schade 
-# (c) 2013-2015, Hetzner Online AG
+# (c) 2013-2015, Hetzner Online GmbH
 #
 
 
@@ -15,11 +15,11 @@ setup_network_config() {
     CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-hetzner.network"
     UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
-    echo -e "### Hetzner Online AG - installimage" > $UDEVFILE
+    echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
     echo -e "# device: $1" >> $UDEVFILE
     echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
-    echo -e "### Hetzner Online AG - installimage" > $CONFIGFILE
+    echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE
     echo -e "# device: $1" >> $CONFIGFILE
     echo -e "[Match]" >> $CONFIGFILE
     echo -e "MACAddress=$2" >> $CONFIGFILE
@@ -68,7 +68,7 @@ generate_config_mdadm() {
 generate_new_ramdisk() {
   if [ "$1" ]; then
     local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
-    echo -e "### Hetzner Online AG - installimage" > $blacklist_conf
+    echo -e "### Hetzner Online GmbH - installimage" > $blacklist_conf
     echo -e "### silence any onboard speaker" >> $blacklist_conf
     echo -e "blacklist pcspkr" >> $blacklist_conf
     echo -e "blacklist snd_pcsp" >> $blacklist_conf
@@ -139,6 +139,7 @@ run_os_specific_functions() {
   execute_chroot_command "systemctl enable sshd"
   execute_chroot_command "systemctl enable haveged"
   execute_chroot_command "systemctl enable cronie"
+  execute_chroot_command "systemctl enable systemd-timesyncd"
 
   return 0
 }
@@ -151,7 +152,7 @@ validate_image() {
 
 # extract image file to hdd
 extract_image() {
-  LANG=C pacstrap -m -a $FOLD/hdd base btrfs-progs cpupower cronie findutils gptfdisk grub haveged ntp openssh vim wget 2>&1 | debugoutput
+  LANG=C pacstrap -m -a $FOLD/hdd base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget 2>&1 | debugoutput
 
   if [ "$EXITCODE" -eq "0" ]; then
     cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput

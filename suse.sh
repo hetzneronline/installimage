@@ -4,7 +4,7 @@
 # OpenSUSE specific functions 
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2007-2015, Hetzner Online AG
+# (c) 2007-2015, Hetzner Online GmbH
 #
 
 
@@ -25,7 +25,7 @@ setup_network_config() {
     # Delete network udev rules
 #    rm $FOLD/hdd/etc/udev/rules.d/*-persistent-net.rules 2>&1 | debugoutput
 
-    echo -e "### Hetzner Online AG - installimage" > $UDEVFILE
+    echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
     echo -e "# device: $1" >> $UDEVFILE
     echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
@@ -34,7 +34,7 @@ setup_network_config() {
 
     CONFIGFILE="$FOLD/hdd/etc/sysconfig/network/ifcfg-$1"
 
-    echo -e "### Hetzner Online AG - installimage" > $CONFIGFILE 2>>$DEBUGFILE
+    echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE 2>>$DEBUGFILE
     echo -e "# device: $1" >> $CONFIGFILE 2>>$DEBUGFILE
     echo -e "BOOTPROTO='static'" >> $CONFIGFILE 2>>$DEBUGFILE
     echo -e "MTU=''" >> $CONFIGFILE 2>>$DEBUGFILE
@@ -126,7 +126,7 @@ generate_new_ramdisk() {
     fi
 
     local blacklist_conf="$FOLD/hdd/etc/modprobe.d/99-local.conf"
-    echo -e "### Hetzner Online AG - installimage" > $blacklist_conf
+    echo -e "### Hetzner Online GmbH - installimage" > $blacklist_conf
     echo -e "### i915 driver blacklisted due to various bugs" >> $blacklist_conf
     echo -e "### especially in combination with nomodeset" >> $blacklist_conf
     echo -e "blacklist i915" >> $blacklist_conf
@@ -173,7 +173,7 @@ setup_cpufreq() {
      # check release notes of furture releases carefully, if this has changed!
      
 #    CPUFREQCONF="$FOLD/hdd/etc/init.d/boot.local"
-#    echo -e "### Hetzner Online AG - installimage" > $CPUFREQCONF 2>>$DEBUGFILE
+#    echo -e "### Hetzner Online GmbH - installimage" > $CPUFREQCONF 2>>$DEBUGFILE
 #    echo -e "# cpu frequency scaling" >> $CPUFREQCONF 2>>$DEBUGFILE
 #    echo -e "cpufreq-set -g $1 -r >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
 
@@ -214,7 +214,7 @@ generate_config_grub() {
     BFILE="$FOLD/hdd/boot/grub/menu.lst"
 
     echo "#" > $BFILE 2>> $DEBUGFILE
-    echo "# Hetzner Online AG - installimage" >> $BFILE 2>> $DEBUGFILE
+    echo "# Hetzner Online GmbH - installimage" >> $BFILE 2>> $DEBUGFILE
     echo "# GRUB bootloader configuration file" >> $BFILE 2>> $DEBUGFILE
     echo "#" >> $BFILE 2>> $DEBUGFILE
     echo >> $BFILE 2>> $DEBUGFILE

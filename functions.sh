@@ -4,7 +4,7 @@
 # functions
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2007-2015, Hetzner Online AG
+# (c) 2007-2015, Hetzner Online GmbH
 #
 
 
@@ -170,7 +170,7 @@ create_config() {
    fi
 
    echo -e "## ===================================================" > $CNF
-   echo -e "##  Hetzner Online AG - installimage - standardconfig " >> $CNF
+   echo -e "##  Hetzner Online GmbH - installimage - standardconfig " >> $CNF
    echo -e "## ===================================================" >> $CNF
    echo -e "" >> $CNF
 
@@ -700,7 +700,7 @@ if [ "$1" ]; then
   NEWHOSTNAME=$(grep -m1 -e ^HOSTNAME $1 | awk '{print $2}')
 
   GOVERNOR="`grep -m1 -e ^GOVERNOR $1 |awk '{print \$2}'`"
-  if [ "$GOVERNOR" = "" ]; then GOVERNOR="powersave"; fi
+  if [ "$GOVERNOR" = "" ]; then GOVERNOR="ondemand"; fi
 
   SYSTEMDEVICE="$DRIVE1"
   SYSTEMREALDEVICE="$DRIVE1"
@@ -1468,7 +1468,7 @@ function get_end_of_partition {
   local LIMIT=2199023255040
   local SECTORSIZE=$(blockdev --getss $DEV)
   local SECTORLIMIT=$[($LIMIT / $SECTORSIZE) - 1]
-  local END_EXTENDED="$(parted -s $DEV unit b print | grep extended | awk '{print $3}' | sed -e 's/s//')"
+  local END_EXTENDED="$(parted -s $DEV unit b print | grep extended | awk '{print $3}' | sed -e 's/B//')"
   local DEVSIZE=$(blockdev --getsize64 $DEV)
   START=$[START * $SECTORSIZE]
   # use the smallest hdd as reference when using swraid
@@ -2436,7 +2436,7 @@ generate_resolvconf() {
   fi
 #  else 
     NAMESERVERFILE="$FOLD/hdd/etc/resolv.conf"
-    echo -e "### Hetzner Online AG installimage" > $NAMESERVERFILE
+    echo -e "### Hetzner Online GmbH installimage" > $NAMESERVERFILE
     echo -e "# nameserver config" >> $NAMESERVERFILE
 
     # IPV4
@@ -2504,7 +2504,7 @@ set_hostname() {
     local fqdn_name="$sethostname"
     [ "$sethostname" = "$shortname" ] && fqdn_name=''
 
-    echo "### Hetzner Online AG installimage" > $hostsfile
+    echo "### Hetzner Online GmbH installimage" > $hostsfile
     echo "# nameserver config" >> $hostsfile
     echo "# IPv4" >> $hostsfile
     echo "127.0.0.1 localhost.localdomain localhost" >> $hostsfile
@@ -2548,7 +2548,7 @@ generate_hosts() {
       HOSTNAME="`cat $HOSTNAMEFILE | cut -d. -f1`";
       [ "$FULLHOSTNAME" = "$HOSTNAME" ] && FULLHOSTNAME=""
     fi
-    echo "### Hetzner Online AG installimage" > $HOSTSFILE
+    echo "### Hetzner Online GmbH installimage" > $HOSTSFILE
     echo "# nameserver config" >> $HOSTSFILE
     echo "# IPv4" >> $HOSTSFILE
     echo "127.0.0.1 localhost.localdomain localhost" >> $HOSTSFILE
@@ -2854,7 +2854,7 @@ generate_sysctlconf() {
    sysctl_conf="$FOLD/hdd/etc/sysctl.d/99-hetzner.conf"
   fi
     cat << EOF > $sysctl_conf
-### Hetzner Online AG installimage
+### Hetzner Online GmbH installimage
 # sysctl config
 #net.ipv4.ip_forward=1
 net.ipv4.conf.all.rp_filter=1
@@ -2960,7 +2960,7 @@ set_ssh_rootlogin() {
      local permit="$1"
      case $permit in
        yes|no|without-password|forced-commands-only)
-         sed -i "$FOLD/hdd/etc/ssh/sshd_config" -e "s/^PermitRootLogin.*/PermitRootLogin $1/"
+         sed -i "$FOLD/hdd/etc/ssh/sshd_config" -e "s/^\(#\)\?PermitRootLogin.*/PermitRootLogin $1/"
        ;;
        *)
          debug "invalid option for PermitRootLogin"
@@ -3009,7 +3009,7 @@ generate_config_lilo() {
   if [ "$1" ]; then
   BFILE="$FOLD/hdd/etc/lilo.conf"
   rm -rf "$FOLD/hdd/boot/grub/menu.lst" >>/dev/null 2>&1
-  echo -e "### Hetzner Online AG installimage" > $BFILE
+  echo -e "### Hetzner Online GmbH installimage" > $BFILE
   echo -e "# bootloader config" >> $BFILE
   if [ "$LILOEXTRABOOT" ]; then
     echo -e "$LILOEXTRABOOT" >> $BFILE
@@ -3766,7 +3766,6 @@ fix_eth_naming() {
      if [ -f "$FOLD/hdd/$FILE" ]; then
        debug "# fix_eth_naming replaces $1/eth0"
        execute_chroot_command "sed -i 's/$1/eth0/g' $FILE"
-#    fi
      fi
    fi
  
@@ -3845,6 +3844,9 @@ is_private_ip() {
        else
          return 1
        fi
+       ;;
+     *)
+       return 1
        ;;
    esac
  else

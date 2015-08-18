@@ -4,7 +4,7 @@
 #. /tmp/install.vars
 #
 # originally written by David Mayr
-# (c) 2009-2015, Hetzner Online AG
+# (c) 2009-2015, Hetzner Online GmbH
 #
 
 
