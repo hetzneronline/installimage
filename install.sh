@@ -488,9 +488,9 @@ fi
 
 #
 #
-# Report statistic
+# Report statistic (disabled, gathered from config below)
 #
-report_statistic "$STATSSERVER" "$IMAGE_FILE" "$SWRAID" "$LVM" "$BOOTLOADER" "$ERROREXIT"
+#report_statistic "$STATSSERVER" "$IMAGE_FILE" "$SWRAID" "$LVM" "$BOOTLOADER" "$ERROREXIT"
 
 #
 # Report install.conf to rz_admin

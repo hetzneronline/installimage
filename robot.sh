@@ -4,6 +4,7 @@ URL=?
 n=0
 
 while [ $n -lt 3 ]; do
+  sleep 30 #wait until all services are available
   wget --timeout=10 --no-check-certificate -O /dev/null $URL &>/dev/null
   test $? -eq 0 && break
   let n++

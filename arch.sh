@@ -4,7 +4,7 @@
 # Archlinux specific functions 
 #
 # originally written by Markus Schade 
-# (c) 2013-2015, Hetzner Online GmbH
+# (c) 2013-2016, Hetzner Online GmbH
 #
 
 
@@ -68,16 +68,18 @@ generate_config_mdadm() {
 generate_new_ramdisk() {
   if [ "$1" ]; then
     local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
-    echo -e "### Hetzner Online GmbH - installimage" > $blacklist_conf
-    echo -e "### silence any onboard speaker" >> $blacklist_conf
-    echo -e "blacklist pcspkr" >> $blacklist_conf
-    echo -e "blacklist snd_pcsp" >> $blacklist_conf
-    echo -e "### i915 driver blacklisted due to various bugs" >> $blacklist_conf
-    echo -e "### especially in combination with nomodeset" >> $blacklist_conf
-    echo -e "blacklist i915" >> $blacklist_conf
-    echo -e "### mei driver blacklisted due to serious bugs" >> $blacklist_conf
-    echo -e "blacklist mei" >> $blacklist_conf
-    echo -e "blacklist mei-me" >> $blacklist_conf
+    {
+      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "### silence any onboard speaker"
+      echo -e "blacklist pcspkr"
+      echo -e "blacklist snd_pcsp"
+      echo -e "### i915 driver blacklisted due to various bugs"
+      echo -e "### especially in combination with nomodeset"
+      echo -e "blacklist i915"
+      echo -e "### mei driver blacklisted due to serious bugs"
+      echo -e "blacklist mei"
+      echo -e "blacklist mei-me"
+    } > $blacklist_conf
 
     execute_chroot_command 'sed -i /etc/mkinitcpio.conf -e "s/^HOOKS=.*/HOOKS=\"base udev autodetect modconf block mdadm lvm2 filesystems keyboard fsck\"/"'
     execute_chroot_command "mkinitcpio -p linux"; EXITCODE=$?

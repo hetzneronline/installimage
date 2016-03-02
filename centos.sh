@@ -16,58 +16,82 @@ setup_network_config() {
     else
       UDEVFILE="/dev/null"
     fi
-    echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
-    echo -e "# device: $1" >> $UDEVFILE
-    echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
+    { 
+      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "# device: $1"
+      echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", KERNEL==\"eth*\", NAME=\"$1\""
+    } > $UDEVFILE
 
     local upper_mac="$(echo "$2" | awk '{ print toupper($0) }')"
 
     NETWORKFILE="$FOLD/hdd/etc/sysconfig/network"
-    echo -e "### Hetzner Online GmbH - installimage" > $NETWORKFILE 2>>$DEBUGFILE
-    echo -e "# general networking" >> $NETWORKFILE 2>>$DEBUGFILE
-    echo -e "NETWORKING=yes" >> $NETWORKFILE 2>>$DEBUGFILE
+    {
+      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "# general networking"
+      echo -e "NETWORKING=yes"
+    } > $NETWORKFILE 2>>$DEBUGFILE
+
+    rm -f $FOLD/hdd/etc/sysconfig/network-scripts/ifcfg-en*
 
     CONFIGFILE="$FOLD/hdd/etc/sysconfig/network-scripts/ifcfg-$1"
     ROUTEFILE="$FOLD/hdd/etc/sysconfig/network-scripts/route-$1"
 
-    echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "#" >> $CONFIGFILE 2>>$DEBUGFILE
+    {
+      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "#" 
+    } > $CONFIGFILE 2>>$DEBUGFILE
+
     if ! is_private_ip "$3"; then 
-      echo -e "# Note for customers who want to create bridged networking for virtualisation:" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "# Gateway is set in separate file" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "# Do not forget to change interface in file route-$1 and rename this file" >> $CONFIGFILE 2>>$DEBUGFILE
+      {
+        echo -e "# Note for customers who want to create bridged networking for virtualisation:"
+        echo -e "# Gateway is set in separate file"
+        echo -e "# Do not forget to change interface in file route-$1 and rename this file"
+      } >> $CONFIGFILE 2>>$DEBUGFILE
     fi
-    echo -e "#" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "# device: $1" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "DEVICE=$1" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "BOOTPROTO=none" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "ONBOOT=yes" >> $CONFIGFILE 2>>$DEBUGFILE
+    {
+      echo -e "#"
+      echo -e "# device: $1"
+      echo -e "DEVICE=$1"
+      echo -e "BOOTPROTO=none"
+      echo -e "ONBOOT=yes"
+    } >> $CONFIGFILE 2>>$DEBUGFILE
 
     if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
-      echo -e "HWADDR=$upper_mac" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "IPADDR=$3" >> $CONFIGFILE 2>>$DEBUGFILE
-      if is_private_ip "$3"; then 
-        echo -e "NETMASK=$5" >> $CONFIGFILE 2>>$DEBUGFILE
-        echo -e "GATEWAY=$6" >> $CONFIGFILE 2>>$DEBUGFILE
+      {
+        echo -e "HWADDR=$upper_mac"
+        echo -e "IPADDR=$3"
+      } >> $CONFIGFILE 2>>$DEBUGFILE
+      if is_private_ip "$3"; then
+        {
+        echo -e "NETMASK=$5"
+        echo -e "GATEWAY=$6"
+        } >> $CONFIGFILE 2>>$DEBUGFILE
       else
-        echo -e "NETMASK=255.255.255.255" >> $CONFIGFILE 2>>$DEBUGFILE
-        echo -e "SCOPE=\"peer $6\"" >> $CONFIGFILE 2>>$DEBUGFILE
+        {
+          echo -e "NETMASK=255.255.255.255"
+          echo -e "SCOPE=\"peer $6\""
+        } >> $CONFIGFILE 2>>$DEBUGFILE
 
-        echo -e "### Hetzner Online GmbH - installimage" > $ROUTEFILE 2>>$DEBUGFILE
-        echo -e "# routing for eth0" >> $ROUTEFILE 2>>$DEBUGFILE
-        echo -e "ADDRESS0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
-        echo -e "NETMASK0=0.0.0.0" >> $ROUTEFILE 2>>$DEBUGFILE
-        echo -e "GATEWAY0=$6" >> $ROUTEFILE 2>>$DEBUGFILE
+        {
+          echo -e "### Hetzner Online GmbH - installimage"
+          echo -e "# routing for eth0"
+          echo -e "ADDRESS0=0.0.0.0"
+          echo -e "NETMASK0=0.0.0.0"
+          echo -e "GATEWAY0=$6"
+        } > $ROUTEFILE 2>>$DEBUGFILE
       fi
     fi
 
     if [ "$8" -a "$9" -a "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
       echo -e "NETWORKING_IPV6=yes" >> $NETWORKFILE 2>>$DEBUGFILE
-      echo -e "IPV6INIT=yes" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "IPV6ADDR=$8/$9" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "IPV6_DEFAULTGW=${10}" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "IPV6_DEFAULTDEV=$1" >> $CONFIGFILE 2>>$DEBUGFILE
+      {
+      echo -e "IPV6INIT=yes"
+      echo -e "IPV6ADDR=$8/$9"
+      echo -e "IPV6_DEFAULTGW=${10}"
+      echo -e "IPV6_DEFAULTDEV=$1"
+      } >> $CONFIGFILE 2>>$DEBUGFILE
+      
     fi 
 
     # set duplex/speed
@@ -88,8 +112,10 @@ setup_network_config() {
 generate_config_mdadm() {
   if [ "$1" ]; then
     MDADMCONF="/etc/mdadm.conf"
-    echo "DEVICES /dev/[hs]d*" > $FOLD/hdd$MDADMCONF
-    echo "MAILADDR root" >> $FOLD/hdd$MDADMCONF
+    {
+      echo "DEVICE partitions"
+      echo "MAILADDR root"
+    } > $FOLD/hdd$MDADMCONF
     execute_chroot_command "mdadm --examine --scan >> $MDADMCONF"; EXITCODE=$?
     return $EXITCODE
   fi
@@ -107,11 +133,13 @@ generate_new_ramdisk() {
       # previously we added an alias for eth0 based on the niclist (static
       # pci-id->driver mapping) of the old rescue. But the new rescue mdev/udev
       # So we only add aliases for the controller
-      echo -e "### Hetzner Online GmbH - installimage" > $MODULESFILE 2>>$DEBUGFILE
-      echo -e "# load all modules" >> $MODULESFILE 2>>$DEBUGFILE
-      echo -e "" >> $MODULESFILE 2>>$DEBUGFILE
+      {
+        echo -e "### Hetzner Online GmbH - installimage"
+        echo -e "# load all modules"
+        echo -e ""
 
-      echo -e "# hdds" >> $MODULESFILE 2>>$DEBUGFILE
+        echo -e "# hdds"
+      } > $MODULESFILE 2>>$DEBUGFILE
       HDDDEV=""
       for hddmodule in $MODULES; do
         if [ "$hddmodule" != "powernow-k8" -a "$hddmodule" != "via82cxxx" -a "$hddmodule" != "atiixp" ]; then
@@ -123,22 +151,29 @@ generate_new_ramdisk() {
     elif [ $IMG_VERSION -ge 60 ] ; then 
       # blacklist some kernel modules due to bugs and/or stability issues or annoyance
       local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
-      echo -e "### Hetzner Online GmbH - installimage" > $blacklist_conf
-      echo -e "### silence any onboard speaker" >> $blacklist_conf
-      echo -e "blacklist pcspkr" >> $blacklist_conf
-      echo -e "### i915 driver blacklisted due to various bugs" >> $blacklist_conf
-      echo -e "### especially in combination with nomodeset" >> $blacklist_conf
-      echo -e "blacklist i915" >> $blacklist_conf
+      {
+        echo -e "### Hetzner Online GmbH - installimage"
+        echo -e "### silence any onboard speaker"
+        echo -e "blacklist pcspkr"
+        echo -e "### i915 driver blacklisted due to various bugs"
+        echo -e "### especially in combination with nomodeset"
+        echo -e "blacklist i915"
+      } > $blacklist_conf
     fi
 
     if [ $IMG_VERSION -ge 70 ] ; then
-      DRACUTFILE="$FOLD/hdd/etc/dracut.conf.d/hetzner.conf"
-      echo "add_dracutmodules+=\"mdraid lvm\"" >> $DRACUTFILE
-      echo "add_drivers+=\"raid1 raid10 raid0 raid456\"" >> $DRACUTFILE
-      echo "mdadmconf=\"yes\"" >> $DRACUTFILE
-      echo "lvmconf=\"yes\"" >> $DRACUTFILE
-      echo "hostonly=\"no\"" >> $DRACUTFILE
-      echo "early_microcode=\"no\"" >> $DRACUTFILE
+      local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-hetzner.conf"
+      {
+        echo '### Hetzner Online GmbH - installimage'
+        echo 'add_dracutmodules+="lvm mdraid"'
+        echo 'add_drivers+="raid0 raid1 raid10 raid456"'
+        #echo 'early_microcode="no"'
+        echo 'hostonly="no"'
+        echo 'hostonly_cmdline="no"'
+        echo 'lvmconf="yes"'
+        echo 'mdadmconf="yes"'
+        echo 'persistent_policy="by-uuid"'
+      } > $dracutfile
     fi
 
     if [ $IMG_VERSION -ge 70 ] ; then 
@@ -348,7 +383,7 @@ run_os_specific_functions() {
   #
   debug "# Testing and setup of cpanel image"
   if [ -f "$FOLD/hdd/etc/wwwacct.conf" ] && [ -f "$FOLD/hdd/etc/cpupdate.conf" ] ; then
-    echo $IMAGENAME | grep -q -i cpanel && ( setup_cpanel || return 1 )
+    echo $IMAGE_FILE | grep -q -i cpanel && ( setup_cpanel || return 1 )
   fi
  
   # selinux autorelabel if enabled 

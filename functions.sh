@@ -59,11 +59,11 @@ LILOEXTRABOOT=""
 ERROREXIT="0"
 FINALIMAGEPATH=""
 
-PLESK_STD_VERSION="PLESK_12_0_18"
+PLESK_STD_VERSION="PLESK_12_5_30"
 
-SYSMFC=$(dmidecode -s system-manufacturer 2>/dev/null | head -n1)
-SYSTYPE=$(dmidecode -s system-product-name 2>/dev/null | head -n1)
-MBTYPE=$(dmidecode -s baseboard-product-name 2>/dev/null | head -n1)
+SYSMFC=$(dmidecode -s system-manufacturer 2>/dev/null | tail -n1)
+SYSTYPE=$(dmidecode -s system-product-name 2>/dev/null | tail -n1)
+MBTYPE=$(dmidecode -s baseboard-product-name 2>/dev/null | tail -n1)
 
 # functions
 # show text in a different color
@@ -448,7 +448,11 @@ create_config() {
    # use ext3 for vservers, because ext4 is too trigger happy of device timeouts
    if isVServer; then
 #     DEFAULTPARTS=${DEFAULTPARTS//ext4/ext3}
-     DEFAULTPARTS=$DEFAULTPARTS_VSERVER
+     if [ "$SYSTYPE" = "vServer" ]; then
+       DEFAULTPARTS=$DEFAULTPARTS_CLOUDSERVER
+     else
+       DEFAULTPARTS=$DEFAULTPARTS_VSERVER
+     fi
    fi
 
    # use /var instead of /home for all partition when installing plesk
@@ -519,7 +523,8 @@ return 0
 }
 
 getdrives() {
-  local DRIVES="$(sfdisk -s 2>/dev/null | sort -u | grep -e "/dev/[hsv]d" | cut -d: -f1)"
+#  local DRIVES="$(sfdisk -s 2>/dev/null | sort -u | grep -e "/dev/[hsv]d" | cut -d: -f1)"
+  local DRIVES="$(ls -1 /sys/block | egrep 'nvme[0-9]n[0-9]$|[hsv]d[a-z]$')"
   local i=1
 
   #cast drives into an array
@@ -527,8 +532,8 @@ getdrives() {
 
   for drive in ${DRIVES[*]} ; do
     # if we have just one drive, add it. Otherwise check that multiple drives are at least HDDMINSIZE
-    if [ ${#DRIVES[@]} -eq 1 ] || [ ! $(fdisk -s $drive 2>/dev/null || echo 0) -lt $HDDMINSIZE ] ; then
-      eval DRIVE$i="$drive"
+    if [ ${#DRIVES[@]} -eq 1 ] || [ ! $(fdisk -s /dev/$drive 2>/dev/null || echo 0) -lt $HDDMINSIZE ] ; then
+      eval DRIVE$i="/dev/$drive"
       let i=i+1
     fi
   done
@@ -700,7 +705,7 @@ if [ "$1" ]; then
   NEWHOSTNAME=$(grep -m1 -e ^HOSTNAME $1 | awk '{print $2}')
 
   GOVERNOR="`grep -m1 -e ^GOVERNOR $1 |awk '{print \$2}'`"
-  if [ "$GOVERNOR" = "" ]; then GOVERNOR="ondemand"; fi
+  if [ "$GOVERNOR" = "" ]; then GOVERNOR="$DEFAULTGOVERNOR"; fi
 
   SYSTEMDEVICE="$DRIVE1"
   SYSTEMREALDEVICE="$DRIVE1"
@@ -1290,8 +1295,25 @@ validate_vars() {
     return 1
   fi
 
- fi
- return 0
+  if [ "$MBTYPE" = "D3401-H1" ]; then
+    if [ "$IAM" = "debian" -a "$IMG_VERSION" -lt 82 ]; then
+      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
+        echo "WARNING: Debian versions older than Debian 8.2 have no support for the Intel i219 NIC of this board." | debugoutput
+      else
+        graph_notice "WARNING: Debian versions older than Debian 8.2 have no support for the Intel i219 NIC of this board."
+      fi
+    fi
+    if [ "$IAM" = "centos" -a "$IMG_VERSION" -ge 70 -a "$IMG_VERSION" -lt 72 ]; then
+      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
+        echo "WARNING: CentOS 7.0 and 7.1 have no support for the Intel i219 NIC of this board." | debugoutput
+      else
+        graph_notice "WARNING: CentOS 7.0 and 7.1 have no support for the Intel i219 NIC of this board."
+      fi
+    fi
+  fi
+
+  fi
+  return 0
 }
 
 #
@@ -1708,25 +1730,31 @@ create_partitions() {
 make_fstab_entry() {
  if [ "$1" -a "$2" -a "$3" -a "$4" ]; then
   ENTRY=""
+  local p="$(echo $1 | grep nvme)"
+  [ -n "$p" ] && p='p'
 
   if [ "$4" = "swap" ] ; then
-   ENTRY="$1$2 none swap sw 0 0"
+    ENTRY="$1$p$2 none swap sw 0 0"
  elif [ "$3" = "lvm" ] ; then 
-   ENTRY="# $1$2  belongs to LVM volume group '$4'"
+    ENTRY="# $1$2  belongs to LVM volume group '$4'"
   else
-   ENTRY="$1$2 $3 $4 defaults 0 0"  
+    if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
+      ENTRY="$1$p$2 $3 $4 defaults,discard 0 0"
+    else
+      ENTRY="$1$p$2 $3 $4 defaults 0 0"
+    fi
   fi
    
   echo $ENTRY >>$FOLD/fstab
 
   if [ "$3" = "/" ]; then
-    SYSTEMREALROOTDEVICE="$1$2"
+    SYSTEMREALROOTDEVICE="$1$p$2"
     if [ -z "$SYSTEMREALBOOTDEVICE" ]; then
-      SYSTEMREALBOOTDEVICE="$1$2"
+      SYSTEMREALBOOTDEVICE="$1$p$2"
     fi
   fi
   if [ "$3" = "/boot" ]; then
-    SYSTEMREALBOOTDEVICE="$1$2"
+    SYSTEMREALBOOTDEVICE="$1$p$2"
   fi
 
  fi
@@ -1767,32 +1795,40 @@ make_swraid() {
     mv $fstab $fstab.tmp
 
     debug "# create software raid array(s)"
-    METADATA="--metadata=1.2"
+    local metadata="--metadata=1.2"
+    local metadata_boot=$metadata
 
     #centos 6.x metadata
     if [ "$IAM" = "centos" -a "$IMG_VERSION" -lt 70 ]; then
       if [ "$IMG_VERSION" -ge 60 ]; then
-        METADATA="--metadata=1.0"
+        metadata="--metadata=1.0"
+        metadata_boot="--metadata=0.90"
       else
-        METADATA="--metadata=0.90"
+        metadata="--metadata=0.90"
       fi
     fi
 
-    local metadata_boot=$METADATA
-    [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -lt 1204 ] && metadata_boot="--metadata=0.90"
+    # we always use /dev/mdX in Ubuntu 10.04. In all other distributions we
+    # use it when we have Metadata format 0.90 in Ubuntu 11.04 we have to use
+    # /boot with metadata format 0.90
+    if [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -lt 1204 ]; then
+    	if [ "$IMG_VERSION" -le 1004 ]; then
+          metadata="--metadata=0.90"
+        else
+          metadata_boot="--metadata=0.90"
+        fi
+    fi
+    [ "$IAM" == "suse" -a "$IMG_VERSION" -lt 123 ] && metadata="--metadata=0.90"
     
     while read line ; do
       PARTNUM="$(next_partnum $count)"
-
       echo "Line is: \"$line\"" | debugoutput
-      # we always use /dev/mdX in Ubuntu 10.04. In all other distributions we use it when we have Metadata format 0.90
-      # in Ubuntu 11.04 we have to use /boot with metadata format 0.90
-      if [ -n "$(echo "$line" | grep "/boot")" -a  "$metadata_boot" == "--metadata=0.90" ] || [ "$METADATA" == "--metadata=0.90" ] ||  [ "$IAM" == "ubuntu"  -a  "$IMG_VERSION" == "1004" ] || [ "$IAM" == "suse" ] || [ "$IAM" == "centos" ]; then
+      if [ -n "$(echo "$line" | grep "/boot")" -a  "$metadata_boot" == "--metadata=0.90" ] || [ "$metadata" == "--metadata=0.90" ]; then
         # update fstab - replace /dev/sdaX with /dev/mdY
-        echo $line | sed "s/$SEDHDD[[:digit:]]\{1,2\}/\/dev\/md$count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md$count/g" >> $fstab
       else
         # update fstab - replace /dev/sdaX with /dev/md/Y
-        echo $line | sed "s/$SEDHDD[[:digit:]]\{1,2\}/\/dev\/md\/$count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md\/$count/g" >> $fstab
       fi
 
       # create raid array
@@ -1803,10 +1839,12 @@ make_swraid() {
         local n=0
         for n in $(seq 1 $COUNT_DRIVES) ; do
           TARGETDISK="$(eval echo \$DRIVE${n})"
-          components="$components $TARGETDISK$PARTNUM"
+          local p="$(echo $TARGETDISK | grep nvme)"
+          [ -n "$p" ] && p='p'
+          components="$components $TARGETDISK$p$PARTNUM"
         done
 
-        local array_metadata=$METADATA
+        local array_metadata=$metadata
         local array_raidlevel=$SWRAIDLEVEL
         local can_assume_clean=''
 
@@ -1965,7 +2003,7 @@ format_partitions() {
       elif [ "$FS" = "ext2" -o "$FS" = "ext3" -o "$FS" = "ext4" ]; then
         mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
       elif [ "$FS" = "btrfs" ]; then
-        wipefs $DEV | debugoutput
+        wipefs -a $DEV | debugoutput
         mkfs -t $FS $DEV 2>&1 | debugoutput ; EXITCODE=$?
       else
         mkfs -t $FS -q -f $DEV 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
@@ -2657,7 +2695,7 @@ generate_new_sshkeys() {
 #       [ "$IAM" = "debian"  -a  "$IMG_VERSION" -ge 80 ] || 
 #       [ "$IAM" = "ubuntu"  -a  "$IMG_VERSION" -ge 1404 ] || 
 #       [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 132 ]; then
-    if [ -f "$FOLD/hdd/etc/ssh/ssh_host_ed25515_key" ]; then
+    if [ -f "$FOLD/hdd/etc/ssh/ssh_host_ed25519_key" ]; then
       rm -f $FOLD/hdd/etc/ssh/ssh_host_ed25519_* 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
@@ -2674,8 +2712,12 @@ generate_new_sshkeys() {
         file="/etc/ssh/ssh_host_${key_type}_key.pub"
         key_json="\"key_type\": \"${key_type}\""
         if [ -f "$FOLD/hdd/$file" ]; then
-          execute_chroot_command "ssh-keygen -l -f ${file} > /tmp/${key_type}"
+          # The default key hashing algorithm used when displaying key fingerprints changes from MD5 to SHA256 in OpenSSH 6.8
+          if ! execute_chroot_command "ssh-keygen -l -f ${file} -E md5 > /tmp/${key_type} 2> /dev/null"; then
+            execute_chroot_command "ssh-keygen -l -f ${file} > /tmp/${key_type}"
+          fi
           while read bits fingerprint name type ; do
+            fingerprint="$(echo "${fingerprint}" | sed "s/^MD5://")"
             key_json="${key_json}, \"key_bits\": \"${bits}\", \"key_fingerprint\": \"${fingerprint}\", \"key_name\": \"${name}\""
           done <<< $(cat $FOLD/hdd/tmp/${key_type})
           [ -z "${keys_json}" ] && keys_json="{${key_json}}" || keys_json="${keys_json}, {${key_json}}"
@@ -2694,6 +2736,17 @@ set_ntp_time() {
   local ntp_pid
   local count=0
   local running=1
+  local systemd=0
+
+  if [ -x /bin/systemd-notify ]; then
+    systemd-notify --booted && systemd=1
+  fi
+
+  # if systemd is running and timesyncd too, then return
+  if [ $systemd -eq 1 ]; then
+    systemctl status systemd-timesyncd 1>/dev/null 2>&1 && return 0
+  fi
+
   service ntp status 1>/dev/null 2>&1 && running=0
 
   # stop ntp daemon first
@@ -2988,21 +3041,9 @@ write_grub() {
     return 0
   fi
 
-#TODO: this needs to be fixed in general, as all distros now install the
+#TODO: this needs to be fixed in general, as all distros install the
 #      bootloader in generate_grub_config instead
 
-#  # Delete existing lilo.conf
-#  execute_chroot_command "rm -rf /etc/lilo.conf"
-#
-#  execute_chroot_command "echo -e \"device (hd0) $DRIVE1\nroot (hd0,$PARTNUM)\nsetup (hd0)\nquit\" | grub --batch >> /dev/null 2>&1"
-#  [ $? -ne 0 ] && return $?
-#  
-#  # Install GRUB also on the second HDD when software RAID is enabled.
-#  if [ "$SWRAID" -eq "1" ]; then
-#    execute_chroot_command "echo -e \"device (hd0) $DRIVE2\nroot (hd0,$PARTNUM)\nsetup (hd0)\nquit\" | grub --batch >> /dev/null 2>&1"
-#  fi
-
-#  return $?
 }
 
 generate_config_lilo() {
@@ -3126,6 +3167,113 @@ create_hostname() {
 
 }
 
+# Executes a command within a systemd-nspawn container <command>
+execute_command_within_a_systemd_nspawn_container() {
+  local command="${1}"
+
+  local mount_point_blacklist=/dev
+  mount_point_blacklist="${mount_point_blacklist} /proc"
+  mount_point_blacklist="${mount_point_blacklist} /sys"
+
+  local container_root_dir=${FOLD}/hdd
+  local working_dir=${FOLD}
+
+  local temp_io_fifo=${container_root_dir}/temp_io.fifo
+  local temp_retval_fifo=${container_root_dir}/temp_retval.fifo
+  local temp_helper_script=${container_root_dir}/temp_helper.sh
+  local temp_helper_service_file=${container_root_dir}/etc/systemd/system/multi-user.target.wants/temp_helper.service
+  local temp_container_service_file=/lib/systemd/system/temp_container.service
+  local temp_umounted_mount_point_list=${working_dir}/temp_umounted_mount_points.txt
+
+  local command_retval=
+
+  local temp_files=${temp_io_fifo}
+  temp_files="${temp_files} ${temp_retval_fifo}"
+  temp_files="${temp_files} ${temp_helper_script}"
+  temp_files="${temp_files} ${temp_helper_service_file}"
+  temp_files="${temp_files} ${temp_container_service_file}"
+  temp_files="${temp_files} ${temp_umounted_mount_point_list}"
+
+  echo "Executing \"${command}\" within a systemd nspawn container" | debugoutput
+
+  mkfifo ${temp_io_fifo}
+  mkfifo ${temp_retval_fifo}
+
+  ### ### ### ### ### ### ### ### ### ###
+
+  cat <<HEREDOC > ${temp_helper_script}
+#!/usr/bin/env bash
+### Hetzner Online GmbH installimage
+trap "poweroff" 0
+\$(cat /$(basename ${temp_io_fifo})) &> /$(basename ${temp_io_fifo})
+echo \${?} > /$(basename ${temp_retval_fifo})
+HEREDOC
+
+  chmod a+x ${temp_helper_script}
+
+  ### ### ### ### ### ### ### ### ### ###
+
+  cat <<HEREDOC > ${temp_helper_service_file}
+### Hetzner Online GmbH installimage
+[Unit]
+Description=Temporary helper service
+After=network.target
+[Service]
+ExecStart=/$(basename ${temp_helper_script})
+HEREDOC
+
+  ### ### ### ### ### ### ### ### ### ###
+
+  cat <<HEREDOC > ${temp_container_service_file}
+### Hetzner Online GmbH installimage
+[Unit]
+Description=Temporary container service
+[Service]
+ExecStart=/usr/bin/systemd-nspawn \
+  --boot \
+  --directory=${container_root_dir} \
+  --quiet
+HEREDOC
+
+  ### ### ### ### ### ### ### ### ### ###
+
+  touch ${temp_umounted_mount_point_list}
+
+  echo "Temporarily umounting blacklisted mount points in order to start the systemd nspawn container" | debugoutput
+
+  while read entry; do
+    for blacklisted_mount_point in ${mount_point_blacklist}; do
+      while read subentry; do
+        umount --verbose $(echo ${subentry} | awk '{ print $2 }') 2>&1 | debugoutput || return 1
+        echo ${subentry} | cat - ${temp_umounted_mount_point_list} | uniq --unique > ${temp_umounted_mount_point_list}2
+        mv ${temp_umounted_mount_point_list}2 ${temp_umounted_mount_point_list}
+      done < <(echo ${entry} | grep ${container_root_dir}${blacklisted_mount_point})
+    done
+  done < <(cat /proc/mounts | tac -)
+
+  echo "Starting the systemd nspawn container" | debugoutput
+
+  systemctl daemon-reload 2>&1 | debugoutput || return 1
+  systemctl start $(basename ${temp_container_service_file}) 2>&1 | debugoutput || return 1
+
+  echo "${command}" > ${temp_io_fifo}
+  cat ${temp_io_fifo} | debugoutput
+  command_retval=$(cat ${temp_retval_fifo})
+
+  while systemctl is-active $(basename ${temp_container_service_file}) &> /dev/null; do
+    sleep 2
+  done
+
+  echo "The systemd nspawn container shut down" | debugoutput
+
+  echo "Remounting temporarily umounted mount points" | debugoutput
+
+  mount --all --fstab ${temp_umounted_mount_point_list} --verbose 2>&1 | debugoutput || return 1
+
+  rm --force ${temp_files}
+
+  return ${command_retval}
+}
 
 # check for latest subversion of Plesk
 check_plesk_subversion() {
@@ -3191,11 +3339,16 @@ install_plesk() {
     execute_chroot_command "mkdir -p /run/lock"
   fi
 
-# old  COMPONENTS="base psa-autoinstaller mod-bw mod_python qmail ruby mailman horde psa-firewall spamassassin pmm backup"
-  COMPONENTS="common psa-autoinstaller mod-bw mod_phyton postfix ruby mailman horde psa-firewall spamassassin pmm bind"
+  # COMPONENTS="base psa-autoinstaller mod-bw mod_python qmail ruby mailman horde psa-firewall spamassassin pmm backup"
+  # COMPONENTS="common psa-autoinstaller mod-bw mod_phyton postfix ruby mailman horde psa-firewall spamassassin pmm bind"
+  COMPONENTS="awstats bind config-troubleshooter dovecot drweb heavy-metal-skin horde l10n mailman mod-bw mod_fcgid mod_python mysqlgroup nginx panel php5.6 phpgroup pmm postfix proftpd psa-firewall roundcube spamassassin Troubleshooter webalizer web-hosting webservers"
   COMPONENTLIST="$(for component in $COMPONENTS; do echo -n "--install-component $component "; done)"
  
-  execute_chroot_command "/pleskinstaller  --select-product-id plesk --select-release-id $plesk_version $COMPONENTLIST"; EXITCODE=$?
+  if readlink --canonicalize /sbin/init | grep --quiet systemd && readlink --canonicalize $FOLD/hdd/sbin/init | grep --quiet systemd; then
+    execute_command_within_a_systemd_nspawn_container "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
+  else
+    execute_chroot_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
+  fi
   rm -rf $FOLD/hdd/pleskinstaller >/dev/null 2>&1
   
   return $EXITCODE
@@ -3287,8 +3440,9 @@ install_robot_script() {
         echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> $FOLD/hdd/etc/rc.local
         ;;
       centos)
-        echo -e "[ -x /robot.sh ] && /robot.sh" >> $FOLD/hdd/etc/rc.local
-        chmod +x $FOLD/hdd/etc/rc.local 1>/dev/null 2>&1
+        sed -e 's/^exit 0$//' -i $FOLD/hdd/etc/rc.d/rc.local
+        echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> $FOLD/hdd/etc/rc.d/rc.local
+        chmod +x $FOLD/hdd/etc/rc.d/rc.local 1>/dev/null 2>&1
         ;;
       suse)
         # needs suse 12.2 or higher
@@ -3502,7 +3656,9 @@ uuid_bugfix() {
 function hdinfo() {
   local withoutdev= vendor= name= logical_nr=
   withoutdev=${1##*/}
-  vendor="$(cat /sys/block/$withoutdev/device/vendor | tr -d ' ')"
+  if [ -e /sys/block/$withoutdev/device/vendor ]; then
+    vendor="$(cat /sys/block/$withoutdev/device/vendor | tr -d ' ')"
+  fi
   
   case "$vendor" in
     LSI)

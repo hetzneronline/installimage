@@ -7,54 +7,96 @@
 # (c) 2007-2015, Hetzner Online GmbH
 #
 
-
 # setup_network_config "$ETH" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK"
 setup_network_config() {
-  if [ "$1" -a "$2" ]; then
-    CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
-    if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
-      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
-    else
-      UDEVFILE="/dev/null"
-    fi
-    echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
-    echo -e "# device: $1" >> $UDEVFILE
-    echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
-
-    echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE
-    echo -e "# Loopback device:" >> $CONFIGFILE
-    echo -e "auto lo" >> $CONFIGFILE
-    echo -e "iface lo inet loopback" >> $CONFIGFILE
-    echo -e "" >> $CONFIGFILE
-    if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
-      echo -e "# device: $1" >> $CONFIGFILE
-      echo -e "auto  $1" >> $CONFIGFILE
-      echo -e "iface $1 inet static" >> $CONFIGFILE
-      echo -e "  address   $3" >> $CONFIGFILE
-      echo -e "  netmask   $5" >> $CONFIGFILE
-      echo -e "  gateway   $6" >> $CONFIGFILE
-      if ! is_private_ip "$3"; then 
-        echo -e "  # default route to access subnet" >> $CONFIGFILE
-        echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
+  if [ $IMG_VERSION -lt 1510 ]; then
+    if [ "$1" -a "$2" ]; then
+      CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
+      if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
+        UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
+      else
+        UDEVFILE="/dev/null"
       fi
-    fi
+      echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
+      echo -e "# device: $1" >> $UDEVFILE
+      echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
-    if [ "$8" -a "$9" -a "${10}" ]; then
-      debug "setting up ipv6 networking $8/$9 via ${10}"
+      echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE
+      echo -e "# Loopback device:" >> $CONFIGFILE
+      echo -e "auto lo" >> $CONFIGFILE
+      echo -e "iface lo inet loopback" >> $CONFIGFILE
       echo -e "" >> $CONFIGFILE
-      echo -e "iface $1 inet6 static" >> $CONFIGFILE
-      echo -e "  address $8" >> $CONFIGFILE
-      echo -e "  netmask $9" >> $CONFIGFILE
-      echo -e "  gateway ${10}" >> $CONFIGFILE	
-    fi
+      if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
+        echo -e "# device: $1" >> $CONFIGFILE
+        echo -e "auto  $1" >> $CONFIGFILE
+        echo -e "iface $1 inet static" >> $CONFIGFILE
+        echo -e "  address   $3" >> $CONFIGFILE
+        echo -e "  netmask   $5" >> $CONFIGFILE
+        echo -e "  gateway   $6" >> $CONFIGFILE
+        if ! is_private_ip "$3"; then
+          echo -e "  # default route to access subnet" >> $CONFIGFILE
+          echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
+        fi
+      fi
 
-    # set duplex speed
-    if ! isNegotiated && ! isVServer; then
-      echo -e "  # force full-duplex for ports without auto-neg" >> $CONFIGFILE
-      echo -e "  post-up mii-tool -F 100baseTx-FD $1" >> $CONFIGFILE
-    fi
+      if [ "$8" -a "$9" -a "${10}" ]; then
+        debug "setting up ipv6 networking $8/$9 via ${10}"
+        echo -e "" >> $CONFIGFILE
+        echo -e "iface $1 inet6 static" >> $CONFIGFILE
+        echo -e "  address $8" >> $CONFIGFILE
+        echo -e "  netmask $9" >> $CONFIGFILE
+        echo -e "  gateway ${10}" >> $CONFIGFILE
+      fi
 
-    return 0
+      # set duplex speed
+      if ! isNegotiated && ! isVServer; then
+        echo -e "  # force full-duplex for ports without auto-neg" >> $CONFIGFILE
+        echo -e "  post-up mii-tool -F 100baseTx-FD $1" >> $CONFIGFILE
+      fi
+
+      return 0
+    fi
+  else
+    if [ "$1" -a "$2" ]; then
+      # good we have a device and a MAC
+      CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-hetzner.network"
+      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
+
+      echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
+      echo -e "# device: $1" >> $UDEVFILE
+      echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
+
+      echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE
+      echo -e "# device: $1" >> $CONFIGFILE
+      echo -e "[Match]" >> $CONFIGFILE
+      echo -e "MACAddress=$2" >> $CONFIGFILE
+      echo -e "" >> $CONFIGFILE
+
+      echo -e "[Network]" >> $CONFIGFILE
+      if [ "$8" -a "$9" -a "${10}" ]; then
+        debug "setting up ipv6 networking $8/$9 via ${10}"
+        echo -e "Address=$8/$9" >> $CONFIGFILE
+        echo -e "Gateway=${10}" >> $CONFIGFILE
+        echo -e "" >> $CONFIGFILE
+      fi
+
+      if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
+        debug "setting up ipv4 networking $3/$5 via $6"
+        echo -e "Address=$3/$CIDR" >> $CONFIGFILE
+        echo -e "Gateway=$6" >> $CONFIGFILE
+        echo -e "" >> $CONFIGFILE
+
+        if ! is_private_ip "$3"; then
+          echo -e "[Route]" >> $CONFIGFILE
+          echo -e "Destination=$7/$CIDR" >> $CONFIGFILE
+          echo -e "Gateway=$6" >> $CONFIGFILE
+        fi
+      fi
+
+      execute_chroot_command "systemctl enable systemd-networkd.service"
+
+      return 0
+    fi
   fi
 }
 

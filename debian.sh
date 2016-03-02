@@ -4,7 +4,7 @@
 # Debian specific functions 
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2008-2015, Hetzner Online GmbH
+# (c) 2008-2016, Hetzner Online GmbH
 #
 
 
@@ -29,15 +29,21 @@ setup_network_config() {
     echo -e "" >> $CONFIGFILE
 
     if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
-      echo -e "# device: $1" >> $CONFIGFILE
-      echo -e "auto  $1" >> $CONFIGFILE
-      echo -e "iface $1 inet static" >> $CONFIGFILE
-      echo -e "  address   $3" >> $CONFIGFILE
-      echo -e "  netmask   $5" >> $CONFIGFILE
-      echo -e "  gateway   $6" >> $CONFIGFILE
-      if ! is_private_ip "$3"; then 
-        echo -e "  # default route to access subnet" >> $CONFIGFILE
-        echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
+      if is_private_ip "$3" && isVServer; then
+        echo -e "# device: $1" >> $CONFIGFILE
+        echo -e "auto  $1" >> $CONFIGFILE
+        echo -e "iface $1 inet dhcp" >> $CONFIGFILE
+      else 
+        echo -e "# device: $1" >> $CONFIGFILE
+        echo -e "auto  $1" >> $CONFIGFILE
+        echo -e "iface $1 inet static" >> $CONFIGFILE
+        echo -e "  address   $3" >> $CONFIGFILE
+        echo -e "  netmask   $5" >> $CONFIGFILE
+        echo -e "  gateway   $6" >> $CONFIGFILE
+        if ! is_private_ip "$3"; then 
+          echo -e "  # default route to access subnet" >> $CONFIGFILE
+          echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
+        fi
       fi
     fi
 
@@ -102,6 +108,36 @@ generate_new_ramdisk() {
       echo -e "### mei driver blacklisted due to serious bugs" >> $blacklist_conf
       echo -e "blacklist mei" >> $blacklist_conf
       echo -e "blacklist mei-me" >> $blacklist_conf
+    fi
+
+    # apparently sometimes the mdadm assembly bugfix introduced with the recent mdadm release does not work
+    # however, the problem is limited to H8SGL boards
+    # see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=784070
+    if [ "$IMG_VERSION" -ge 80 -a -n "$(dmidecode -s baseboard-product-name | grep -i H8SGL)" ]; then
+      local script="$FOLD/hdd/usr/share/initramfs-tools/scripts/local-block/mdadmpatch"
+      cat <<END > $script
+#!/bin/sh
+
+### Hetzner Online GmbH - installimage
+
+PREREQ="mdadm mdrun multipath"
+
+prereqs()
+{
+        echo "\$PREREQ"
+}
+
+case \$1 in
+# get pre-requisites
+prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+mdadm --assemble --scan
+END
+      chmod a+x $script
     fi
 
     # just make sure that we do not accidentally try to install a bootloader
@@ -192,7 +228,7 @@ run_os_specific_functions() {
   #
   debug "# Testing if mysql is installed and if this is a LAMP image and setting new debian-sys-maint password"
   if [ -f "$FOLD/hdd/etc/mysql/debian.cnf" ] ; then
-    echo $IMAGENAME | grep -q -i lamp && ( randomize_maint_mysql_pass || return 1 )
+    echo $IMAGE_FILE | grep -q -i lamp && ( randomize_maint_mysql_pass || return 1 )
   fi
 
   return 0
