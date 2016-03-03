@@ -265,4 +265,4 @@ fi
 [ "$OPT_USE_SSHKEYS" ]  && debug "# OPT_USE_SSHKEYS:  $OPT_USE_SSHKEYS"
 [ "$OPT_SSHKEYS_URL" ]  && debug "# OPT_SSHKEYS_URL:  $OPT_SSHKEYS_URL"
 
-
+# vim: ai:ts=2:sw=2:et

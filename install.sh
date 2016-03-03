@@ -519,3 +519,5 @@ echo
 echo_bold "                  INSTALLATION COMPLETE"
 echo_bold "   You can now reboot and log in to your new system with"
 echo_bold "  the same password as you logged in to the rescue system.\n"
+
+# vim: ai:ts=2:sw=2:et

@@ -453,3 +453,5 @@ modify_wwwacct() {
   execute_chroot_command "echo \"NS2 ${NS2}\" >> $WWWACCT"
   execute_chroot_command "echo \"NS3 ${NS3}\" >> $WWWACCT"
 }
+
+# vim: ai:ts=2:sw=2:et

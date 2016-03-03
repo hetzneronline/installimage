@@ -354,3 +354,4 @@ run_os_specific_functions() {
   return 0
 }
 
+# vim: ai:ts=2:sw=2:et

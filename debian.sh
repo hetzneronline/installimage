@@ -4,7 +4,7 @@
 # Debian specific functions 
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2008-2016, Hetzner Online GmbH
+# (c) 2008-2015, Hetzner Online GmbH
 #
 
 
@@ -115,28 +115,7 @@ generate_new_ramdisk() {
     # see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=784070
     if [ "$IMG_VERSION" -ge 80 -a -n "$(dmidecode -s baseboard-product-name | grep -i H8SGL)" ]; then
       local script="$FOLD/hdd/usr/share/initramfs-tools/scripts/local-block/mdadmpatch"
-      cat <<END > $script
-#!/bin/sh
-
-### Hetzner Online GmbH - installimage
-
-PREREQ="mdadm mdrun multipath"
-
-prereqs()
-{
-        echo "\$PREREQ"
-}
-
-case \$1 in
-# get pre-requisites
-prereqs)
-        prereqs
-        exit 0
-        ;;
-esac
-
-mdadm --assemble --scan
-END
+      cp $SCRIPTPATH/h8sgl-deb8-md.sh $script
       chmod a+x $script
     fi
 
@@ -311,3 +290,4 @@ debian_grub_fix() {
   done
 }
 
+# vim: ai:ts=2:sw=2:et
