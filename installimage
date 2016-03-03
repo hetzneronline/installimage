@@ -20,6 +20,7 @@ esac
 
 clear
 wd=$(pwd)
+export wd
 
 # important: set pipefile bash option, see bash manual
 set -o pipefail
@@ -33,7 +34,7 @@ echo 3 >/proc/sys/vm/drop_caches
 
 
 # realconfig
-SCRIPTPATH="`dirname $0`"
+SCRIPTPATH="$(dirname $0)"
 REALCONFIG="$SCRIPTPATH/config.sh"
 
 # copy our config file and read global variables and functions
@@ -47,8 +48,10 @@ echo > $DEBUGFILE
 
 # get command line options
 if [ $# -lt 1 -a ! -e "$AUTOSETUPCONFIG" ] ; then
-  echo -e "\n${YELLOW}run  'installimage -h'  to get help for command line arguments."
-  echo -e "${GREEN}starting interactive mode ...${NOCOL}\n"
+  echo ""
+  echo -e "${YELLOW}run  'installimage -h'  to get help for command line arguments."
+  echo -e "${GREEN}starting interactive mode ...${NOCOL}"
+  echo ""
   # press any key or sleep 1 sec ...
   read -n1 -t1
 fi
@@ -81,34 +84,42 @@ else
 fi
 
 # Unmount all partitions and print an error message if it fails
-unmount_all ; EXITCODE=$?
+output=$(unmount_all) ; EXITCODE=$?
 if [ $EXITCODE -ne 0 ] ; then
-  echo -e "$RED""\nERROR unmounting device(s):$NOCOL\n$unmount_output\n"
-  echo -e "$RED""Cannot continue, device(s) seem to be in use.$NOCOL"
-  echo -e "Please unmount used devices manually or reboot the rescuesystem and retry.\n"
+  echo ""
+  echo -e "${RED}ERROR unmounting device(s):$NOCOL"
+  echo "$output"
+  echo ""
+  echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
+  echo "Please unmount used devices manually or reboot the rescuesystem and retry."
+  echo ""
   exit 1
 fi
 stop_lvm_raid ; EXITCODE=$?
 if [ $EXITCODE -ne 0 ] ; then
-  echo -e "$RED""\nERROR stopping LVM and/or RAID device(s):$NOCOL\n$unmount_output\n"
-  echo -e "$RED""Cannot continue, device(s) seem to be in use.$NOCOL"
-  echo -e "Please stop used lvm/raid manually or reboot the rescuesystem and retry.\n"
+  echo ""
+  echo -e "${RED}ERROR stopping LVM and/or RAID device(s):$NOCOL"
+  echo ""
+  echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
+  echo "Please stop used lvm/raid manually or reboot the rescuesystem and retry."
+  echo ""
   exit 1
 fi
 
 
 # check if we have a autosetup-file, else we start the menu
-if [ -e $AUTOSETUPCONFIG ] ; then
+if [ -e "$AUTOSETUPCONFIG" ] ; then
 
   # start autosetup
-  AUTOSETUP="true"
-  cp  $AUTOSETUPCONFIG  $FOLD/install.conf
-  [ "$OPT_CONFIGFILE" ] && mv  $AUTOSETUPCONFIG  $AUTOSETUPCONFIG.bak-$(date +%Y%m%d-%H%M%S)
+  export AUTOSETUP="true"
+  cp "$AUTOSETUPCONFIG" "$FOLD/install.conf"
+  [ "$OPT_CONFIGFILE" ] && mv  "$AUTOSETUPCONFIG"  $AUTOSETUPCONFIG.bak-$(date +%Y%m%d-%H%M%S)
   debug "# executing autosetup ..."
-  if [ -f $AUTOSETUPFILE ] ; then
-     . $AUTOSETUPFILE ; EXITCODE=$?
+  if [ -f "$AUTOSETUPFILE" ] ; then
+     . "$AUTOSETUPFILE" ; EXITCODE=$?
   else
-    echo -e "${RED}\nERROR: $AUTOSETUPFILE does not exist${NOCOL}"
+    echo ""
+    echo -e "${RED}ERROR: $AUTOSETUPFILE does not exist${NOCOL}"
     debug "=> FAILED, $AUTOSETUPFILE does not exist"
   fi
 
@@ -116,11 +127,12 @@ else
 
   # start the menu
   debug "# executing setupfile"
-  if [ -f $SETUPFILE ] ; then
-     . $SETUPFILE ; EXITCODE=$?
+  if [ -f "$SETUPFILE" ] ; then
+     . "$SETUPFILE" ; EXITCODE=$?
   else
     debug "=> FAILED, $SETUPFILE does not exist"
-    echo -e "${RED}\nERROR: Cant find files${NOCOL}"
+    echo ""
+    echo -e "${RED}ERROR: Cant find files${NOCOL}"
   fi
 fi
 

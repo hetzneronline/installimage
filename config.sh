@@ -31,8 +31,7 @@ IMAGEFILETYPE="tgz"
 HETZNER_PUBKEY=$SCRIPTPATH"/gpg/public-key.asc"
 
 MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
-STATSSERVER="rz-admin.hetzner.de"
-#STATSSERVER="192.168.100.1"
+STATSSERVER="213.133.99.103"
 CURL_OPTIONS="-q -s -S --ftp-create-dirs"
 HDDMINSIZE="70000000"
 

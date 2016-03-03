@@ -487,14 +487,8 @@ if [ -n "$OPT_SSHKEYS_URL" ] ; then
 fi
 
 #
-#
-# Report statistic (disabled, gathered from config below)
-#
-#report_statistic "$STATSSERVER" "$IMAGE_FILE" "$SWRAID" "$LVM" "$BOOTLOADER" "$ERROREXIT"
-
-#
-# Report install.conf to rz_admin
-# Report debug.txt to rz_admin
+# Report install.conf to rz-admin
+# Report debug.txt to rz-admin
 #
 report_id="$(report_config)"
 report_debuglog $report_id
