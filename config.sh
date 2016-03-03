@@ -12,23 +12,24 @@ DEBUGFILE=/root/debug.txt
 
 
 # set up standard env
-SCRIPTPATH=`dirname $0`
-DISABLEDFILE=$SCRIPTPATH"/disabled"
-SETUPFILE=$SCRIPTPATH"/setup.sh"
-AUTOSETUPFILE=$SCRIPTPATH"/autosetup.sh"
+SCRIPTPATH=$(dirname "$0")
+DISABLEDFILE="$SCRIPTPATH/disabled"
+SETUPFILE="$SCRIPTPATH/setup.sh"
+AUTOSETUPFILE="$SCRIPTPATH/autosetup.sh"
 AUTOSETUPCONFIG="/autosetup"
-INSTALLFILE=$SCRIPTPATH"/install.sh"
-FUNCTIONSFILE=$SCRIPTPATH"/functions.sh"
-GETOPTIONSFILE=$SCRIPTPATH"/get_options.sh"
-STANDARDCONFIG=$SCRIPTPATH"/standard.conf"
-CONFIGSPATH=$SCRIPTPATH"/configs"
-POSTINSTALLPATH=$SCRIPTPATH"/post-install"
-IMAGESPATH=$SCRIPTPATH"/../images/"
-OLDIMAGESPATH=$SCRIPTPATH"/../images.old/"
+INSTALLFILE="$SCRIPTPATH/install.sh"
+FUNCTIONSFILE="$SCRIPTPATH/functions.sh"
+GETOPTIONSFILE="$SCRIPTPATH/get_options.sh"
+STANDARDCONFIG="$SCRIPTPATH/standard.conf"
+CONFIGSPATH="$SCRIPTPATH/configs"
+POSTINSTALLPATH="$SCRIPTPATH/post-install"
+IMAGESPATH="$SCRIPTPATH/../images/"
+OLDIMAGESPATH="$SCRIPTPATH/../images.old/"
 IMAGESPATHTYPE="local"
 IMAGESEXT="tar.gz"
 IMAGEFILETYPE="tgz"
-HETZNER_PUBKEY=$SCRIPTPATH"/gpg/public-key.asc"
+COMPANY_PUBKEY="$SCRIPTPATH/gpg/public-key.asc"
+export COMPANY="Hetzner Online GmbH"
 
 MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
 STATSSERVER="213.133.99.103"
@@ -54,7 +55,7 @@ DEFAULTGOVERNOR="ondemand"
 V6ONLY="0"
 
 # dialog settings
-DIATITLE='Hetzner Online GmbH'
+DIATITLE="$COMPANY"
 OSMENULIST='Debian (official) '
 OSMENULIST=$OSMENULIST'Ubuntu (official) '
 OSMENULIST=$OSMENULIST'CentOS (official) '

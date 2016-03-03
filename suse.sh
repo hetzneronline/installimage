@@ -25,7 +25,7 @@ setup_network_config() {
     # Delete network udev rules
 #    rm $FOLD/hdd/etc/udev/rules.d/*-persistent-net.rules 2>&1 | debugoutput
 
-    echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
+    echo -e "### $COMPANY - installimage" > $UDEVFILE
     echo -e "# device: $1" >> $UDEVFILE
     echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
@@ -34,7 +34,7 @@ setup_network_config() {
 
     CONFIGFILE="$FOLD/hdd/etc/sysconfig/network/ifcfg-$1"
 
-    echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE 2>>$DEBUGFILE
+    echo -e "### $COMPANY - installimage" > $CONFIGFILE 2>>$DEBUGFILE
     echo -e "# device: $1" >> $CONFIGFILE 2>>$DEBUGFILE
     echo -e "BOOTPROTO='static'" >> $CONFIGFILE 2>>$DEBUGFILE
     echo -e "MTU=''" >> $CONFIGFILE 2>>$DEBUGFILE
@@ -102,7 +102,7 @@ generate_new_ramdisk() {
   # blacklist i915
   local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
   {
-    echo '### Hetzner Online GmbH - installimage'
+    echo '### $COMPANY - installimage'
     echo '### i915 driver blacklisted due to various bugs'
     echo '### especially in combination with nomodeset'
     echo 'blacklist i915'
@@ -130,7 +130,7 @@ generate_new_ramdisk() {
   else 
     local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-hetzner.conf"
     {
-      echo '### Hetzner Online GmbH - installimage'
+      echo '### $COMPANY - installimage'
       echo 'add_dracutmodules+="lvm mdraid"'
       echo 'add_drivers+="raid0 raid1 raid10 raid456"'
       #echo 'early_microcode="no"'
@@ -173,7 +173,7 @@ setup_cpufreq() {
      # check release notes of furture releases carefully, if this has changed!
      
 #    CPUFREQCONF="$FOLD/hdd/etc/init.d/boot.local"
-#    echo -e "### Hetzner Online GmbH - installimage" > $CPUFREQCONF 2>>$DEBUGFILE
+#    echo -e "### $COMPANY - installimage" > $CPUFREQCONF 2>>$DEBUGFILE
 #    echo -e "# cpu frequency scaling" >> $CPUFREQCONF 2>>$DEBUGFILE
 #    echo -e "cpufreq-set -g $1 -r >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
 
@@ -214,7 +214,7 @@ generate_config_grub() {
     BFILE="$FOLD/hdd/boot/grub/menu.lst"
 
     echo "#" > $BFILE 2>> $DEBUGFILE
-    echo "# Hetzner Online GmbH - installimage" >> $BFILE 2>> $DEBUGFILE
+    echo "### $COMPANY - installimage" >> $BFILE 2>> $DEBUGFILE
     echo "# GRUB bootloader configuration file" >> $BFILE 2>> $DEBUGFILE
     echo "#" >> $BFILE 2>> $DEBUGFILE
     echo >> $BFILE 2>> $DEBUGFILE

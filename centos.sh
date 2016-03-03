@@ -17,7 +17,7 @@ setup_network_config() {
       UDEVFILE="/dev/null"
     fi
     { 
-      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "### $COMPANY - installimage"
       echo -e "# device: $1"
       echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", KERNEL==\"eth*\", NAME=\"$1\""
     } > $UDEVFILE
@@ -26,7 +26,7 @@ setup_network_config() {
 
     NETWORKFILE="$FOLD/hdd/etc/sysconfig/network"
     {
-      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "### $COMPANY - installimage"
       echo -e "# general networking"
       echo -e "NETWORKING=yes"
     } > $NETWORKFILE 2>>$DEBUGFILE
@@ -37,7 +37,7 @@ setup_network_config() {
     ROUTEFILE="$FOLD/hdd/etc/sysconfig/network-scripts/route-$1"
 
     {
-      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "### $COMPANY - installimage"
       echo -e "#" 
     } > $CONFIGFILE 2>>$DEBUGFILE
 
@@ -73,7 +73,7 @@ setup_network_config() {
         } >> $CONFIGFILE 2>>$DEBUGFILE
 
         {
-          echo -e "### Hetzner Online GmbH - installimage"
+          echo -e "### $COMPANY - installimage"
           echo -e "# routing for eth0"
           echo -e "ADDRESS0=0.0.0.0"
           echo -e "NETMASK0=0.0.0.0"
@@ -134,7 +134,7 @@ generate_new_ramdisk() {
       # pci-id->driver mapping) of the old rescue. But the new rescue mdev/udev
       # So we only add aliases for the controller
       {
-        echo -e "### Hetzner Online GmbH - installimage"
+        echo -e "### $COMPANY - installimage"
         echo -e "# load all modules"
         echo -e ""
 
@@ -152,7 +152,7 @@ generate_new_ramdisk() {
       # blacklist some kernel modules due to bugs and/or stability issues or annoyance
       local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
       {
-        echo -e "### Hetzner Online GmbH - installimage"
+        echo -e "### $COMPANY - installimage"
         echo -e "### silence any onboard speaker"
         echo -e "blacklist pcspkr"
         echo -e "### i915 driver blacklisted due to various bugs"
@@ -164,7 +164,7 @@ generate_new_ramdisk() {
     if [ $IMG_VERSION -ge 70 ] ; then
       local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-hetzner.conf"
       {
-        echo '### Hetzner Online GmbH - installimage'
+        echo '### $COMPANY - installimage'
         echo 'add_dracutmodules+="lvm mdraid"'
         echo 'add_drivers+="raid0 raid1 raid10 raid456"'
         #echo 'early_microcode="no"'
@@ -205,7 +205,7 @@ setup_cpufreq() {
       local CPUFREQCONF="$FOLD/hdd/etc/sysconfig/modules/cpufreq.modules"
       echo -e "" > $CPUFREQCONF 2>>$DEBUGFILE
       echo -e "#!/bin/sh" > $CPUFREQCONF 2>>$DEBUGFILE
-      echo -e "### Hetzner Online GmbH - installimage" >> $CPUFREQCONF 2>>$DEBUGFILE
+      echo -e "### $COMPANY - installimage" >> $CPUFREQCONF 2>>$DEBUGFILE
       echo -e "# cpu frequency scaling" >> $CPUFREQCONF 2>>$DEBUGFILE
       echo -e "# this gets started by /etc/rc.sysinit" >> $CPUFREQCONF 2>>$DEBUGFILE
       if [ "$(check_cpu)" = "intel" ]; then

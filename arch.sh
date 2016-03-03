@@ -15,11 +15,11 @@ setup_network_config() {
     CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-hetzner.network"
     UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
-    echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
+    echo -e "### $COMPANY - installimage" > $UDEVFILE
     echo -e "# device: $1" >> $UDEVFILE
     echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
-    echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE
+    echo -e "### $COMPANY - installimage" > $CONFIGFILE
     echo -e "# device: $1" >> $CONFIGFILE
     echo -e "[Match]" >> $CONFIGFILE
     echo -e "MACAddress=$2" >> $CONFIGFILE
@@ -69,7 +69,7 @@ generate_new_ramdisk() {
   if [ "$1" ]; then
     local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
     {
-      echo -e "### Hetzner Online GmbH - installimage"
+      echo -e "### $COMPANY - installimage"
       echo -e "### silence any onboard speaker"
       echo -e "blacklist pcspkr"
       echo -e "blacklist snd_pcsp"

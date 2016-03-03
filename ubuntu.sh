@@ -17,11 +17,11 @@ setup_network_config() {
       else
         UDEVFILE="/dev/null"
       fi
-      echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
+      echo -e "### $COMPANY - installimage" > $UDEVFILE
       echo -e "# device: $1" >> $UDEVFILE
       echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
-      echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE
+      echo -e "### $COMPANY - installimage" > $CONFIGFILE
       echo -e "# Loopback device:" >> $CONFIGFILE
       echo -e "auto lo" >> $CONFIGFILE
       echo -e "iface lo inet loopback" >> $CONFIGFILE
@@ -62,11 +62,11 @@ setup_network_config() {
       CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-hetzner.network"
       UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
-      echo -e "### Hetzner Online GmbH - installimage" > $UDEVFILE
+      echo -e "### $COMPANY - installimage" > $UDEVFILE
       echo -e "# device: $1" >> $UDEVFILE
       echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
 
-      echo -e "### Hetzner Online GmbH - installimage" > $CONFIGFILE
+      echo -e "### $COMPANY - installimage" > $CONFIGFILE
       echo -e "# device: $1" >> $CONFIGFILE
       echo -e "[Match]" >> $CONFIGFILE
       echo -e "MACAddress=$2" >> $CONFIGFILE
@@ -135,7 +135,7 @@ generate_new_ramdisk() {
       # blacklist i915 driver due to many bugs and stability issues
       # required for Ubuntu 12.10 because of a kernel bug
       local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
-      echo -e "### Hetzner Online GmbH - installimage" > $blacklist_conf
+      echo -e "### $COMPANY - installimage" > $blacklist_conf
       echo -e "### silence any onboard speaker" >> $blacklist_conf
       echo -e "blacklist pcspkr" >> $blacklist_conf
       echo -e "### i915 driver blacklisted due to various bugs" >> $blacklist_conf
@@ -160,7 +160,7 @@ setup_cpufreq() {
   if [ "$1" ]; then
     LOADCPUFREQCONF="$FOLD/hdd/etc/default/loadcpufreq"
     CPUFREQCONF="$FOLD/hdd/etc/default/cpufrequtils"
-    echo -e "### Hetzner Online GmbH - installimage" > $CPUFREQCONF
+    echo -e "### $COMPANY - installimage" > $CPUFREQCONF
     echo -e "# cpu frequency scaling" >> $CPUFREQCONF
     if isVServer; then
       echo -e "ENABLE=\"false\"" > $LOADCPUFREQCONF

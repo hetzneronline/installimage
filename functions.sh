@@ -169,10 +169,12 @@ create_config() {
      return 1
    fi
 
-   echo -e "## ===================================================" > $CNF
-   echo -e "##  Hetzner Online GmbH - installimage - standardconfig " >> $CNF
-   echo -e "## ===================================================" >> $CNF
-   echo -e "" >> $CNF
+   {
+     echo "## ======================================================"
+     echo "##  $COMPANY - installimage - standard config "
+     echo "## ======================================================"
+     echo ""
+    } > $CNF
 
    # first drive
    echo -e "\n" >> $CNF
@@ -2173,10 +2175,10 @@ import_imagekey() {
   # check if pubkey is given by the customer
   if [ -n "$IMAGE_PUBKEY" -a -e "$IMAGE_PUBKEY" ] ; then
     PUBKEY=$IMAGE_PUBKEY
-  elif [ -e "$HETZNER_PUBKEY" ] ; then
-    # if no special pubkey given, use the hetzner key
-    echo "Using hetzner standard pubkey: $HETZNER_PUBKEY" | debugoutput
-    PUBKEY=$HETZNER_PUBKEY
+  elif [ -e "$COMPANY_PUBKEY" ] ; then
+    # if no special pubkey given, use the standard company key
+    echo "Using standard $COMPANY pubkey: $COMPANY_PUBKEY" | debugoutput
+    PUBKEY=$COMPANY_PUBKEY
   fi
   if [ -n "$PUBKEY" ] ; then
     # import public key
@@ -2474,7 +2476,7 @@ generate_resolvconf() {
   fi
 #  else 
     NAMESERVERFILE="$FOLD/hdd/etc/resolv.conf"
-    echo -e "### Hetzner Online GmbH installimage" > $NAMESERVERFILE
+    echo -e "### $COMPANY installimage" > $NAMESERVERFILE
     echo -e "# nameserver config" >> $NAMESERVERFILE
 
     # IPV4
@@ -2542,7 +2544,7 @@ set_hostname() {
     local fqdn_name="$sethostname"
     [ "$sethostname" = "$shortname" ] && fqdn_name=''
 
-    echo "### Hetzner Online GmbH installimage" > $hostsfile
+    echo "### $COMPANY installimage" > $hostsfile
     echo "# nameserver config" >> $hostsfile
     echo "# IPv4" >> $hostsfile
     echo "127.0.0.1 localhost.localdomain localhost" >> $hostsfile
@@ -2586,7 +2588,7 @@ generate_hosts() {
       HOSTNAME="$(cat $HOSTNAMEFILE | cut -d. -f1)";
       [ "$FULLHOSTNAME" = "$HOSTNAME" ] && FULLHOSTNAME=""
     fi
-    echo "### Hetzner Online GmbH installimage" > $HOSTSFILE
+    echo "### $COMPANY installimage" > $HOSTSFILE
     echo "# nameserver config" >> $HOSTSFILE
     echo "# IPv4" >> $HOSTSFILE
     echo "127.0.0.1 localhost.localdomain localhost" >> $HOSTSFILE
@@ -2907,7 +2909,7 @@ generate_sysctlconf() {
    sysctl_conf="$FOLD/hdd/etc/sysctl.d/99-hetzner.conf"
   fi
     cat << EOF > $sysctl_conf
-### Hetzner Online GmbH installimage
+### $COMPANY installimage
 # sysctl config
 #net.ipv4.ip_forward=1
 net.ipv4.conf.all.rp_filter=1
@@ -3050,7 +3052,7 @@ generate_config_lilo() {
   if [ "$1" ]; then
   BFILE="$FOLD/hdd/etc/lilo.conf"
   rm -rf "$FOLD/hdd/boot/grub/menu.lst" >>/dev/null 2>&1
-  echo -e "### Hetzner Online GmbH installimage" > $BFILE
+  echo -e "### $COMPANY installimage" > $BFILE
   echo -e "# bootloader config" >> $BFILE
   if [ "$LILOEXTRABOOT" ]; then
     echo -e "$LILOEXTRABOOT" >> $BFILE
@@ -3203,7 +3205,7 @@ execute_command_within_a_systemd_nspawn_container() {
 
   cat <<HEREDOC > ${temp_helper_script}
 #!/usr/bin/env bash
-### Hetzner Online GmbH installimage
+### $COMPANY installimage
 trap "poweroff" 0
 \$(cat /$(basename ${temp_io_fifo})) &> /$(basename ${temp_io_fifo})
 echo \${?} > /$(basename ${temp_retval_fifo})
@@ -3214,7 +3216,7 @@ HEREDOC
   ### ### ### ### ### ### ### ### ### ###
 
   cat <<HEREDOC > ${temp_helper_service_file}
-### Hetzner Online GmbH installimage
+### $COMPANY installimage
 [Unit]
 Description=Temporary helper service
 After=network.target
@@ -3225,7 +3227,7 @@ HEREDOC
   ### ### ### ### ### ### ### ### ### ###
 
   cat <<HEREDOC > ${temp_container_service_file}
-### Hetzner Online GmbH installimage
+### $COMPANY installimage
 [Unit]
 Description=Temporary container service
 [Service]
