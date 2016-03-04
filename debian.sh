@@ -41,7 +41,7 @@ setup_network_config() {
     } > "$CONFIGFILE"
 
     if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-      echo "# device: $1" >> $CONFIGFILE
+      echo "# device: $1" >> "$CONFIGFILE"
       if is_private_ip "$3" && isVServer; then
         {
           echo "auto  $1"
@@ -146,7 +146,7 @@ generate_new_ramdisk() {
     # when we haven't configured grub yet
     # Debian won't install a boot loader anyway, but display an error message,
     # that needs to be confirmed
-    sed -i "s/do_bootloader = yes/do_bootloader = no/" $FOLD/hdd/etc/kernel-img.conf
+    sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
 
     # well, we might just as well update all initramfs and stop findling around
     # to find out which kernel version is the latest
@@ -165,8 +165,8 @@ setup_cpufreq() {
       echo "# cpu frequency scaling"
     } > "$cpufreqconf"
     if isVServer; then
-      echo 'ENABLE="false"' > $loadcpufreqconf
-      echo 'ENABLE="false"' >> $cpufreqconf
+      echo 'ENABLE="false"' > "$loadcpufreqconf"
+      echo 'ENABLE="false"' >> "$cpufreqconf"
     else
       {
         echo 'ENABLE="true"'
@@ -205,10 +205,9 @@ generate_config_grub() {
   execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"'"${grub_linux_default}"'\"/"'
 
   # only install grub2 in mbr of all other drives if we use swraid
-  local i=0
-  for i in $(seq 1 $COUNT_DRIVES) ; do
-    if [ $SWRAID -eq 1 -o $i -eq 1 ] ;  then
-      local disk="$(eval echo "\$DRIVE"$i)"
+  for ((i=1; i<=COUNT_DRIVES; i++)); do
+    if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
+      local disk; disk="$(eval echo "\$DRIVE"$i)"
       execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
     fi
   done
@@ -221,16 +220,16 @@ generate_config_grub() {
   PARTNUM=$(echo "$SYSTEMBOOTDEVICE" | rev | cut -c1)
 
   if [ "$SWRAID" = "0" ]; then
-    PARTNUM="$[$PARTNUM - 1]"
+    PARTNUM="$((PARTNUM - 1))"
   fi
-  
+
   delete_grub_device_map
- 
+
   return "$EXITCODE"
 }
 
 delete_grub_device_map() {
-  [ -f $FOLD/hdd/boot/grub/device.map ] && rm $FOLD/hdd/boot/grub/device.map
+  [ -f "$FOLD/hdd/boot/grub/device.map" ] && rm "$FOLD/hdd/boot/grub/device.map"
 }
 
 #
@@ -257,9 +256,9 @@ randomize_mdadm_checkarray_cronjob_time() {
   local mdcron="$FOLD/hdd/etc/cron.d/mdadm"
   if [ -f "$mdcron" ] && grep -q checkarray "$mdcron"; then
     declare -i hour minute day
-    hour=$((($RANDOM % 4) + 1))
-    minute=$((($RANDOM % 59) + 1))
-    day=$((($RANDOM % 28) + 1))
+    minute=$(((RANDOM % 59) + 1))
+    hour=$(((RANDOM % 4) + 1))
+    day=$(((RANDOM % 28) + 1))
     debug "# Randomizing cronjob run time for mdadm checkarray: day $day @ $hour:$minute"
 
     sed -i \
@@ -287,7 +286,7 @@ randomize_maint_mysql_pass() {
   local PMAPASS=$(pwgen -s 16 1)
   local PMASEC=$(pwgen -s 24 1)
   if [ -f "$PMA_SEC_CNF" ]; then
-    echo -e "<?php\n\$cfg['blowfish_secret'] = '$PMASEC';" > $PMA_SEC_CNF
+    echo -e "<?php\n\$cfg['blowfish_secret'] = '$PMASEC';" > "$PMA_SEC_CNF"
   fi
   MYSQLCOMMAND="USE mysql;\nUPDATE user SET password=PASSWORD(\""$DEBIANPASS"\") WHERE user='debian-sys-maint'; \
   UPDATE user SET password=PASSWORD(\""$ROOTPASS"\") WHERE user='root'; \
@@ -301,20 +300,24 @@ randomize_maint_mysql_pass() {
   execute_chroot_command "DEBIAN_FRONTEND=noninteractive dpkg-reconfigure phpmyadmin"
   rm "$FOLD/hdd/etc/mysql/pwchange.sql"
 
+  #
   # generate correct ~/.my.cnf
-  echo "[client]" > $MYCNF
-  echo "user=root" >> $MYCNF
-  echo "password=$ROOTPASS" >> $MYCNF
+  #
+  {
+    echo "[client]"
+    echo "user=root"
+    echo "password=$ROOTPASS"
+  } > "$MYCNF"
 
   # write password file and erase script
-  cp $SCRIPTPATH/password.txt $FOLD/hdd/
-  sed -i -e "s#<password>#$ROOTPASS#" $FOLD/hdd/password.txt
-  chmod 600 $FOLD/hdd/password.txt
-  echo -e "\nNote: Your MySQL password is in /password.txt (delete this with \"erase_password_note\")\n" >> $FOLD/hdd/etc/motd.tail
-  cp $SCRIPTPATH/erase_password_note $FOLD/hdd/usr/local/bin/
-  chmod +x $FOLD/hdd/usr/local/bin/erase_password_note
+  cp "$SCRIPTPATH/password.txt" "$FOLD/hdd/"
+  sed -i -e "s#<password>#$ROOTPASS#" "$FOLD/hdd/password.txt"
+  chmod 600 "$FOLD/hdd/password.txt"
+  echo -e "\nNote: Your MySQL password is in /password.txt (delete this with \"erase_password_note\")\n" >> "$FOLD/hdd/etc/motd.tail"
+  cp "$SCRIPTPATH/erase_password_note" "$FOLD/hdd/usr/local/bin/"
+  chmod +x "$FOLD/hdd/usr/local/bin/erase_password_note"
 
-  return $EXITCODE
+  return "$EXITCODE"
 }
 
 
@@ -322,13 +325,13 @@ debian_grub_fix() {
   MAPPER="$FOLD/hdd/dev/mapper"
   TEMPFILE="$FOLD/hdd/tmp"
 
-  ls -l $MAPPER > $TEMPFILE/tmp.tmp
+  ls -l "$MAPPER" > "$TEMPFILE/tmp.tmp"
   cat $TEMPFILE/tmp.tmp | grep -v "total" | grep -v "crw" | while read line; do
-    VOLGROUP=$(echo $line | cut -d " " -f9)
-    DMDEVICE=$(echo $line | cut -d "/" -f2)
+    VOLGROUP=$(echo "$line" | cut -d " " -f9)
+    DMDEVICE=$(echo "$line" | cut -d "/" -f2)
 
-    rm $MAPPER/$VOLGROUP
-    cp -R $FOLD/hdd/dev/$DMDEVICE $MAPPER/$VOLGROUP
+    rm "$MAPPER/$VOLGROUP"
+    cp -R "$FOLD/hdd/dev/$DMDEVICE" "$MAPPER/$VOLGROUP"
   done
 }
 
