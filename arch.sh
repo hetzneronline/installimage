@@ -21,7 +21,7 @@ setup_network_config() {
     { 
       echo "### $COMPANY - installimage"
       echo "# device: $1"
-      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="$1"\n' "$2" "$1"
+      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
     } > "$UDEVFILE"
 
     {
@@ -32,7 +32,7 @@ setup_network_config() {
       echo ""
     } > "$CONFIGFILE"
 
-    echo "[Network]" >> $CONFIGFILE
+    echo "[Network]" >> "$CONFIGFILE"
     if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
       { 
@@ -65,14 +65,14 @@ setup_network_config() {
   fi
 }
 
-# generate_mdadmconf "NIL"
+# generate_config_mdadm "NIL"
 generate_config_mdadm() {
   if [ "$1" ]; then
     local mdadmconf="/etc/mdadm.conf"
     {
       echo "DEVICE partitions"
       echo "MAILADDR root"
-    } > $FOLD/hdd$mdadmconf
+    } > "$FOLD/hdd$mdadmconf"
     execute_chroot_command "mdadm --examine --scan >> $mdadmconf"; declare -i EXITCODE=$?
     return "$EXITCODE"
   fi
@@ -109,7 +109,7 @@ setup_cpufreq() {
     if ! isVServer; then
       local cpufreqconf=''
       cpufreqconf="$FOLD/hdd/etc/default/cpupower"
-      sed -i -e "s/#governor=.*/governor'$1'/" $cpufreqconf
+      sed -i -e "s/#governor=.*/governor'$1'/" "$cpufreqconf"
       execute_chroot_command "systemctl enable cpupower"
     fi
 
@@ -136,8 +136,8 @@ generate_config_grub() {
   # only install grub2 in mbr of all other drives if we use swraid
   if [ "$SWRAID" = "1" ] ;  then
     local i=2
-    while [ `eval echo \\$DRIVE${i}` ]; do
-      local targetdrive=`eval echo \\$DRIVE${i}`
+    while [ "$(eval echo "\$DRIVE"$i)" ]; do
+      local targetdrive="$(eval echo "\$DRIVE"$i)"
       execute_chroot_command "grub-install --no-floppy --recheck $targetdrive 2>&1"
       declare -i EXITCODE=$?
       let i=i+1
