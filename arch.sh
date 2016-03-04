@@ -1,48 +1,61 @@
 #!/bin/bash
 
 #
-# Archlinux specific functions 
+# Archlinux specific functions
 #
-# originally written by Markus Schade 
+# originally written by Markus Schade
 # (c) 2013-2016, Hetzner Online GmbH
 #
+# Contributors
+# * Thore Bödecker
+# * Tim Meusel
 
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
 setup_network_config() {
-  if [ "$1" -a "$2" ]; then
+  if [ -n "$1" ] && [ -n "$2" ]; then
     # good we have a device and a MAC
     CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-hetzner.network"
     UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
-    echo -e "### $COMPANY - installimage" > $UDEVFILE
-    echo -e "# device: $1" >> $UDEVFILE
-    echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
+    { 
+      echo "### $COMPANY - installimage"
+      echo "# device: $1"
+      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="$1"\n' "$2" "$1"
+    } > "$UDEVFILE"
 
-    echo -e "### $COMPANY - installimage" > $CONFIGFILE
-    echo -e "# device: $1" >> $CONFIGFILE
-    echo -e "[Match]" >> $CONFIGFILE
-    echo -e "MACAddress=$2" >> $CONFIGFILE
-    echo -e "" >> $CONFIGFILE
+    {
+      echo "### $COMPANY - installimage"
+      echo "# device: $1"
+      echo "[Match]"
+      echo "MACAddress=$2"
+      echo ""
+    } > "$CONFIGFILE"
 
     echo -e "[Network]" >> $CONFIGFILE
-    if [ "$8" -a "$9" -a "${10}" ]; then
+    if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
-      echo -e "Address=$8/$9" >> $CONFIGFILE
-      echo -e "Gateway=${10}" >> $CONFIGFILE	
-      echo -e "" >> $CONFIGFILE
+      { 
+        echo "Address=$8/$9"
+        echo "Gateway=${10}"
+        echo ""
+      } >> "$CONFIGFILE"
     fi
 
-    if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
+    if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
       debug "setting up ipv4 networking $3/$5 via $6"
-      echo -e "Address=$3/$CIDR" >> $CONFIGFILE
-      echo -e "Gateway=$6" >> $CONFIGFILE
-      echo -e "" >> $CONFIGFILE
+      {
+        echo "Address=$3/$CIDR"
+        echo "Gateway=$6"
+        echo ""
+      } >> "$CONFIGFILE"
 
       if ! is_private_ip "$3"; then 
-        echo -e "[Route]" >> $CONFIGFILE
-        echo -e "Destination=$7/$CIDR" >> $CONFIGFILE
-        echo -e "Gateway=$6" >> $CONFIGFILE
+        {
+          echo "[Route]"
+          echo "Destination=$7/$CIDR"
+          echo "Gateway=$6"
+        } >> "$CONFIGFILE"
       fi
     fi
 
@@ -55,10 +68,12 @@ setup_network_config() {
 # generate_mdadmconf "NIL"
 generate_config_mdadm() {
   if [ "$1" ]; then
-    MDADMCONF="/etc/mdadm.conf"
-    echo "DEVICES /dev/[hs]d*" > $FOLD/hdd$MDADMCONF
-    echo "MAILADDR root" >> $FOLD/hdd$MDADMCONF
-    execute_chroot_command "mdadm --examine --scan >> $MDADMCONF"; EXITCODE=$?
+    local mdadmconf="/etc/mdadm.conf"
+    {
+      echo "DEVICE partitions"
+      echo "MAILADDR root"
+    } > $FOLD/hdd$mdadmconf
+    execute_chroot_command "mdadm --examine --scan >> $mdadmconf"; declare -i EXITCODE=$?
     return $EXITCODE
   fi
 }
@@ -69,20 +84,20 @@ generate_new_ramdisk() {
   if [ "$1" ]; then
     local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
     {
-      echo -e "### $COMPANY - installimage"
-      echo -e "### silence any onboard speaker"
-      echo -e "blacklist pcspkr"
-      echo -e "blacklist snd_pcsp"
-      echo -e "### i915 driver blacklisted due to various bugs"
-      echo -e "### especially in combination with nomodeset"
-      echo -e "blacklist i915"
-      echo -e "### mei driver blacklisted due to serious bugs"
-      echo -e "blacklist mei"
-      echo -e "blacklist mei-me"
+      echo "### $COMPANY - installimage"
+      echo "### silence any onboard speaker"
+      echo "blacklist pcspkr"
+      echo "blacklist snd_pcsp"
+      echo "### i915 driver blacklisted due to various bugs"
+      echo "### especially in combination with nomodeset"
+      echo "blacklist i915"
+      echo "### mei driver blacklisted due to serious bugs"
+      echo "blacklist mei"
+      echo "blacklist mei-me"
     } > $blacklist_conf
 
     execute_chroot_command 'sed -i /etc/mkinitcpio.conf -e "s/^HOOKS=.*/HOOKS=\"base udev autodetect modconf block mdadm lvm2 filesystems keyboard fsck\"/"'
-    execute_chroot_command "mkinitcpio -p linux"; EXITCODE=$?
+    execute_chroot_command "mkinitcpio -p linux"; declare -i EXITCODE=$?
 
     return $EXITCODE
   fi
@@ -91,8 +106,9 @@ generate_new_ramdisk() {
 setup_cpufreq() {
   if [ "$1" ]; then
     if ! isVServer; then
-      CPUFREQCONF="$FOLD/hdd/etc/default/cpupower"
-      sed -i -e "s/#governor=.*/governor'$1'/" $CPUFREQCONF
+      local cpufreqconf=''
+      cpufreqconf="$FOLD/hdd/etc/default/cpupower"
+      sed -i -e "s/#governor=.*/governor'$1'/" $cpufreqconf
       execute_chroot_command "systemctl enable cpupower"
     fi
 
@@ -113,7 +129,7 @@ generate_config_grub() {
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
-  execute_chroot_command "grub-install --no-floppy --recheck $DRIVE1 2>&1"; EXITCODE=$?
+  execute_chroot_command "grub-install --no-floppy --recheck $DRIVE1 2>&1"; declare -i EXITCODE=$?
 
   # only install grub2 in mbr of all other drives if we use swraid
   if [ "$SWRAID" = "1" ] ;  then

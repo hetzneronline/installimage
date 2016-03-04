@@ -14,18 +14,21 @@
 
 # check if the script is temporary disabled due some maintenance or something
 debug "# checking if the script is disabled"
-if [ -f $DISABLEDFILE ]; then
- debug "=> script is DISABLED" 
+if [ -f "$DISABLEDFILE" ]; then
+ debug "=> script is DISABLED"
  echo_red "Due to maintenance the installimage-script is temporarily unavailable.\nWe are sorry for the inconvenience."
  exit 1
 fi
 
 
 # display information about autosetup
-echo -e "\n\033[01;32mFound AUTOSETUP file '$AUTOSETUPCONFIG'\033[00m"
-echo -e "\033[01;33mRunning unattended installimage installation ...\033[00m\n"
-cat $FOLD/install.conf | grep -v "^#" | grep -v "^$"
-echo -e "\n"
+echo ""
+echo -e "\033[01;32mFound AUTOSETUP file '$AUTOSETUPCONFIG'\033[00m"
+echo -e "\033[01;33mRunning unattended installimage installation ...\033[00m"
+echo ""
+grep -v "^#" "$FOLD/install.conf" | grep -v "^$"
+echo ""
+echo ""
 
 
 # validate config
@@ -42,16 +45,18 @@ while [ "$VALIDATED" = "false" ]; do
    VALIDATED="true"
  else
    debug "=> FAILED"
-   mcedit $FOLD/install.conf
+   mcedit "$FOLD/install.conf"
  fi
 done
 
 
 # if we are using the config file option "-c" and not using the automatic mode,
 # ask for confirmation before continuing ...
-if [ "$OPT_CONFIGFILE" -a -z "$OPT_AUTOMODE" ] ; then
-  echo -en "\n${RED}ALL DATA ON THE GIVEN DISKS WILL BE DESTROYED!\n"
-  echo -en "${YELLOW}DO YOU REALLY WANT TO CONTINUE?${NOCOL} [y|N] "
+if [ "$OPT_CONFIGFILE" ] && [ -z "$OPT_AUTOMODE" ] ; then
+  echo -n ""
+  echo "${RED}ALL DATA ON THE GIVEN DISKS WILL BE DESTROYED!"
+  echo ""
+  echo -n "${YELLOW}DO YOU REALLY WANT TO CONTINUE?${NOCOL} [y|N] "
   read -n1 aw
   case "$aw" in
     y|Y|j|J) echo -e "\n\n" ;;
@@ -75,7 +80,7 @@ done
 echo
 #
 debug "# executing installfile ..."
-if [ -f $INSTALLFILE -a "$VALIDATED" = "true" ] ; then
+if [ -f "$INSTALLFILE" ] && [ "$VALIDATED" = "true" ] ; then
    . $INSTALLFILE ; EXITCODE=$?
 else
   debug "=> FAILED"
