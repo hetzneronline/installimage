@@ -68,7 +68,7 @@ extract_image() {
 
     # extract image with given compression
     if [ -n "$COMPRESSION" ]; then
-      $COMPRESSION -d --stdout $EXTRACTFROM > ${DRIVE1}
+      "$COMPRESSION -d --stdout $EXTRACTFROM" > "${DRIVE1}"
       EXITCODE=$?
     else
       # or write binary file directly to disk
@@ -245,7 +245,7 @@ copy_ssh_keys() {
      echo "ssh_authorized_keys:" >> "$CLOUDINIT"
      case $key_url in
        https:*|http:*|ftp:*)
-         wget $key_url -O "$FOLD/authorized_keys"
+         wget "$key_url" -O "$FOLD/authorized_keys"
          while read -r line; do
            echo -e "  - $line" >> "$CLOUDINIT"
          done < "$FOLD/authorized_keys"
@@ -287,7 +287,7 @@ add_coreos_oem_scripts() {
 IFINDEX=\$1
 echo "ID_NET_NAME_SIMPLE=eth\$((\${IFINDEX} - 2))"
 EOF
-    chmod a+x $scriptfile
+    chmod a+x "$scriptfile"
     scriptfile="$scriptpath/rename-interfaces.sh"
     cat << EOF >> "$scriptfile"
 #! /bin/bash
@@ -381,7 +381,7 @@ run_os_specific_functions() {
   add_coreos_oem_cloudconfig "$FOLD/hdd/usr"
 
   mkdir -p "$FOLD/hdd/var/lib/coreos-install"
-  cat $CLOUDINIT | debugoutput
+  debugoutput < "$CLOUDINIT"
   cp "$CLOUDINIT" "$FOLD/hdd/var/lib/coreos-install/user_data"
 
   return 0
