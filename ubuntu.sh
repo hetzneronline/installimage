@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# Ubuntu specific functions 
+# Ubuntu specific functions
 #
 # originally written by Florian Wicke and David Mayr
 # (c) 2007-2016, Hetzner Online GmbH
@@ -15,87 +15,109 @@
 
 # setup_network_config "$ETH" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK"
 setup_network_config() {
-  if [ $IMG_VERSION -lt 1510 ]; then
-    if [ "$1" -a "$2" ]; then
-      CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
-      if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
-        UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
-      else
-        UDEVFILE="/dev/null"
-      fi
-      echo -e "### $COMPANY - installimage" > $UDEVFILE
-      echo -e "# device: $1" >> $UDEVFILE
-      echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
+  if [ -n "$1" ] && [ -n "$2" ]; then
+    if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
+      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
+    elif [ "$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules" ]; then
+      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
+    else
+      UDEVFILE="/dev/null"
+    fi
+    {
+      echo "### $COMPANY - installimage"
+      echo "# device: $1"
+      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
+    } >> "$UDEVFILE"
 
-      echo -e "### $COMPANY - installimage" > $CONFIGFILE
-      echo -e "# Loopback device:" >> $CONFIGFILE
-      echo -e "auto lo" >> $CONFIGFILE
-      echo -e "iface lo inet loopback" >> $CONFIGFILE
-      echo -e "" >> $CONFIGFILE
-      if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
-        echo -e "# device: $1" >> $CONFIGFILE
-        echo -e "auto  $1" >> $CONFIGFILE
-        echo -e "iface $1 inet static" >> $CONFIGFILE
-        echo -e "  address   $3" >> $CONFIGFILE
-        echo -e "  netmask   $5" >> $CONFIGFILE
-        echo -e "  gateway   $6" >> $CONFIGFILE
-        if ! is_private_ip "$3"; then
-          echo -e "  # default route to access subnet" >> $CONFIGFILE
-          echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
+    if [ $IMG_VERSION -lt 1510 ]; then
+      CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
+
+      {
+        echo "### $COMPANY - installimage"
+        echo "# Loopback device:"
+        echo "auto lo"
+        echo "iface lo inet loopback"
+        echo ""
+      } > "$CONFIGFILE"
+      if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
+        echo "# device: $1" >> $CONFIGFILE
+        if is_private_ip "$3" && isVServer; then
+          {
+            echo "auto  $1"
+            echo "iface $1 inet dhcp"
+          } >> "$CONFIGFILE"
+        else 
+          {
+            echo "auto  $1"
+            echo "iface $1 inet static"
+            echo "  address   $3"
+            echo "  netmask   $5"
+            echo "  gateway   $6"
+            if ! is_private_ip "$3"; then 
+              echo "  # default route to access subnet"
+              echo "  up route add -net $7 netmask $5 gw $6 $1"
+            fi
+          } >> "$CONFIGFILE"
         fi
       fi
 
-      if [ "$8" -a "$9" -a "${10}" ]; then
+      if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
         debug "setting up ipv6 networking $8/$9 via ${10}"
-        echo -e "" >> $CONFIGFILE
-        echo -e "iface $1 inet6 static" >> $CONFIGFILE
-        echo -e "  address $8" >> $CONFIGFILE
-        echo -e "  netmask $9" >> $CONFIGFILE
-        echo -e "  gateway ${10}" >> $CONFIGFILE
+        {
+          echo ""
+          echo "iface $1 inet6 static"
+          echo "  address $8"
+          echo "  netmask $9"
+          echo "  gateway ${10}"
+        } >> "$CONFIGFILE"
       fi
 
+      #
       # set duplex speed
+      #
       if ! isNegotiated && ! isVServer; then
-        echo -e "  # force full-duplex for ports without auto-neg" >> $CONFIGFILE
-        echo -e "  post-up mii-tool -F 100baseTx-FD $1" >> $CONFIGFILE
+        {
+          echo "  # force full-duplex for ports without auto-neg"
+          echo "  post-up mii-tool -F 100baseTx-FD $1"
+        } >> "$CONFIGFILE"
       fi
 
       return 0
-    fi
-  else
-    if [ "$1" -a "$2" ]; then
-      # good we have a device and a MAC
+    else
       CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-$C_SHORT.network"
-      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
-      echo -e "### $COMPANY - installimage" > $UDEVFILE
-      echo -e "# device: $1" >> $UDEVFILE
-      echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
+      {
+        echo "### $COMPANY - installimage"
+        echo "# device: $1"
+        echo "[Match]"
+        echo "MACAddress=$2"
+        echo ""
+      } > "$CONFIGFILE"
 
-      echo -e "### $COMPANY - installimage" > $CONFIGFILE
-      echo -e "# device: $1" >> $CONFIGFILE
-      echo -e "[Match]" >> $CONFIGFILE
-      echo -e "MACAddress=$2" >> $CONFIGFILE
-      echo -e "" >> $CONFIGFILE
-
-      echo -e "[Network]" >> $CONFIGFILE
-      if [ "$8" -a "$9" -a "${10}" ]; then
+      echo "[Network]" >> $CONFIGFILE
+      if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
         debug "setting up ipv6 networking $8/$9 via ${10}"
-        echo -e "Address=$8/$9" >> $CONFIGFILE
-        echo -e "Gateway=${10}" >> $CONFIGFILE
-        echo -e "" >> $CONFIGFILE
+        { 
+          echo "Address=$8/$9"
+          echo "Gateway=${10}"
+          echo ""
+        } >> "$CONFIGFILE"
       fi
 
-      if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
+      if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
         debug "setting up ipv4 networking $3/$5 via $6"
-        echo -e "Address=$3/$CIDR" >> $CONFIGFILE
-        echo -e "Gateway=$6" >> $CONFIGFILE
-        echo -e "" >> $CONFIGFILE
+        {
+          echo "Address=$3/$CIDR"
+          echo "Gateway=$6"
+          echo ""
+        } >> "$CONFIGFILE"
 
         if ! is_private_ip "$3"; then
-          echo -e "[Route]" >> $CONFIGFILE
-          echo -e "Destination=$7/$CIDR" >> $CONFIGFILE
-          echo -e "Gateway=$6" >> $CONFIGFILE
+          {
+            echo "[Route]"
+            echo "Destination=$7/$CIDR"
+            echo "Gateway=$6"
+          } >> "$CONFIGFILE"
         fi
       fi
 
@@ -106,56 +128,67 @@ setup_network_config() {
   fi
 }
 
-# generate_mdadmconf "NIL"
+# generate_config_mdadmconf "NIL"
 generate_config_mdadm() {
-  if [ "$1" ]; then
-    MDADMCONF="/etc/mdadm/mdadm.conf"
-#    echo "DEVICES /dev/[hs]d*" > $FOLD/hdd$MDADMCONF
-#    execute_chroot_command "mdadm --examine --scan | sed -e 's/metadata=00.90/metadata=0.90/g' >> $MDADMCONF"; EXITCODE=$?
-    execute_chroot_command "/usr/share/mdadm/mkconf > $MDADMCONF"; EXITCODE=$?
-    # Enable mdadm
-    sed -i "s/AUTOCHECK=false/AUTOCHECK=true # modified by installimage/" \
-        $FOLD/hdd/etc/default/mdadm
-    sed -i "s/AUTOSTART=false/AUTOSTART=true # modified by installimage/" \
-        $FOLD/hdd/etc/default/mdadm
-    sed -i "s/START_DAEMON=false/START_DAEMON=true # modified by installimage/" \
-        $FOLD/hdd/etc/default/mdadm
-    if [ -f $FOLD/hdd/etc/initramfs-tools/conf.d/mdadm ]; then
-      sed -i "s/BOOT_DEGRADED=false/BOOT_DEGRADED=true # modified by installimage/" \
-        $FOLD/hdd/etc/initramfs-tools/conf.d/mdadm
-    fi
+  local mdadmconf="/etc/mdadm/mdadm.conf"
+  execute_chroot_command "/usr/share/mdadm/mkconf > $mdadmconf"; declare -i EXITCODE=$?
 
-    return $EXITCODE
+  #
+  # Enable mdadm
+  #
+  local mdadmdefconf="$FOLD/hdd/etc/default/mdadm"
+  sed -i "s/AUTOCHECK=false/AUTOCHECK=true # modified by installimage/" \
+    "$mdadmdefconf"
+  sed -i "s/AUTOSTART=false/AUTOSTART=true # modified by installimage/" \
+    "$mdadmdefconf"
+  sed -i "s/START_DAEMON=false/START_DAEMON=true # modified by installimage/" \
+    "$mdadmdefconf"
+  sed -i -e "s/^INITRDSTART=.*/INITRDSTART='all' # modified by installimage/" \
+    "$mdadmdefconf"
+  if [ -f "$FOLD/hdd/etc/initramfs-tools/conf.d/mdadm" ]; then
+    sed -i "s/BOOT_DEGRADED=false/BOOT_DEGRADED=true # modified by installimage/" \
+      "$FOLD/hdd/etc/initramfs-tools/conf.d/mdadm"
   fi
+
+  return "$EXITCODE"
 }
 
 
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
   if [ "$1" ]; then
-    OUTFILE=`ls -1r $FOLD/hdd/boot/initrd.img-* | grep -v ".bak$\|.gz$" | awk -F "/" '{print $NF}' | grep -m1 "initrd"`
-    VERSION=`echo $OUTFILE | cut -d "-" -f2-`
-    echo "Kernel Version found: $VERSION" | debugoutput
+    local outfile=$(find "$FOLD"/hdd/boot -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
+    local kvers=$(echo "$OUTFILE" |cut -d "-" -f2-)
+    debug "# Kernel Version found: $kvers"
 
     if [ "$IMG_VERSION" -ge 1204 ]; then
-      # blacklist i915 driver due to many bugs and stability issues
+      # blacklist various driver due to bugs and stability issues
       # required for Ubuntu 12.10 because of a kernel bug
       local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
-      echo -e "### $COMPANY - installimage" > $blacklist_conf
-      echo -e "### silence any onboard speaker" >> $blacklist_conf
-      echo -e "blacklist pcspkr" >> $blacklist_conf
-      echo -e "### i915 driver blacklisted due to various bugs" >> $blacklist_conf
-      echo -e "### especially in combination with nomodeset" >> $blacklist_conf
-      echo -e "blacklist i915" >> $blacklist_conf
-      echo -e "blacklist i915_bdw" >> $blacklist_conf
-      echo -e "install i915 /bin/true" >> $blacklist_conf
-      echo -e "### mei driver blacklisted due to serious bugs" >> $blacklist_conf
-      echo -e "blacklist mei" >> $blacklist_conf
-      echo -e "blacklist mei_me" >> $blacklist_conf
+      {
+        echo "### $COMPANY - installimage"
+        echo "### silence any onboard speaker"
+        echo "blacklist pcspkr"
+        echo "blacklist snd_pcsp"
+        echo "### i915 driver blacklisted due to various bugs"
+        echo "### especially in combination with nomodeset"
+        echo "blacklist i915"
+        echo "blacklist i915_bdw"
+        echo "### mei driver blacklisted due to serious bugs"
+        echo "blacklist mei"
+        echo "blacklist mei-me"
+      } > "$blacklist_conf"
     fi
  
+    # just make sure that we do not accidentally try to install a bootloader
+    # when we haven't configured grub yet
     sed -i "s/do_bootloader = yes/do_bootloader = no/" $FOLD/hdd/etc/kernel-img.conf
-    execute_chroot_command "update-initramfs -u -k $VERSION"; EXITCODE=$?
+
+    # well, we might just as well update all initramfs and stop findling around
+    # to find out which kernel version is the latest
+    execute_chroot_command "update-initramfs -u -k $kvers"; EXITCODE=$?
+
+    # re-enable updates to grub
     sed -i "s/do_bootloader = no/do_bootloader = yes/" $FOLD/hdd/etc/kernel-img.conf
 
     return $EXITCODE
@@ -163,19 +196,23 @@ generate_new_ramdisk() {
 }
 
 setup_cpufreq() {
-  if [ "$1" ]; then
-    LOADCPUFREQCONF="$FOLD/hdd/etc/default/loadcpufreq"
-    CPUFREQCONF="$FOLD/hdd/etc/default/cpufrequtils"
-    echo -e "### $COMPANY - installimage" > $CPUFREQCONF
-    echo -e "# cpu frequency scaling" >> $CPUFREQCONF
+  if [ -n "$1" ]; then
+    local loadcpufreqconf="$FOLD/hdd/etc/default/loadcpufreq"
+    local cpufreqconf="$FOLD/hdd/etc/default/cpufrequtils"
+    {
+      echo "### $COMPANY - installimage"
+      echo "# cpu frequency scaling"
+    } > "$cpufreqconf"
     if isVServer; then
-      echo -e "ENABLE=\"false\"" > $LOADCPUFREQCONF
-      echo -e "ENABLE=\"false\"" >> $CPUFREQCONF
+      echo 'ENABLE="false"' > $loadcpufreqconf
+      echo 'ENABLE="false"' >> $cpufreqconf
     else
-      echo -e "ENABLE=\"true\"" >> $CPUFREQCONF
-      echo -e "GOVERNOR=\"$1\"" >> $CPUFREQCONF
-      echo -e "MAX_SPEED=\"0\"" >> $CPUFREQCONF
-      echo -e "MIN_SPEED=\"0\"" >> $CPUFREQCONF
+      {
+        echo 'ENABLE="true"'
+        printf 'GOVERNOR="%s"', "$1"
+        echo 'MAX_SPEED="0"'
+        echo 'MIN_SPEED="0"'
+      } >> "$cpufreqconf"
     fi
 
     return 0
@@ -204,16 +241,21 @@ write_lilo() {
 # Generate the GRUB bootloader configuration.
 #
 generate_config_grub() {
+  declare -i EXITCODE=0
+  [ -n "$1" ] || return
 
-  ubuntu_grub_fix
-  execute_chroot_command "cd /boot; [ -e boot ] && rm -rf boot; ln -s . boot >> /dev/null 2>&1"
+  local grubdefconf="$FOLD/hdd/etc/default/grub"
+
+  # this shold not be necessary anymore
+#  ubuntu_grub_fix
+#  execute_chroot_command "cd /boot; [ -e boot ] && rm -rf boot; ln -s . boot >> /dev/null 2>&1"
 
   # set linux_default in grub
   local grub_linux_default="nomodeset"
   if isVServer; then
      grub_linux_default="${grub_linux_default} elevator=noop"
   else
-     if [ $IMG_VERSION -eq 1404 ]; then
+     if [ "$IMG_VERSION" -eq 1404 ]; then
        grub_linux_default="${grub_linux_default} intel_pstate=enable"
      fi
   fi
@@ -223,12 +265,16 @@ generate_config_grub() {
     grub_linux_default="${grub_linux_default} iommu=noaperture"
   fi
 
-  execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"'
-  execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"'"${grub_linux_default}"'\"/"'
-  execute_chroot_command 'echo -e "\n# only use text mode - other modes may scramble screen\nGRUB_GFXPAYLOAD_LINUX=\"text\"\n" >>/etc/default/grub'
+  sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
+  sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"'"${grub_linux_default}"'\"/"
+  {
+    echo ""
+    echo "# only use text mode - other modes may scramble screen"
+    echo 'GRUB_GFXPAYLOAD_LINUX="text"'
+  } >> "$grubdefconf"
 
   # create /run/lock if it didn't exist because it is needed by grub-mkconfig
-  execute_chroot_command "mkdir -p /run/lock"
+  mkdir -p "$FOLD/hdd/run/lock"
 	
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
@@ -243,11 +289,12 @@ generate_config_grub() {
 
   uuid_bugfix
 	
-  PARTNUM=`echo "$SYSTEMBOOTDEVICE" | rev | cut -c1`
+  PARTNUM=$(echo "$SYSTEMBOOTDEVICE" | rev | cut -c1)
   if [ "$SWRAID" = "0" ]; then
     PARTNUM="$[$PARTNUM - 1]"
   fi
-  return $EXITCODE
+
+  return "$EXITCODE"
 }
 
 #

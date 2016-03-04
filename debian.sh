@@ -89,25 +89,23 @@ setup_network_config() {
 
 # generate_config_mdadmconf "NIL"
 generate_config_mdadm() {
-  if [ "$1" ]; then
-    local mdadmconf="/etc/mdadm/mdadm.conf"
-    execute_chroot_command "/usr/share/mdadm/mkconf > $mdadmconf"; declare -i EXITCODE=$?
+  local mdadmconf="/etc/mdadm/mdadm.conf"
+  execute_chroot_command "/usr/share/mdadm/mkconf > $mdadmconf"; declare -i EXITCODE=$?
 
-    #
-    # Enable mdadm
-    #
-    local mdadmdefconf="$FOLD/hdd/etc/default/mdadm"
-    sed -i "s/AUTOCHECK=false/AUTOCHECK=true # modified by installimage/" \
-      "$mdadmdefconf"
-    sed -i "s/AUTOSTART=false/AUTOSTART=true # modified by installimage/" \
-      "$mdadmdefconf"
-    sed -i "s/START_DAEMON=false/START_DAEMON=true # modified by installimage/" \
-      "$mdadmdefconf"
-    sed -i -e "s/^INITRDSTART=.*/INITRDSTART='all' # modified by installimage/" \
-      "$mdadmdefconf"
+  #
+  # Enable mdadm
+  #
+  local mdadmdefconf="$FOLD/hdd/etc/default/mdadm"
+  sed -i "s/AUTOCHECK=false/AUTOCHECK=true # modified by installimage/" \
+    "$mdadmdefconf"
+  sed -i "s/AUTOSTART=false/AUTOSTART=true # modified by installimage/" \
+    "$mdadmdefconf"
+  sed -i "s/START_DAEMON=false/START_DAEMON=true # modified by installimage/" \
+    "$mdadmdefconf"
+  sed -i -e "s/^INITRDSTART=.*/INITRDSTART='all' # modified by installimage/" \
+    "$mdadmdefconf"
 
-    return "$EXITCODE"
-  fi
+  return "$EXITCODE"
 }
 
 
@@ -116,10 +114,11 @@ generate_new_ramdisk() {
   if [ -n "$1" ]; then
     local outfile=$(find "$FOLD"/hdd/boot -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
     local kvers=$(echo "$OUTFILE" |cut -d "-" -f2-)
-    echo "Kernel Version found: $kvers" | debugoutput
+    debug "# Kernel Version found: $kvers"
 
     if [ "$IMG_VERSION" -ge 60 ]; then
-      # blacklist i915 driver due to many bugs and stability issues
+      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
+      # blacklist various driver due to bugs and stability issues
       {
         echo "### $COMPANY - installimage"
         echo "### silence any onboard speaker"
@@ -196,12 +195,14 @@ generate_config_grub() {
   # already present in image
   execute_chroot_command "mkdir -p /boot/grub/; cp -r /usr/lib/grub/* /boot/grub >> /dev/null 2>&1"
 
-  sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
+  # set linux_default in grub
+  local grub_linux_default="nomodeset"
   if isVServer; then
-    sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset elevator=noop\"/"
-  else
-    sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset\"/"
+     grub_linux_default="${grub_linux_default} elevator=noop"
   fi
+
+  sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
+  sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"'"${grub_linux_default}"'\"/"
 
   # only install grub2 in mbr of all other drives if we use swraid
   local i=0
@@ -217,7 +218,7 @@ generate_config_grub() {
 
   uuid_bugfix
 
-  PARTNUM=`echo "$SYSTEMBOOTDEVICE" | rev | cut -c1`
+  PARTNUM=$(echo "$SYSTEMBOOTDEVICE" | rev | cut -c1)
 
   if [ "$SWRAID" = "0" ]; then
     PARTNUM="$[$PARTNUM - 1]"
