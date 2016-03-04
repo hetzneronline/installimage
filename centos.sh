@@ -164,7 +164,7 @@ generate_new_ramdisk() {
         echo "### i915 driver blacklisted due to various bugs"
         echo "### especially in combination with nomodeset"
         echo "blacklist i915"
-      } > $blacklist_conf
+      } > "$blacklist_conf"
     fi
 
     if [ "$IMG_VERSION" -ge 70 ] ; then
@@ -297,7 +297,7 @@ generate_config_grub() {
 
     # disable pcie active state power management. does not work as it should,
     # and causes problems with Intel 82574L NICs (onboard-NIC Asus P8B WS - EX6/EX8, addon NICs)
-    lspci -n | grep '8086:10d3' && aspm='pcie_aspm=off' || aspm=''
+    lspci -n | grep -q '8086:10d3' && aspm='pcie_aspm=off' || aspm=''
 
     if [ "$IMG_VERSION" -ge 60 ]; then 
       echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE rd_NO_LUKS rd_NO_DM nomodeset $elevator $aspm" >> $BFILE
@@ -410,8 +410,12 @@ randomize_cpanel_mysql_passwords() {
   rm "$FOLD/hdd/tmp/pwchange.sql"
   rm "$cphulkdconf.old"
 
-  # write password file 
-  echo -e "[client]\nuser=root\npass=$rootpass" > $FOLD/hdd/root/.my.cnf
+  # write password file
+  {
+    echo "[client]"
+    echo "user=root"
+    echo "pass=$rootpass"
+  } > $FOLD/hdd/root/.my.cnf
 
   return "$EXITCODE"
 }
@@ -422,26 +426,29 @@ randomize_cpanel_mysql_passwords() {
 change_mainIP() {
   local mainipfile="/var/cpanel/mainip"
   debug "changing content of ${mainipfile}"
-  execute_chroot_command "echo -n ${IPADDR} > $mainipfile"
+  echo -n "${IPADDR}" > "$FOLD/hdd/$mainipfile"
 }
 
 #
 # set the correct hostname, IP and nameserver in /etc/wwwacct.conf
 #
 modify_wwwacct() {
-  WWWACCT="/etc/wwwacct.conf"
-  NS="ns1.first-ns.de"
-  NS2="robotns2.second-ns.de"
-  NS3="robotns3.second-ns.com"
+  local wwwacct="/etc/wwwacct.conf"
+  local wfile="$FOLD/hdd/$wwwacct"
 
-  debug "setting hostname in ${WWWACCT}"
-  execute_chroot_command "echo \"HOST ${SETHOSTNAME}\" >> $WWWACCT"
-  debug "setting IP in ${WWWACCT}"
-  execute_chroot_command "echo \"ADDR ${IPADDR}\" >> $WWWACCT"
-  debug "setting NS in ${WWWACCT}"
-  execute_chroot_command "echo \"NS ${NS}\" >> $WWWACCT"
-  execute_chroot_command "echo \"NS2 ${NS2}\" >> $WWWACCT"
-  execute_chroot_command "echo \"NS3 ${NS3}\" >> $WWWACCT"
+  debug "setting hostname in ${wwwacct}"
+  echo "HOST ${SETHOSTNAME}" >> "$wfile"
+
+  debug "setting IP in ${wwwacct}"
+  echo "ADDR ${IPADDR}" >> "$wfile"
+
+  debug "setting NS in ${wwwacct}"
+  {
+    echo "NS ${AUTH_DNS1}"
+    echo "NS2 ${AUTH_DNS2}"
+    echo "NS3 ${AUTH_DNS3}"
+  } >> "$wfile"
+
 }
 
 # vim: ai:ts=2:sw=2:et

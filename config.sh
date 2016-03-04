@@ -39,6 +39,9 @@ export HDDMINSIZE="70000000"
 export NAMESERVER=("213.133.98.98" "213.133.99.99" "213.133.100.100")
 export DNSRESOLVER_V6=("2a01:4f8:0:a111::add:9898" "2a01:4f8:0:a102::add:9999" "2a01:4f8:0:a0a1::add:1010")
 export NTPSERVERS=("ntp1.hetzner.de" "ntp2.hetzner.com" "ntp3.hetzner.net")
+export AUTH_DNS1="ns1.first-ns.de"
+export AUTH_DNS2="robotns2.second-ns.de"
+export AUTH_DNS3="robotns3.second-ns.com"
 
 export DEFAULTPARTS="PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 all"
 export DEFAULTPARTS_BIG="PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 1024G\nPART /home ext4 all"

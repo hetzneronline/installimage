@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# Debian specific functions 
+# Debian specific functions
 #
 # originally written by Florian Wicke and David Mayr
 # (c) 2008-2016, Hetzner Online GmbH
@@ -15,104 +15,123 @@
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
 setup_network_config() {
-  if [ "$1" -a "$2" ]; then
+  if [ -n "$1" ] && [ -n "$2" ]; then
+
+    #
     # good we have a device and a MAC
+    #
     CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
     if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
       UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
     else
       UDEVFILE="/dev/null"
     fi
-    echo -e "### $COMPANY - installimage" > $UDEVFILE
-    echo -e "# device: $1" >> $UDEVFILE
-    echo -e "SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$2\", ATTR{dev_id}==\"0x0\", ATTR{type}==\"1\", KERNEL==\"eth*\", NAME=\"$1\"" >> $UDEVFILE
+    {
+      echo "### $COMPANY - installimage"
+      echo "# device: $1"
+      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
+    } >> "$UDEVFILE"
 
-    echo -e "### $COMPANY - installimage" > $CONFIGFILE
-    echo -e "# Loopback device:" >> $CONFIGFILE
-    echo -e "auto lo" >> $CONFIGFILE
-    echo -e "iface lo inet loopback" >> $CONFIGFILE
-    echo -e "" >> $CONFIGFILE
+    {
+      echo "### $COMPANY - installimage"
+      echo "# Loopback device:"
+      echo "auto lo"
+      echo "iface lo inet loopback"
+      echo ""
+    } > "$CONFIGFILE"
 
-    if [ "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
+    if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
+      echo "# device: $1" >> $CONFIGFILE
       if is_private_ip "$3" && isVServer; then
-        echo -e "# device: $1" >> $CONFIGFILE
-        echo -e "auto  $1" >> $CONFIGFILE
-        echo -e "iface $1 inet dhcp" >> $CONFIGFILE
+        {
+          echo "auto  $1"
+          echo "iface $1 inet dhcp"
+        } >> "$CONFIGFILE"
       else 
-        echo -e "# device: $1" >> $CONFIGFILE
-        echo -e "auto  $1" >> $CONFIGFILE
-        echo -e "iface $1 inet static" >> $CONFIGFILE
-        echo -e "  address   $3" >> $CONFIGFILE
-        echo -e "  netmask   $5" >> $CONFIGFILE
-        echo -e "  gateway   $6" >> $CONFIGFILE
-        if ! is_private_ip "$3"; then 
-          echo -e "  # default route to access subnet" >> $CONFIGFILE
-          echo -e "  up route add -net $7 netmask $5 gw $6 $1" >> $CONFIGFILE
-        fi
+        {
+          echo "auto  $1"
+          echo "iface $1 inet static"
+          echo "  address   $3"
+          echo "  netmask   $5"
+          echo "  gateway   $6"
+          if ! is_private_ip "$3"; then 
+            echo "  # default route to access subnet"
+            echo "  up route add -net $7 netmask $5 gw $6 $1"
+          fi
+        } >> "$CONFIGFILE"
       fi
     fi
 
-    if [ "$8" -a "$9" -a "${10}" ]; then
+    if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
-      echo -e "" >> $CONFIGFILE
-      echo -e "iface $1 inet6 static" >> $CONFIGFILE
-      echo -e "  address $8" >> $CONFIGFILE
-      echo -e "  netmask $9" >> $CONFIGFILE
-      echo -e "  gateway ${10}" >> $CONFIGFILE	
+      {
+        echo ""
+        echo "iface $1 inet6 static"
+        echo "  address $8"
+        echo "  netmask $9"
+        echo "  gateway ${10}"
+      } >> "$CONFIGFILE"
     fi
 
+    #
     # set duplex speed
+    #
     if ! isNegotiated && ! isVServer; then
-      echo -e "  # force full-duplex for ports without auto-neg" >> $CONFIGFILE
-      echo -e "  post-up mii-tool -F 100baseTx-FD $1" >> $CONFIGFILE
+      {
+        echo "  # force full-duplex for ports without auto-neg"
+        echo "  post-up mii-tool -F 100baseTx-FD $1"
+      } >> "$CONFIGFILE"
     fi
 
     return 0
   fi
 }
 
-# generate_mdadmconf "NIL"
+# generate_config_mdadmconf "NIL"
 generate_config_mdadm() {
   if [ "$1" ]; then
-    MDADMCONF="/etc/mdadm/mdadm.conf"
-#    echo "DEVICES /dev/[hs]d*" > $FOLD/hdd$MDADMCONF
-#    execute_chroot_command "mdadm --detail --scan | sed -e 's/metadata=00.90/metadata=0.90/g' >> $MDADMCONF"; EXITCODE=$?
-    execute_chroot_command "/usr/share/mdadm/mkconf > $MDADMCONF"; EXITCODE=$?
-    # Enable mdadm
-    sed -i "s/AUTOCHECK=false/AUTOCHECK=true # modified by installimage/" \
-        $FOLD/hdd/etc/default/mdadm
-    sed -i "s/AUTOSTART=false/AUTOSTART=true # modified by installimage/" \
-        $FOLD/hdd/etc/default/mdadm
-    sed -i "s/START_DAEMON=false/START_DAEMON=true # modified by installimage/" \
-        $FOLD/hdd/etc/default/mdadm
-    sed -i -e "s/^INITRDSTART=.*/INITRDSTART='all' # modified by installimage/" \
-        $FOLD/hdd/etc/default/mdadm
+    local mdadmconf="/etc/mdadm/mdadm.conf"
+    execute_chroot_command "/usr/share/mdadm/mkconf > $mdadmconf"; declare -i EXITCODE=$?
 
-    return $EXITCODE
+    #
+    # Enable mdadm
+    #
+    local mdadmdefconf="$FOLD/hdd/etc/default/mdadm"
+    sed -i "s/AUTOCHECK=false/AUTOCHECK=true # modified by installimage/" \
+      "$mdadmdefconf"
+    sed -i "s/AUTOSTART=false/AUTOSTART=true # modified by installimage/" \
+      "$mdadmdefconf"
+    sed -i "s/START_DAEMON=false/START_DAEMON=true # modified by installimage/" \
+      "$mdadmdefconf"
+    sed -i -e "s/^INITRDSTART=.*/INITRDSTART='all' # modified by installimage/" \
+      "$mdadmdefconf"
+
+    return "$EXITCODE"
   fi
 }
 
 
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
-  if [ "$1" ]; then
-    OUTFILE=`ls -1r $FOLD/hdd/boot/initrd.img-* | grep -v ".bak$\|.gz$" | awk -F "/" '{print $NF}' | grep -m1 "initrd"`
-    VERSION=`echo $OUTFILE |cut -d "-" -f2-`
-    echo "Kernel Version found: $VERSION" | debugoutput
+  if [ -n "$1" ]; then
+    local outfile=$(find "$FOLD"/hdd/boot -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
+    local kvers=$(echo "$OUTFILE" |cut -d "-" -f2-)
+    echo "Kernel Version found: $kvers" | debugoutput
 
     if [ "$IMG_VERSION" -ge 60 ]; then
       # blacklist i915 driver due to many bugs and stability issues
-      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
-      echo -e "### $COMPANY - installimage" > $blacklist_conf
-      echo -e "### silence any onboard speaker" >> $blacklist_conf
-      echo -e "blacklist pcspkr" >> $blacklist_conf
-      echo -e "blacklist snd_pcsp" >> $blacklist_conf
-      echo -e "### i915 driver blacklisted due to various bugs" >> $blacklist_conf
-      echo -e "### especially in combination with nomodeset" >> $blacklist_conf
-      echo -e "blacklist i915" >> $blacklist_conf
-      echo -e "### mei driver blacklisted due to serious bugs" >> $blacklist_conf
-      echo -e "blacklist mei" >> $blacklist_conf
-      echo -e "blacklist mei-me" >> $blacklist_conf
+      {
+        echo "### $COMPANY - installimage"
+        echo "### silence any onboard speaker"
+        echo "blacklist pcspkr"
+        echo "blacklist snd_pcsp"
+        echo "### i915 driver blacklisted due to various bugs"
+        echo "### especially in combination with nomodeset"
+        echo "blacklist i915"
+        echo "### mei driver blacklisted due to serious bugs"
+        echo "blacklist mei"
+        echo "blacklist mei-me"
+      } > "$blacklist_conf"
     fi
 
     # apparently sometimes the mdadm assembly bugfix introduced with the recent mdadm release does not work
@@ -120,8 +139,8 @@ generate_new_ramdisk() {
     # see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=784070
     if [ "$IMG_VERSION" -ge 80 -a -n "$(dmidecode -s baseboard-product-name | grep -i H8SGL)" ]; then
       local script="$FOLD/hdd/usr/share/initramfs-tools/scripts/local-block/mdadmpatch"
-      cp $SCRIPTPATH/h8sgl-deb8-md.sh $script
-      chmod a+x $script
+      cp "$SCRIPTPATH/h8sgl-deb8-md.sh" "$script"
+      chmod a+x "$script"
     fi
 
     # just make sure that we do not accidentally try to install a bootloader
@@ -129,26 +148,33 @@ generate_new_ramdisk() {
     # Debian won't install a boot loader anyway, but display an error message,
     # that needs to be confirmed
     sed -i "s/do_bootloader = yes/do_bootloader = no/" $FOLD/hdd/etc/kernel-img.conf
-    execute_chroot_command "update-initramfs -u -k $VERSION"; EXITCODE=$?
 
-    return $EXITCODE
+    # well, we might just as well update all initramfs and stop findling around
+    # to find out which kernel version is the latest
+    execute_chroot_command "update-initramfs -u -k $kvers"; EXITCODE=$?
+
+    return "$EXITCODE"
   fi
 }
 
 setup_cpufreq() {
-  if [ "$1" ]; then
-    LOADCPUFREQCONF="$FOLD/hdd/etc/default/loadcpufreq"
-    CPUFREQCONF="$FOLD/hdd/etc/default/cpufrequtils"
-    echo -e "### $COMPANY - installimage" > $CPUFREQCONF
-    echo -e "# cpu frequency scaling" >> $CPUFREQCONF
+  if [ -n "$1" ]; then
+    local loadcpufreqconf="$FOLD/hdd/etc/default/loadcpufreq"
+    local cpufreqconf="$FOLD/hdd/etc/default/cpufrequtils"
+    {
+      echo "### $COMPANY - installimage"
+      echo "# cpu frequency scaling"
+    } > "$cpufreqconf"
     if isVServer; then
-      echo -e "ENABLE=\"false\"" > $LOADCPUFREQCONF
-      echo -e "ENABLE=\"false\"" >> $CPUFREQCONF
+      echo 'ENABLE="false"' > $loadcpufreqconf
+      echo 'ENABLE="false"' >> $cpufreqconf
     else
-      echo -e "ENABLE=\"true\"" >> $CPUFREQCONF
-      echo -e "GOVERNOR=\"$1\"" >> $CPUFREQCONF
-      echo -e "MAX_SPEED=\"0\"" >> $CPUFREQCONF
-      echo -e "MIN_SPEED=\"0\"" >> $CPUFREQCONF
+      {
+        echo 'ENABLE="true"'
+        printf 'GOVERNOR="%s"', "$1"
+        echo 'MAX_SPEED="0"'
+        echo 'MIN_SPEED="0"'
+      } >> "$cpufreqconf"
     fi
 
     return 0
@@ -161,16 +187,22 @@ setup_cpufreq() {
 # Generate the GRUB bootloader configuration.
 #
 generate_config_grub() {
-  EXITCODE=0
-  [ "$1" ] || return
+  declare -i EXITCODE=0
+  [ -n "$1" ] || return
 
+  local grubdefconf="$FOLD/hdd/etc/default/grub"
+
+  # do we still actually need this? grub-install should/will copy this, if not
+  # already present in image
   execute_chroot_command "mkdir -p /boot/grub/; cp -r /usr/lib/grub/* /boot/grub >> /dev/null 2>&1"
-  execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"'
+
+  sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
   if isVServer; then
-     execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset elevator=noop\"/"'
+    sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset elevator=noop\"/"
   else
-     execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset\"/"'
+    sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset\"/"
   fi
+
   # only install grub2 in mbr of all other drives if we use swraid
   local i=0
   for i in $(seq 1 $COUNT_DRIVES) ; do
@@ -179,7 +211,7 @@ generate_config_grub() {
       execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
     fi
   done
-  [ -e $FOLD/hdd/boot/grub/grub.cfg ] && rm "$FOLD/hdd/boot/grub/grub.cfg"
+  [ -e "$FOLD/hdd/boot/grub/grub.cfg" ] && rm "$FOLD/hdd/boot/grub/grub.cfg"
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
@@ -193,7 +225,7 @@ generate_config_grub() {
   
   delete_grub_device_map
  
-  return $EXITCODE
+  return "$EXITCODE"
 }
 
 delete_grub_device_map() {
@@ -212,14 +244,18 @@ run_os_specific_functions() {
   #
   debug "# Testing if mysql is installed and if this is a LAMP image and setting new debian-sys-maint password"
   if [ -f "$FOLD/hdd/etc/mysql/debian.cnf" ] ; then
-    echo $IMAGE_FILE | grep -q -i lamp && ( randomize_maint_mysql_pass || return 1 )
+    if [[ "$IMAGE_FILE" =~ lamp ]]; then
+      randomize_maint_mysql_pass || return 1
+    fi
   fi
 
   return 0
 }
 
 randomize_mdadm_checkarray_cronjob_time() {
-  if [ -e "$FOLD/hdd/etc/cron.d/mdadm" -a "$(grep checkarray "$FOLD/hdd/etc/cron.d/mdadm")" ]; then
+  local mdcron="$FOLD/hdd/etc/cron.d/mdadm"
+  if [ -f "$mdcron" ] && grep -q checkarray "$mdcron"; then
+    declare -i hour minute day
     hour=$((($RANDOM % 4) + 1))
     minute=$((($RANDOM % 59) + 1))
     day=$((($RANDOM % 28) + 1))
@@ -228,7 +264,7 @@ randomize_mdadm_checkarray_cronjob_time() {
     sed -i \
       -e "s/^57 0 \* \* 0 /$minute $hour $day \* \* /" \
       -e 's/ && \[ \$(date +\\%d) -le 7 \]//' \
-      "$FOLD/hdd/etc/cron.d/mdadm"
+      "$mdcron"
   else
     debug "# No /etc/cron.d/mdadm found to randomize cronjob run time"
   fi

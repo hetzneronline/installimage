@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# CoreOS specific functions 
+# CoreOS specific functions
 #
 # originally written by Markus Schade
 # (c) 2014-2015, Hetzner Online GmbH
