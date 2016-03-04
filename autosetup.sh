@@ -4,8 +4,12 @@
 # skip menu - use "autosetup" file
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2008-2015, Hetzner Online GmbH
+# (c) 2008-2016, Hetzner Online GmbH
 #
+# Contributors
+# * Markus Schade
+# * Thore Bödecker
+# * Tim Meusel
 
 
 # read global variables and functions
@@ -57,7 +61,7 @@ if [ "$OPT_CONFIGFILE" ] && [ -z "$OPT_AUTOMODE" ] ; then
   echo "${RED}ALL DATA ON THE GIVEN DISKS WILL BE DESTROYED!"
   echo ""
   echo -n "${YELLOW}DO YOU REALLY WANT TO CONTINUE?${NOCOL} [y|N] "
-  read -n1 aw
+  read -r -n1 aw
   case "$aw" in
     y|Y|j|J) echo -e "\n\n" ;;
     *) echo -e "\n\n${GREEN}ABORT${NOCOL}\n" ; exit 0 ;;
@@ -74,17 +78,21 @@ echo -e "\033[01;33m  Press CTRL-C to abort now!\033[00m"
 echo -n "  => "
 for i in $(seq 1 20) ; do
   echo -n "."
-  read -t1 -n1 anykey
-  if [ "$anykey" = "x" -o "$anykey" = "X" ] ; then break ; fi
+  read -r -t1 -n1 anykey
+  if [ "$anykey" = "x" ] || [ "$anykey" = "X" ]; then
+    break
+  fi
 done
-echo
+echo ""
 #
 debug "# executing installfile ..."
 if [ -f "$INSTALLFILE" ] && [ "$VALIDATED" = "true" ] ; then
-   . $INSTALLFILE ; EXITCODE=$?
+  . "$INSTALLFILE"
+  declare -i EXITCODE="$?"
 else
   debug "=> FAILED"
-  echo -e "\n\033[01;31mERROR: Cant find files\033[00m"
+  echo ""
+  echo -e "\033[01;31mERROR: Cant find files\033[00m"
 fi
 
 

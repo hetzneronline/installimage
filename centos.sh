@@ -1,11 +1,13 @@
 #!/bin/bash
+
 #
 # CentOS specific functions
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2008-2015, Hetzner Online GmbH
+# (c) 2008-2016, Hetzner Online GmbH
 #
 # Contributors
+# * Markus Schade
 # * Thore Bödecker
 # * Tim Meusel
 
@@ -154,7 +156,7 @@ generate_new_ramdisk() {
       echo "" >> "$modulesfile"
     elif [ "$IMG_VERSION" -ge 60 ] ; then
       # blacklist some kernel modules due to bugs and/or stability issues or annoyance
-      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
+      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
       {
         echo "### $COMPANY - installimage"
         echo "### silence any onboard speaker"
@@ -166,7 +168,7 @@ generate_new_ramdisk() {
     fi
 
     if [ "$IMG_VERSION" -ge 70 ] ; then
-      local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-hetzner.conf"
+      local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
       {
         echo '### $COMPANY - installimage'
         echo 'add_dracutmodules+="lvm mdraid"'

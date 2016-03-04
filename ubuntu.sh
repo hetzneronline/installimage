@@ -4,8 +4,14 @@
 # Ubuntu specific functions 
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2007-2015, Hetzner Online GmbH
+# (c) 2007-2016, Hetzner Online GmbH
 #
+# Contributors
+# * Markus Schade
+# * Jonas Keidel
+# * Matthias Übler
+# * Thore Bödecker
+# * Tim Meusel
 
 # setup_network_config "$ETH" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK"
 setup_network_config() {
@@ -59,7 +65,7 @@ setup_network_config() {
   else
     if [ "$1" -a "$2" ]; then
       # good we have a device and a MAC
-      CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-hetzner.network"
+      CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-$C_SHORT.network"
       UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
       echo -e "### $COMPANY - installimage" > $UDEVFILE
@@ -134,7 +140,7 @@ generate_new_ramdisk() {
     if [ "$IMG_VERSION" -ge 1204 ]; then
       # blacklist i915 driver due to many bugs and stability issues
       # required for Ubuntu 12.10 because of a kernel bug
-      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
+      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
       echo -e "### $COMPANY - installimage" > $blacklist_conf
       echo -e "### silence any onboard speaker" >> $blacklist_conf
       echo -e "blacklist pcspkr" >> $blacklist_conf

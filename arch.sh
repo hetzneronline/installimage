@@ -15,7 +15,7 @@
 setup_network_config() {
   if [ -n "$1" ] && [ -n "$2" ]; then
     # good we have a device and a MAC
-    CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-hetzner.network"
+    CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-$C_SHORT.network"
     UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
     { 
@@ -32,7 +32,7 @@ setup_network_config() {
       echo ""
     } > "$CONFIGFILE"
 
-    echo -e "[Network]" >> $CONFIGFILE
+    echo "[Network]" >> $CONFIGFILE
     if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
       { 
@@ -74,7 +74,7 @@ generate_config_mdadm() {
       echo "MAILADDR root"
     } > $FOLD/hdd$mdadmconf
     execute_chroot_command "mdadm --examine --scan >> $mdadmconf"; declare -i EXITCODE=$?
-    return $EXITCODE
+    return "$EXITCODE"
   fi
 }
 
@@ -82,7 +82,7 @@ generate_config_mdadm() {
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
   if [ "$1" ]; then
-    local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
+    local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
     {
       echo "### $COMPANY - installimage"
       echo "### silence any onboard speaker"
@@ -94,12 +94,13 @@ generate_new_ramdisk() {
       echo "### mei driver blacklisted due to serious bugs"
       echo "blacklist mei"
       echo "blacklist mei-me"
-    } > $blacklist_conf
+    } > "$blacklist_conf"
 
     execute_chroot_command 'sed -i /etc/mkinitcpio.conf -e "s/^HOOKS=.*/HOOKS=\"base udev autodetect modconf block mdadm lvm2 filesystems keyboard fsck\"/"'
-    execute_chroot_command "mkinitcpio -p linux"; declare -i EXITCODE=$?
+    execute_chroot_command "mkinitcpio -p linux"
+    declare -i EXITCODE=$?
 
-    return $EXITCODE
+    return "$EXITCODE"
   fi
 }
 
@@ -129,20 +130,22 @@ generate_config_grub() {
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
-  execute_chroot_command "grub-install --no-floppy --recheck $DRIVE1 2>&1"; declare -i EXITCODE=$?
+  execute_chroot_command "grub-install --no-floppy --recheck $DRIVE1 2>&1"
+  declare -i EXITCODE=$?
 
   # only install grub2 in mbr of all other drives if we use swraid
   if [ "$SWRAID" = "1" ] ;  then
     local i=2
     while [ `eval echo \\$DRIVE${i}` ]; do
-      local TARGETDRIVE=`eval echo \\$DRIVE${i}`
-      execute_chroot_command "grub-install --no-floppy --recheck $TARGETDRIVE 2>&1"
+      local targetdrive=`eval echo \\$DRIVE${i}`
+      execute_chroot_command "grub-install --no-floppy --recheck $targetdrive 2>&1"
+      declare -i EXITCODE=$?
       let i=i+1
     done
   fi
   uuid_bugfix
 
-  return $EXITCODE
+  return "$EXITCODE"
 }
 
 
@@ -170,24 +173,28 @@ validate_image() {
 
 # extract image file to hdd
 extract_image() {
-  LANG=C pacstrap -m -a $FOLD/hdd base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget 2>&1 | debugoutput
+  LANG=C pacstrap -m -a "$FOLD/hdd" base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget 2>&1 | debugoutput
 
   if [ "$EXITCODE" -eq "0" ]; then
     cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput
 
     #timezone - we are in Germany
     execute_chroot_command "ln -s /usr/share/timezone/Europe/Berlin /etc/localtime"
-    echo en_US.UTF-8 UTF-8 > $FOLD/hdd/etc/locale.gen
-    echo de_DE.UTF-8 UTF-8 >> $FOLD/hdd/etc/locale.gen
+    {
+      echo "en_US.UTF-8 UTF-8"
+      echo "de_DE.UTF-8 UTF-8"
+    } > "$FOLD/hdd/etc/locale.gen"
     execute_chroot_command "locale-gen"
 
-    echo > $FOLD/hdd/etc/locale.conf
-    echo "LANG=de_DE.UTF-8" >> $FOLD/hdd/etc/locale.conf
-    echo "LC_MESSAGES=C" >> $FOLD/hdd/etc/locale.conf
+    {
+      echo "LANG=de_DE.UTF-8"
+      echo "LC_MESSAGES=C"
+    } > "$FOLD/hdd/etc/locale.conf"
 
-    echo > $FOLD/hdd/etc/vconsole.conf
-    echo "KEYMAP=de" >> $FOLD/hdd/etc/vconsole.conf
-    echo "FONT=LatArCyrHeb-16" >> $FOLD/hdd/etc/vconsole.conf
+    {
+      echo "KEYMAP=de"
+      echo "FONT=LatArCyrHeb-16"
+    } > "$FOLD/hdd/etc/vconsole.conf"
 
     
     return 0 

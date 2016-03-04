@@ -4,8 +4,13 @@
 # Debian specific functions 
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2008-2015, Hetzner Online GmbH
+# (c) 2008-2016, Hetzner Online GmbH
 #
+# Contributors
+# * Markus Schade
+# * Matthias Übler
+# * Thore Bödecker
+# * Tim Meusel
 
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
@@ -97,7 +102,7 @@ generate_new_ramdisk() {
 
     if [ "$IMG_VERSION" -ge 60 ]; then
       # blacklist i915 driver due to many bugs and stability issues
-      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
+      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
       echo -e "### $COMPANY - installimage" > $blacklist_conf
       echo -e "### silence any onboard speaker" >> $blacklist_conf
       echo -e "blacklist pcspkr" >> $blacklist_conf

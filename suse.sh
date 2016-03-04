@@ -6,6 +6,12 @@
 # originally written by Florian Wicke and David Mayr
 # (c) 2007-2016, Hetzner Online GmbH
 #
+# Contributors
+# * Markus Schade
+# * Jonas Keidel
+# * Matthias Übler
+# * Thore Bödecker
+# * Tim Meusel
 
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
@@ -100,7 +106,7 @@ generate_new_ramdisk() {
   VERSION=`echo $OUTFILE |cut -d "-" -f2-`
 
   # blacklist i915
-  local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-hetzner.conf"
+  local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
   {
     echo '### $COMPANY - installimage'
     echo '### i915 driver blacklisted due to various bugs'
@@ -128,7 +134,7 @@ generate_new_ramdisk() {
     fi
 #  elif [ "$SUSEVERSION" -ge 132 ]; then
   else 
-    local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-hetzner.conf"
+    local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT"
     {
       echo '### $COMPANY - installimage'
       echo 'add_dracutmodules+="lvm mdraid"'

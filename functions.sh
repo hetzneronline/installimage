@@ -4,8 +4,13 @@
 # functions
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2007-2015, Hetzner Online GmbH
+# (c) 2007-2016, Hetzner Online GmbH
 #
+# Contributors
+# * Markus Schade
+# * Jonas Keidel
+# * Thore Bödecker
+# * Tim Meusel
 
 
 # nil settings parsed out of the config
@@ -2935,7 +2940,7 @@ clear_logs() {
 generate_sysctlconf() {
   local sysctl_conf="$FOLD/hdd/etc/sysctl.conf"
   if [ -d $FOLD/hdd/etc/sysctl.d ]; then
-   sysctl_conf="$FOLD/hdd/etc/sysctl.d/99-hetzner.conf"
+   sysctl_conf="$FOLD/hdd/etc/sysctl.d/99-$C_SHORT.conf"
   fi
     cat << EOF > $sysctl_conf
 ### $COMPANY installimage
@@ -3137,26 +3142,50 @@ generate_ntp_config() {
 
   if [ -f "$FOLD/hdd/$CFGNTP" -o -f "$FOLD/hdd/$CFGCHRONY" -o -f "$FOLD/hdd/$CFGTIMESYNCD" ] ; then
     if [ -f "$FOLD/hdd/$CFGTIMESYNCD" ]; then
+      debug "# using systemd-timesyncd"
       local cfgdir="$FOLD/hdd/$CFGTIMESYNCD.d"
       local cfgparam='NTP'
       [ "$IAM" = "debian" ] && cfgparam='Servers'
-      mkdir -p "$cfgdir" | debugoutput
-      CFG="$cfgdir/hetzner.conf"
-      echo -e "[Time]\n$cfgparam=ntp1.hetzner.de ntp2.hetzner.com ntp3.hetzner.net\n" > "$CFG" | debugoutput
+      mkdir -p "$cfgdir"
+      CFG="$cfgdir/$C_SHORT.conf"
+      {
+        echo "[Time]"
+        echo -n "$cfgparam="
+        for i in "${NTPSERVERS[@]}"; do
+          echo -n "$i "
+        done
+      } > "$CFG" | debugoutput
     elif [ -f "$FOLD/hdd/$CFGCHRONY" ]; then
-      echo "using chrony" | debugoutput
-      CFG="$CFGCHRONY"
-      execute_chroot_command 'echo -e "\n\n# hetzner ntp servers \nserver ntp1.hetzner.de offline minpoll 8\nserver ntp2.hetzner.com offline minpoll 8\nserver ntp3.hetzner.net offline minpoll 8\n" >> '"$CFG" | debugoutput
+      debug "# using chrony"
+      CFG="$FOLD/hdd/$CFGCHRONY"
+      {
+        echo ""
+        echo "# $C_SHORT ntp servers"
+        for i in "${NTPSERVERS[@]}"; do
+          echo "server $i offline minpoll 8"
+        done
+      } >> "$CFG" | debugoutput
     else
-      CFG="$CFGNTP"
-      echo "using ntp.conf" | debugoutput
-      execute_chroot_command 'sed -e "s/^server \(.*\)$/## server \1   ## see end of file/" -i '"$CFG" | debugoutput
-      execute_chroot_command 'echo -e "\n\n# hetzner ntp servers \nserver ntp1.hetzner.de iburst\nserver ntp2.hetzner.com iburst\nserver ntp3.hetzner.net iburst\n" >> '"$CFG" | debugoutput
-      [ "$IAM" = "suse" ] && execute_chroot_command 'echo -e "\n# local clock\nserver 127.127.1.0" >> '"$CFG" | debugoutput
+      CFG="$FOLD/hdd/$CFGNTP"
+      debug "# using NTP"
+      sed -e "s/^server \(.*\)$/## server \1   ## see end of file/" -i "$CFG"
+      {
+        echo ""
+        echo "# $C_SHORT ntp servers"
+        for i in "${NTPSERVERS[@]}"; do
+          echo "server $i offline iburst"
+        done
+      } >> "$CFG" | debugoutput
+      if [ "$IAM" = "suse" ]; then
+        {
+          echo ""
+          echo "# local clock"
+          echo "server 127.127.1.0"
+        } >> "$CFG" | debugoutput
+      fi
     fi
   else
-    msg="ntp config '$CFG' not found, ignoring"
-    echo $msg | debugoutput
+    debug "no ntp config found, ignoring"
   fi
   return 0
 }
@@ -3541,7 +3570,7 @@ exit_function() {
   echo
   echo "Please check our wiki for a description of the error:"
   echo
-  echo "http://wiki.hetzner.de/index.php/Betriebssystem_Images_installieren"
+  echo "http://wiki.hetzner.de/index.php/Installimage"
   echo
   echo "If your problem is not described there, try booting into a fresh"
   echo "rescue system and restart the installation. If the installation"
