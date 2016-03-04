@@ -158,7 +158,7 @@ generate_config_mdadm() {
 generate_new_ramdisk() {
   if [ "$1" ]; then
     local outfile=$(find "$FOLD"/hdd/boot -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
-    local kvers=$(echo "$OUTFILE" |cut -d "-" -f2-)
+    local kvers=$(echo "$outfile" |cut -d "-" -f2-)
     debug "# Kernel Version found: $kvers"
 
     if [ "$IMG_VERSION" -ge 1204 ]; then
