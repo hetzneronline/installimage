@@ -136,7 +136,7 @@ generate_new_ramdisk() {
     # apparently sometimes the mdadm assembly bugfix introduced with the recent mdadm release does not work
     # however, the problem is limited to H8SGL boards
     # see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=784070
-    if [ "$IMG_VERSION" -ge 80 -a -n "$(dmidecode -s baseboard-product-name | grep -i H8SGL)" ]; then
+    if [ "$IMG_VERSION" -ge 80 ] && [ "$MBTYPE" = 'H8SGL' ]; then
       local script="$FOLD/hdd/usr/share/initramfs-tools/scripts/local-block/mdadmpatch"
       cp "$SCRIPTPATH/h8sgl-deb8-md.sh" "$script"
       chmod a+x "$script"

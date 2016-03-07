@@ -260,7 +260,7 @@ generate_config_grub() {
   fi
 
   # H8SGL need workaround for iommu
-  if [ -n "$(dmidecode -s baseboard-product-name | grep -i h8sgl)" -a $IMG_VERSION -ge 1404 ] ; then
+  if [ "$MBTYPE" = 'H8SGL' ] && [ "$IMG_VERSION" -ge 1404 ] ; then
     grub_linux_default="${grub_linux_default} iommu=noaperture"
   fi
 
