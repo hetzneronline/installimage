@@ -2337,10 +2337,10 @@ gather_network_information() {
   fi
 
   # ipv6
-  # check for our global ipv6
-  DOIPV6=$(ip -6 addr show dev $ETHDEV | grep 'inet6 2a01:4f8:')
+  # check for non-link-local ipv6
+  DOIPV6=$(ip -6 addr show dev $ETHDEV | grep -v fe80 | grep -m1 'inet6')
   if [ -n "$DOIPV6" ]; then
-    local INET6ADDR=$(ip -6 addr show dev $ETHDEV | grep 'inet6 2a01:4f8:' | awk '{print $2}')
+    local INET6ADDR=$(ip -6 addr show dev $ETHDEV | grep -v fe80 | grep -m1 'inet6' | awk '{print $2}')
     IP6ADDR=$(echo $INET6ADDR | cut -d"/" -f1)
     IP6PREFLEN=$(echo $INET6ADDR | cut -d'/' -f2)
     # we can get default route from here, but we could also assume fe80::1 for now
@@ -3139,20 +3139,26 @@ generate_ntp_config() {
   [ "$IAM" = 'ubuntu' ] && ubuntu_version="$IMG_VERSION"
   [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
 
-  if [ -f "$FOLD/hdd/$CFGNTP" -o -f "$FOLD/hdd/$CFGCHRONY" -o -f "$FOLD/hdd/$CFGTIMESYNCD" ] ; then
+  if [ -f "$FOLD/hdd/$CFGNTP" ] || [ -f "$FOLD/hdd/$CFGCHRONY" ] || [ -f "$FOLD/hdd/$CFGTIMESYNCD" ] ; then
     if [ -f "$FOLD/hdd/$CFGTIMESYNCD" ]; then
       debug "# using systemd-timesyncd"
       local cfgdir="$FOLD/hdd/$CFGTIMESYNCD.d"
       local cfgparam='NTP'
-      [ "$IAM" = "debian" ] && cfgparam='Servers'
-      mkdir -p "$cfgdir"
-      CFG="$cfgdir/$C_SHORT.conf"
+      # jessie systemd does not recognize drop-ins for systemd-timesyncd
+      if [ "$IAM" = "debian" ] && [ "$debian_version" -eq 8 ]; then
+        cfgparam='Servers'
+        CFG="$FOLD/hdd/$CFGTIMESYNCD"
+      else 
+        mkdir -p "$cfgdir"
+        CFG="$cfgdir/$C_SHORT.conf"
+      fi
       {
         echo "[Time]"
         echo -n "$cfgparam="
         for i in "${NTPSERVERS[@]}"; do
           echo -n "$i "
         done
+        echo ""
       } > "$CFG" | debugoutput
     elif [ -f "$FOLD/hdd/$CFGCHRONY" ]; then
       debug "# using chrony"
