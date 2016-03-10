@@ -36,27 +36,32 @@ IAM=""
 IMG_VERSION=0
 BOOTLOADER=""
 GOVERNOR=""
-SFDISKPARTS=""
+# this var is probably not used anymore. keep it for safety
+#SFDISKPARTS=""
 COUNT_DRIVES="0"
-LAST_PART_START=""
-LAST_PART_END=""
-DISK_SIZE_SECTORS=""
+# this var is probably not used anymore. keep it for safety
+#LAST_PART_START=""
+# this var is probably not used anymore. keep it for safety
+#LAST_PART_END=""
+# this var is probably not used anymore. keep it for safety
+#DISK_SIZE_SECTORS=""
 
 SYSTEMROOTDEVICE=""
 SYSTEMBOOTDEVICE=""
 SYSTEMREALBOOTDEVICE=""
 EXTRACTFROM=""
 
-ETHDEV=""
-HWADDR=""
-IPADDR=""
-BROADCAST=""
-SUBNETMASK=""
-GATEWAY=""
-NETWORK=""
-IP6ADDR=""
-IP6PREFLEN=""
-IP6GATEWAY=""
+export ETHDEV=""
+export HWADDR=""
+export IPADDR=""
+export CIDR=""
+export BROADCAST=""
+export SUBNETMASK=""
+export GATEWAY=""
+export NETWORK=""
+export IP6ADDR=""
+export IP6PREFLEN=""
+export IP6GATEWAY=""
 
 ROOTHASH=""
 LILOEXTRABOOT=""
@@ -93,46 +98,47 @@ generate_menu() {
   PROXMOX=false
   # find image-files and generate raw list
   FINALIMAGEPATH="$IMAGESPATH"
-  if [ "$1" = "openSUSE" ]; then
-    RAWLIST=$(ls -1 $IMAGESPATH | grep -i -e "^$1\|^old_$1\|^suse\|^old_suse")
-  elif [ "$1" = "Virtualization" ]; then
+# don't go looking for old_openSUSE or suse images. That was a long time ago
+#  if [ "$1" = "openSUSE" ]; then
+#    RAWLIST=$(ls -1 "$IMAGESPATH" | grep -i -e "^$1\|^old_$1\|^suse\|^old_suse")
+  if [ "$1" = "Virtualization" ]; then
     RAWLIST=""
-    RAWLIST=$(ls -1 $IMAGESPATH | grep -i -e "^CoreOS")
+    RAWLIST=$(find "$IMAGESPATH/*" -maxdepth 0 -name "CoreOS*" -printf '%f\n')
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Wheezy"
   elif [ "$1" = "old_images" ]; then
-    RAWLIST=$(ls -1 $OLDIMAGESPATH)
+    RAWLIST=$(find "$OLDIMAGESPATH/*" -maxdepth 0 -printf '%f\n')
     FINALIMAGEPATH="$OLDIMAGESPATH"
   else
-    RAWLIST=$(ls -1 $IMAGESPATH | grep -i -e "^$1\|^old_$1")
+    RAWLIST=$(ls -1 "$IMAGESPATH" | grep -i -e "^$1\|^old_$1")
   fi
   # Remove CPANEL image and signature files from list
-  RAWLIST="$(echo $RAWLIST |tr ' ' '\n' |egrep -i -v "cpanel|.sig$")"
+  RAWLIST="$(echo "$RAWLIST" |tr ' ' '\n' |egrep -i -v "cpanel|.sig$")"
   # check if 32-bit rescue is activated and disable 64-bit images then
   ARCH="$(uname -m)"
   if [ "$ARCH" != "x86_64" ]; then
-    RAWLIST="$(echo $RAWLIST |tr ' ' '\n' |grep -v "\-64\-[a-zA-Z]")"
+    RAWLIST="$(echo "$RAWLIST" |tr ' ' '\n' |grep -v "\-64\-[a-zA-Z]")"
   fi
   # generate formatted list for usage with "dialog"
   for i in $RAWLIST; do
-   TEMPVAR="$i"
-   TEMPVAR=$(basename $TEMPVAR .bin)
-   TEMPVAR=$(basename $TEMPVAR .bin.z2)
-   TEMPVAR=$(basename $TEMPVAR .txz)
-   TEMPVAR=$(basename $TEMPVAR .tar.xz)
-   TEMPVAR=$(basename $TEMPVAR .tgz)
-   TEMPVAR=$(basename $TEMPVAR .tar.gz)
-   TEMPVAR=$(basename $TEMPVAR .tbz)
-   TEMPVAR=$(basename $TEMPVAR .tar.bz)
-   TEMPVAR=$(basename $TEMPVAR .tar.bz2)
-   TEMPVAR=$(basename $TEMPVAR .tar)
-   MENULIST=$MENULIST"$TEMPVAR . "
+    TEMPVAR="$i"
+    TEMPVAR=$(basename "$TEMPVAR" .bin)
+    TEMPVAR=$(basename "$TEMPVAR" .bin.bz2)
+    TEMPVAR=$(basename "$TEMPVAR" .txz)
+    TEMPVAR=$(basename "$TEMPVAR" .tar.xz)
+    TEMPVAR=$(basename "$TEMPVAR" .tgz)
+    TEMPVAR=$(basename "$TEMPVAR" .tar.gz)
+    TEMPVAR=$(basename "$TEMPVAR" .tbz)
+    TEMPVAR=$(basename "$TEMPVAR" .tar.bz)
+    TEMPVAR=$(basename "$TEMPVAR" .tar.bz2)
+    TEMPVAR=$(basename "$TEMPVAR" .tar)
+    MENULIST="$MENULIST$TEMPVAR . "
   done
   # add "back to mainmenu" entry
-  MENULIST=$MENULIST'back . '
+  MENULIST="$MENULIST"'back . '
 
   # show menu and get result
-  dialog --backtitle "$DIATITLE" --title "$1 images" --no-cancel --menu "choose image" 0 0 0 $MENULIST 2>$FOLD/submenu.chosen
-  IMAGENAME=$(cat $FOLD/submenu.chosen)
+  dialog --backtitle "$DIATITLE" --title "$1 images" --no-cancel --menu "choose image" 0 0 0 $MENULIST 2> "$FOLD/submenu.chosen"
+  IMAGENAME=$(cat "$FOLD/submenu.chosen")
 
   # create proxmox post-install file if needed
   case $IMAGENAME in 
@@ -140,7 +146,7 @@ generate_menu() {
       case "$IMAGENAME" in
         Proxmox-Virtualization-Environment-on-Debian-Wheezy) export PROXMOX_VERSION="3" ;;
       esac
-      cp $SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION /post-install
+      cp "$SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION" /post-install
       chmod 0755 /post-install
       PROXMOX=true
       IMAGENAME=$(eval echo \\$PROXMOX${PROXMOX_VERSION}_BASE_IMAGE)
@@ -194,11 +200,11 @@ create_config() {
 
     local found_optdrive=0
     local optdrive_count=0
-    for i in $(seq 1 $COUNT_DRIVES) ; do
+    for ((i=1; i<=COUNT_DRIVES; i++)); do
       DISK="$(eval echo \$DRIVE${i})"
       OPTDISK="$(eval echo \$OPT_DRIVE${i})"
       if [ -n "$OPTDISK" ] ; then
-        optdrive_count=$[$optdrive_count+1]
+        optdrive_count=$((optdrive_count+1))
         found_optdrive=1
         hdinfo "/dev/$OPTDISK" >> "$CNF"
         echo "DRIVE$i /dev/$OPTDISK" >> "$CNF"
@@ -239,7 +245,7 @@ create_config() {
         echo ""
         echo "## activate software RAID?  < 0 | 1 >"
         echo ""
-      } >> $CNF
+      } >> "$CNF"
 
       case "$OPT_SWRAID" in
         0) echo "SWRAID 0" >> "$CNF" ;;
@@ -265,17 +271,17 @@ create_config() {
       for level in $raid_levels ; do
         # set raidlevel to given opt raidlevel
         if [ -n "$OPT_SWRAIDLEVEL" ] ; then
-          [ $OPT_SWRAIDLEVEL -eq $level ] && set_level="$level"
+          [ "$OPT_SWRAIDLEVEL" -eq "$level" ] && set_level="$level"
         fi
 
         # no raidlevel 5 if less then 3 hdds
-        [ $level -eq 5 -a $COUNT_DRIVES -lt 3 ] && continue
+        [ "$level" -eq 5 ] && [ $COUNT_DRIVES -lt 3 ] && continue
 
         # no raidlevel 6 if less then 4 hdds
-        [ $level -eq 6 -a $COUNT_DRIVES -lt 4 ] && continue
+        [ "$level" -eq 6 ] && [ $COUNT_DRIVES -lt 4 ] && continue
 
         # no raidlevel 10 if less then 2 hdds
-        [ $level -eq 10 -a $COUNT_DRIVES -lt 2 ] && continue
+        [ "$level" -eq 10 ] && [ $COUNT_DRIVES -lt 2 ] && continue
 
         # create list of all possible raidlevels
         if [ -z "$avail_level" ] ; then
@@ -344,18 +350,18 @@ create_config() {
       echo "## which hostname should be set?"
       echo "##"
       echo ""
-    } >> $CNF
+    } >> "$CNF"
     # set default hostname to image name
     DEFAULT_HOSTNAME="$1"
     # or to proxmox if chosen
     if [ "$PROXMOX" = "true" ]; then
-      echo -e "## This must be a FQDN otherwise installation will fail\n## \n" >> $CNF
+      echo -e "## This must be a FQDN otherwise installation will fail\n## \n" >> "$CNF"
       DEFAULT_HOSTNAME="Proxmox-VE.localdomain"
     fi
     # or to the hostname passed through options
     [ "$OPT_HOSTNAME" ] && DEFAULT_HOSTNAME="$OPT_HOSTNAME"
-    echo "HOSTNAME $DEFAULT_HOSTNAME" >> $CNF
-    echo "" >> $CNF
+    echo "HOSTNAME $DEFAULT_HOSTNAME" >> "$CNF"
+    echo "" >> "$CNF"
 
 
     ## Calculate how much hardisk space at raid level 0,1,5,6,10
@@ -432,33 +438,41 @@ create_config() {
     } >> "$CNF"
 
     if [ -x "/usr/local/bin/hwdata" ]; then
-      echo -e "#" >> $CNF
-      echo -e "## your system has the following devices:" >> $CNF
-      echo -e "#" >> $CNF
-      echo -e "$(/usr/local/bin/hwdata | grep "Disk /" | sed "s/^  /#/")" >> $CNF
+      {
+        echo "#"
+        echo "## your system has the following devices:"
+        echo "#"
+        /usr/local/bin/hwdata | grep "Disk /"  | sed "s/^  /#/"
+      } >> "$CNF"
     fi
 
-    if [ "$RAID1" -a "$RAID0" ] ; then
-      echo -e "#" >> $CNF
-      echo -e "## Based on your disks and which RAID level you will choose you have" >> $CNF
-      echo -e "## the following free space to allocate (in GiB):" >> $CNF
-      echo -e "# RAID  0: ~$RAID0" >> $CNF
-      echo -e "# RAID  1: ~$RAID1" >> $CNF
-      [ "$RAID5" ] && echo -e "# RAID  5: ~$RAID5" >> $CNF
+    if [ "$RAID1" ] && [ "$RAID0" ] ; then
+      {
+        echo "#"
+        echo "## Based on your disks and which RAID level you will choose you have"
+        echo "## the following free space to allocate (in GiB):"
+        echo "# RAID  0: ~$RAID0"
+        echo "# RAID  1: ~$RAID1"
+      } >> "$CNF"
+      [ "$RAID5" ] && echo "# RAID  5: ~$RAID5" >> "$CNF"
       if [ "$RAID6" ]; then
-        echo -e "# RAID  6: ~$RAID6" >> $CNF
-        echo -e "# RAID 10: ~$RAID10" >> $CNF
+        {
+          echo "# RAID  6: ~$RAID6"
+          echo "# RAID 10: ~$RAID10"
+        } >> "$CNF"
       fi
     fi
 
-    echo "#" >> $CNF
-    echo "" >> $CNF
+    {
+      echo "#"
+      echo ""
+    } >> "$CNF"
 
     # check if there are 3TB disks inside and use other default scheme
     local LIMIT=2096128
     local THREE_TB=2861588
-    local DRIVE_SIZE="$(sfdisk -s `smallest_hd` 2>/dev/null)"
-    DRIVE_SIZE="$(echo $DRIVE_SIZE / 1024 | bc)"
+    local DRIVE_SIZE; DRIVE_SIZE="$(sfdisk -s "$(smallest_hd)" 2>/dev/null)"
+    DRIVE_SIZE="$(echo "$DRIVE_SIZE" / 1024 | bc)"
 
     # adjust swap dynamically according to RAM
     # RAM < 2 GB : SWAP=2 * RAM
@@ -470,11 +484,11 @@ create_config() {
     RAM=$(free -m | grep Mem: | tr -s ' ' | cut -d' ' -f2)
     SWAPSIZE=4
     if [ "$RAM" -lt 2048 ]; then
-      SWAPSIZE=$(($RAM * 2 / 1024 + 1))
+      SWAPSIZE=$((RAM * 2 / 1024 + 1))
     elif [ "$RAM" -lt 8192 ]; then
-      SWAPSIZE=$(($RAM / 1024 + 1))
+      SWAPSIZE=$((RAM / 1024 + 1))
     elif [ "$RAM" -lt 65535 ]; then 
-      SWAPSIZE=$(($RAM / 2 / 1024 + 1))
+      SWAPSIZE=$((RAM / 2 / 1024 + 1))
     fi
 
     DEFAULTPARTS=${DEFAULTPARTS/SWAPSIZE##/$SWAPSIZE}
@@ -492,7 +506,7 @@ create_config() {
 
     # use /var instead of /home for all partition when installing plesk
     if [ "$OPT_INSTALL" ]; then
-      if [ $(echo $OPT_INSTALL | grep -i "PLESK") ]; then
+      if echo "$OPT_INSTALL" | grep -qi 'PLESK'; then
         DEFAULTPARTS_BIG="${DEFAULTPARTS_BIG//home/var}"
       fi
     fi
@@ -502,8 +516,8 @@ create_config() {
       echo "## NOTICE: Please keep the following lines unchanged. They are just placeholders." >> "$CNF"
     fi
 
-    if [ $DRIVE_SIZE -gt $LIMIT ]; then
-      if [ $DRIVE_SIZE -gt $THREE_TB ]; then
+    if [ "$DRIVE_SIZE" -gt "$LIMIT" ]; then
+      if [ "$DRIVE_SIZE" -gt "$THREE_TB" ]; then
         [ "$OPT_PARTS" ] && echo -e "$OPT_PARTS" >> "$CNF" || echo -e "$DEFAULTPARTS_LARGE" >> "$CNF"
       else
         [ "$OPT_PARTS" ] && echo -e "$OPT_PARTS" >> "$CNF" || echo -e "$DEFAULTPARTS_BIG" >> "$CNF"
@@ -513,53 +527,59 @@ create_config() {
     fi
 
     [ "$OPT_LVS" ] && echo -e "$OPT_LVS" >> "$CNF"
-    echo -e "" >> "$CNF"
+    echo "" >> "$CNF"
 
     # image
-    echo -e "\n" >> $CNF
-    echo -e "## ========================" >> $CNF
-    echo -e "##  OPERATING SYSTEM IMAGE:" >> $CNF
-    echo -e "## ========================\n" >> $CNF
-    echo -e "## full path to the operating system image" >> $CNF
-    echo -e "##   supported image sources:  local dir,  ftp,  http,  nfs" >> $CNF
-    echo -e "##   supported image types: tar, tar.gz, tar.bz, tar.bz2, tar.xz, tgz, tbz, txz" >> $CNF
-    echo -e "## examples:" >> $CNF
-    echo -e "#" >> $CNF
-    echo -e "# local: /path/to/image/filename.tar.gz" >> $CNF
-    echo -e "# ftp:   ftp://<user>:<password>@hostname/path/to/image/filename.tar.bz2" >> $CNF
-    echo -e "# http:  http://<user>:<password>@hostname/path/to/image/filename.tbz" >> $CNF
-    echo -e "# https: https://<user>:<password>@hostname/path/to/image/filename.tbz" >> $CNF
-    echo -e "# nfs:   hostname:/path/to/image/filename.tgz" >> $CNF
-    echo -e "#" >> $CNF
-    echo -e "# for validation of the image, place the detached gpg-signature" >> $CNF
-    echo -e "# and your public key in the same directory as your image file." >> $CNF
-    echo -e "# naming examples:" >> $CNF
-    echo -e "#  signature:   filename.tar.bz2.sig" >> $CNF
-    echo -e "#  public key:  public-key.asc" >> $CNF
-    echo -e "" >> $CNF
+    {
+      echo ""
+      echo "## ========================"
+      echo "##  OPERATING SYSTEM IMAGE:"
+      echo "## ========================"
+      echo ""
+      echo "## full path to the operating system image"
+      echo "##   supported image sources:  local dir,  ftp,  http,  nfs"
+      echo "##   supported image types: tar, tar.gz, tar.bz, tar.bz2, tar.xz, tgz, tbz, txz"
+      echo "## examples:"
+      echo "#"
+      echo "# local: /path/to/image/filename.tar.gz"
+      echo "# ftp:   ftp://<user>:<password>@hostname/path/to/image/filename.tar.bz2"
+      echo "# http:  http://<user>:<password>@hostname/path/to/image/filename.tbz"
+      echo "# https: https://<user>:<password>@hostname/path/to/image/filename.tbz"
+      echo "# nfs:   hostname:/path/to/image/filename.tgz"
+      echo "#"
+      echo "# for validation of the image, place the detached gpg-signature"
+      echo "# and your public key in the same directory as your image file."
+      echo "# naming examples:"
+      echo "#  signature:   filename.tar.bz2.sig"
+      echo "#  public key:  public-key.asc"
+      echo ""
+    } >> "$CNF"
     if [ "$1" = "custom" ]; then
-      echo -e "IMAGE " >> $CNF
+      echo "IMAGE " >> "$CNF"
     else
       if [ "$OPT_IMAGE" ] ; then
         if [ -f "$FINALIMAGEPATH/$OPT_IMAGE" ] ; then
-          echo -e "IMAGE $FINALIMAGEPATH/$OPT_IMAGE" >> $CNF
+          echo "IMAGE $FINALIMAGEPATH/$OPT_IMAGE" >> "$CNF"
         else
-          echo -e "IMAGE $OPT_IMAGE" >> $CNF
+          echo "IMAGE $OPT_IMAGE" >> "$CNF"
         fi
       else
         [ -n "$IMG_EXT" ] && IMAGESEXT="$IMG_EXT"
-        echo -e "IMAGE $FINALIMAGEPATH$1.$IMAGESEXT" >> $CNF
+        echo "IMAGE $FINALIMAGEPATH$1.$IMAGESEXT" >> "$CNF"
       fi
     fi
-    echo -e "" >> $CNF
+    echo "" >> "$CNF"
 
   fi
-return 0
+  return 0
 }
 
 getdrives() {
+  local DRIVES;
 #  local DRIVES="$(sfdisk -s 2>/dev/null | sort -u | grep -e "/dev/[hsv]d" | cut -d: -f1)"
-  local DRIVES="$(ls -1 /sys/block | egrep 'nvme[0-9]n[0-9]$|[hsv]d[a-z]$')"
+  DRIVES="$(ls -1 /sys/block | egrep 'nvme[0-9]n[0-9]$|[hsv]d[a-z]$')"
+# this should be better;
+#  DRIVES="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \)   -printf '%f\n')"
   local i=1
 
   #cast drives into an array
@@ -567,14 +587,14 @@ getdrives() {
 
   for drive in ${DRIVES[*]} ; do
     # if we have just one drive, add it. Otherwise check that multiple drives are at least HDDMINSIZE
-    if [ ${#DRIVES[@]} -eq 1 ] || [ ! $(fdisk -s /dev/$drive 2>/dev/null || echo 0) -lt $HDDMINSIZE ] ; then
+    if [ ${#DRIVES[@]} -eq 1 ] || [ ! $(fdisk -s /dev/$drive 2>/dev/null || echo 0) -lt "$HDDMINSIZE" ] ; then
       eval DRIVE$i="/dev/$drive"
       let i=i+1
     fi
   done
   [ -z "$DRIVE1" ] && DRIVE1="no valid drive found"
 
-  COUNT_DRIVES=$[$i - 1]
+  COUNT_DRIVES=$((i - 1))
 
   return 0
 }
@@ -588,26 +608,26 @@ if [ "$1" ]; then
 
   # special hidden configure option: create RAID1 and 10 with assume clean to
   # avoid initial resync 
-  RAID_ASSUME_CLEAN="$(grep -m1 -e ^RAID_ASSUME_CLEAN $1 |awk '{print $2}')"
+  RAID_ASSUME_CLEAN="$(grep -m1 -e ^RAID_ASSUME_CLEAN "$1" |awk '{print $2}')"
 
   # special hidden configure option: GPT usage
   # if set to 1, use GPT even on disks smaller than 2TiB
   # if set to 2, always use GPT, even if the OS does not support it
-  FORCE_GPT="$(grep -m1 -e ^FORCE_GPT $1 |awk '{print $2}')"
+  FORCE_GPT="$(grep -m1 -e ^FORCE_GPT "$1" |awk '{print $2}')"
 
   # another special hidden configure option: force image validation
   # if set to 1: force validation
-  FORCE_SIGN="$(grep -m1 -e ^FORCE_SIGN $1 |awk '{print $2}')"
+  FORCE_SIGN="$(grep -m1 -e ^FORCE_SIGN "$1" |awk '{print $2}')"
 
   # hidden configure option:   
   # if set to 1: force setting root password even if ssh keys are
   # provided
-  FORCE_PASSWORD="$(grep -m1 -e ^FORCE_PASSWORD $1 |awk '{print $2}')"
+  FORCE_PASSWORD="$(grep -m1 -e ^FORCE_PASSWORD "$1" |awk '{print $2}')"
 
   # get all disks from configfile
   local used_disks=1
   for i in $(seq 1 $COUNT_DRIVES) ; do
-    disk="$(grep -m1 -e ^DRIVE$i $1 | awk '{print $2}')"
+    disk="$(grep -m1 -e ^DRIVE$i "$1" | awk '{print $2}')"
     if [ -n "$disk" ] ; then
       export DRIVE$i
       eval DRIVE$i="$disk"
@@ -615,7 +635,7 @@ if [ "$1" ]; then
     else
       unset DRIVE$i
     fi
-    format_disk="$(grep -m1 -e ^FORMATDRIVE$i $1 | awk '{print $2}')"
+    format_disk="$(grep -m1 -e ^FORMATDRIVE$i "$1" | awk '{print $2}')"
     export FORMAT_DRIVE$i
     eval FORMAT_DRIVE$i="0"
     if [ -n "$format_disk" ] ; then
@@ -627,11 +647,11 @@ if [ "$1" ]; then
   COUNT_DRIVES="$((used_disks-1))"
 
   # is RAID activated?
-  SWRAID="$(grep -m1 -e ^SWRAID $1 |awk '{print $2}')"
+  SWRAID="$(grep -m1 -e ^SWRAID "$1" |awk '{print $2}')"
   [ "$SWRAID" = "" ] && SWRAID="0"
 
   # Software RAID Level
-  SWRAIDLEVEL="$(grep -m1 -e ^SWRAIDLEVEL $1 | awk '{ print $2 }')"
+  SWRAIDLEVEL="$(grep -m1 -e ^SWRAIDLEVEL "$1" | awk '{ print $2 }')"
   [ "$SWRAIDLEVEL" = "" ] && SWRAIDLEVEL="1"
 
   PARTS_SUM_SIZE="0"
@@ -1570,13 +1590,15 @@ create_partitions() {
   local SECTORSIZE=$(blockdev --getss $1)
 
   # write standard entries to fstab
-  echo "proc /proc proc defaults 0 0" > $FOLD/fstab
+  echo "proc /proc proc defaults 0 0" > "$FOLD/fstab"
   # add fstab entries for devpts, sys and shm in CentOS as they are not
   # automatically mounted by init skripts like in Debian/Ubuntu and OpenSUSE
   if [ "$IAM" = "centos" ]; then
-    echo "devpts /dev/pts devpts gid=5,mode=620 0 0" >> $FOLD/fstab
-    echo "tmpfs /dev/shm tmpfs defaults 0 0" >> $FOLD/fstab
-    echo "sysfs /sys sysfs defaults 0 0" >> $FOLD/fstab
+    {
+      echo "devpts /dev/pts devpts gid=5,mode=620 0 0"
+      echo "tmpfs /dev/shm tmpfs defaults 0 0"
+      echo "sysfs /sys sysfs defaults 0 0"
+    } >> "$FOLD/fstab"
   fi
   #copy defaults to tempfstab for softwareraid
   ### cp $FOLD/fstab $FOLD/fstab.md >>/dev/null 2>&1
@@ -1779,8 +1801,8 @@ make_fstab_entry() {
       ENTRY="$1$p$2 $3 $4 defaults 0 0"
     fi
   fi
-   
-  echo $ENTRY >>$FOLD/fstab
+
+  echo $ENTRY >> "$FOLD/fstab"
 
   if [ "$3" = "/" ]; then
     SYSTEMREALROOTDEVICE="$1$p$2"
@@ -2148,8 +2170,8 @@ get_image_info() {
         fi
        ;;
       http)
-        mkdir $FOLD/keys/ 2>&1
-        cd $FOLD/keys/ 
+        mkdir "$FOLD/keys/" 2>&1
+        cd "$FOLD/keys/"
         # no exitcode, because if not found hetzner-pubkey will be used
         wget -q --no-check-certificate "${1}public-key.asc" 2>&1 | debugoutput ; >/dev/null
         if [ "$EXITCODE" -eq "0" ]; then
@@ -2188,11 +2210,11 @@ get_image_info() {
 # download image via http/ftp
 get_image_url() {
   # load image to mounted hdd
-  cd $FOLD/hdd/ ; wget -q --no-check-certificate "$1$2" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
+  cd "$FOLD/hdd/" ; wget -q --no-check-certificate "$1$2" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
   if [ "$EXITCODE" -eq "0" ]; then
     EXTRACTFROM="$FOLD/hdd/$2"
     # search for sign file and download
-    cd $FOLD/keys/ ; wget -q --no-check-certificate "$1$2.sig" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
+    cd "$FOLD/keys/" ; wget -q --no-check-certificate "$1$2.sig" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
     if [ "$EXITCODE" -eq "0" ]; then
       IMAGE_SIGN="$FOLD/keys/$2.sig"
     fi
@@ -2299,7 +2321,7 @@ function get_active_eth_dev() {
     iptest=$(ip addr show dev "$nic" | grep "$nic"$ | awk '{print $2}')
     if [ -n "$iptest" ]; then
       ETHDEV="$nic"
-      break	
+      break
     fi
   done
 }
@@ -2489,7 +2511,7 @@ generate_resolvconf() {
     # disable netconfig of DNS servers in YaST config file
     sed -i -e \
       "s/^NETCONFIG_DNS_POLICY=\".*\"/NETCONFIG_DNS_POLICY=\"\"/" \
-      $FOLD/hdd/etc/sysconfig/network/config
+      "$FOLD/hdd/etc/sysconfig/network/config"
 
 #    if [ "$V6ONLY" -eq 1 ]; then
 #      debug "# skipping IPv4 DNS resolvers"
@@ -2544,7 +2566,7 @@ set_hostname() {
     local networkfile="$FOLD/hdd/etc/sysconfig/network"
     local hostsfile="$FOLD/hdd/etc/hosts"
 
-    [ -f $FOLD/hdd/etc/HOSTNAME ] && hostnamefile="$FOLD/hdd/etc/HOSTNAME"
+    [ -f "$FOLD/hdd/etc/HOSTNAME" ] && hostnamefile="$FOLD/hdd/etc/HOSTNAME"
 
     hostname $sethostname
     execute_chroot_command "hostname $sethostname"
@@ -2592,7 +2614,7 @@ set_hostname() {
     echo "ff02::3 ip6-allhosts" >> $hostsfile
     if [ "$3" ]; then
       if [ "$PROXMOX" = 'true' ] && [ "$PROXMOX_VERSION" = '3' ]; then
-	debug "not adding ipv6 fqdn to hosts for Proxmox3"
+        debug "not adding ipv6 fqdn to hosts for Proxmox3"
       else
         echo "$3 $fqdn_name $shortname" >> $hostsfile
       fi
@@ -2608,8 +2630,8 @@ set_hostname() {
 generate_hosts() {
   if [ "$1" ]; then
     HOSTSFILE="$FOLD/hdd/etc/hosts"
-    [ -f $FOLD/hdd/etc/hostname ] && HOSTNAMEFILE="$FOLD/hdd/etc/hostname"
-    [ -f $FOLD/hdd/etc/HOSTNAME ] && HOSTNAMEFILE="$FOLD/hdd/etc/HOSTNAME"
+    [ -f "$FOLD/hdd/etc/hostname" ] && HOSTNAMEFILE="$FOLD/hdd/etc/hostname"
+    [ -f "$FOLD/hdd/etc/HOSTNAME" ] && HOSTNAMEFILE="$FOLD/hdd/etc/HOSTNAME"
     if [ "$HOSTNAMEFILE" = "" ]; then 
       if [ "$NEWHOSTNAME" ]; then
         HOSTNAME="$NEWHOSTNAME";
@@ -2636,7 +2658,7 @@ generate_hosts() {
     echo "ff02::3 ip6-allhosts" >> $HOSTSFILE
     if [ "$2" ]; then
       if [ "$PROXMOX" = 'true' ] && [ "$PROXMOX_VERSION" = '3' ]; then
-	debug "not adding ipv6 fqdn to hosts for Proxmox3"
+        debug "not adding ipv6 fqdn to hosts for Proxmox3"
       else
         echo "$2 $FULLHOSTNAME $HOSTNAME" >> $HOSTSFILE
       fi
@@ -2649,7 +2671,7 @@ generate_hosts() {
 execute_chroot_command() {
   if [ "$1" ]; then
     debug "# chroot_command: $1"
-    chroot $FOLD/hdd/ /bin/bash -c "$1" 2>&1 | debugoutput ; EXITCODE=$?
+    chroot "$FOLD/hdd/" /bin/bash -c "$1" 2>&1 | debugoutput ; EXITCODE=$?
     return $EXITCODE
   fi
 }
@@ -2657,7 +2679,7 @@ execute_chroot_command() {
 # execute chroot command but without debugoutput
 execute_chroot_command_wo_debug() {
   if [ "$1" ]; then
-    chroot $FOLD/hdd/ /bin/bash -c "$1" 2>&1; EXITCODE=$?
+    chroot "$FOLD/hdd/" /bin/bash -c "$1" 2>&1; EXITCODE=$?
     return $EXITCODE
   fi
 }
@@ -2681,7 +2703,7 @@ generate_new_sshkeys() {
 #    rm -rf $FOLD/hdd/etc/ssh/ssh_host_* 2>&1 | debugoutput
 
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_key" ]; then
-      rm -f $FOLD/hdd/etc/ssh/ssh_host_k* 2>&1 | debugoutput
+      rm -f "$FOLD/hdd/etc/ssh/ssh_host_k*" 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t rsa1 -b 1024 -f /etc/ssh/ssh_host_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
        return $EXITCODE
@@ -2691,7 +2713,7 @@ generate_new_sshkeys() {
     fi
 
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_dsa_key" ]; then
-      rm -f $FOLD/hdd/etc/ssh/ssh_host_dsa_* 2>&1 | debugoutput
+      rm -f "$FOLD/hdd/etc/ssh/ssh_host_dsa_*" 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
@@ -2701,7 +2723,7 @@ generate_new_sshkeys() {
     fi
 
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_rsa_key" ]; then
-      rm -f $FOLD/hdd/etc/ssh/ssh_host_rsa_* 2>&1 | debugoutput
+      rm -f "$FOLD/hdd/etc/ssh/ssh_host_rsa_*" 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
@@ -2717,7 +2739,7 @@ generate_new_sshkeys() {
 #       [ "$IAM" = "debian" -a  "$IMG_VERSION" -ge 70 ] || 
 #       [ "$IAM" = "centos" -a "$IMG_VERSION" -ge 70 ]; then
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_ecdsa_key" ]; then
-      rm -f $FOLD/hdd/etc/ssh/ssh_host_ecdsa_* 2>&1 | debugoutput
+      rm -f "$FOLD/hdd/etc/ssh/ssh_host_ecdsa_*" 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t ecdsa -f /etc/ssh/ssh_host_ecdsa_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
@@ -2731,7 +2753,7 @@ generate_new_sshkeys() {
 #       [ "$IAM" = "ubuntu"  -a  "$IMG_VERSION" -ge 1404 ] || 
 #       [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 132 ]; then
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_ed25519_key" ]; then
-      rm -f $FOLD/hdd/etc/ssh/ssh_host_ed25519_* 2>&1 | debugoutput
+      rm -f "$FOLD/hdd/etc/ssh/ssh_host_ed25519_*" 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
@@ -2754,14 +2776,14 @@ generate_new_sshkeys() {
           while read bits fingerprint name type ; do
             fingerprint="$(echo "${fingerprint}" | sed "s/^MD5://")"
             key_json="${key_json}, \"key_bits\": \"${bits}\", \"key_fingerprint\": \"${fingerprint}\", \"key_name\": \"${name}\""
-          done <<< $(cat $FOLD/hdd/tmp/${key_type})
+          done <<< $(cat "$FOLD/hdd/tmp/${key_type}")
           [ -z "${keys_json}" ] && keys_json="{${key_json}}" || keys_json="${keys_json}, {${key_json}}"
           rm "$FOLD/hdd/tmp/${key_type}"
         fi
     done
     keys_json="{\"keys\": [ ${keys_json} ] }"
 
-    echo "${keys_json}" > $FOLD/ssh_fingerprints
+    echo "${keys_json}" > "$FOLD/ssh_fingerprints"
 
     return 0
   fi
@@ -2889,8 +2911,8 @@ execute_postinstall_script() {
 
     debug "# Found post-installation script $script; executing it..."
     # don't use the execute_chroot_command function and logging here - we need output on stdout!
-  
-    chroot $FOLD/hdd/ /bin/bash -c "$script" ; EXITCODE=$? 
+
+    chroot "$FOLD/hdd/" /bin/bash -c "$script" ; EXITCODE=$? 
 
     if [ $EXITCODE -ne 0 ]; then
       debug "# Post-installation script didn't exit successfully (exit code = $EXITCODE)"
@@ -2923,7 +2945,7 @@ setup_cpufreq() {
 # clear_logs "NIL"
 clear_logs() {
   if [ "$1" ]; then
-    find $FOLD/hdd/var/log -type f > /tmp/filelist.tmp
+    find "$FOLD/hdd/var/log" -type f > /tmp/filelist.tmp
     while read a; do
       if [ "$(echo $a |grep ".gz$\|.[[:digit:]]\{1,3\}$")" ]; then
         rm -rf "$a" >> /dev/null 2>&1
@@ -2938,7 +2960,7 @@ clear_logs() {
 # activate ip_forward for new netsetup
 generate_sysctlconf() {
   local sysctl_conf="$FOLD/hdd/etc/sysctl.conf"
-  if [ -d $FOLD/hdd/etc/sysctl.d ]; then
+  if [ -d "$FOLD/hdd/etc/sysctl.d" ]; then
    sysctl_conf="$FOLD/hdd/etc/sysctl.d/99-$C_SHORT.conf"
   fi
     cat << EOF > $sysctl_conf
@@ -3091,7 +3113,7 @@ generate_config_lilo() {
     echo -e "$LILOEXTRABOOT" >> $BFILE
   fi
   echo -e "boot=$SYSTEMDEVICE" >> $BFILE
-  echo -e "root=$(cat $FOLD/hdd/etc/fstab |grep " / " |cut -d " " -f 1)" >> $BFILE
+  echo -e "root=$(cat "$FOLD/hdd/etc/fstab" |grep " / " |cut -d " " -f 1)" >> $BFILE
   echo -e "vga=0x317" >> $BFILE
   echo -e "timeout=40" >> $BFILE
   echo -e "prompt" >> $BFILE
@@ -3135,7 +3157,7 @@ generate_ntp_config() {
   local debian_version=0
   local ubuntu_version=0
   local suse_version=0
-  [ "$IAM" == debian ] && debian_version=$(cut -c 1 $FOLD/hdd/etc/debian_version)
+  [ "$IAM" == debian ] && debian_version=$(cut -c 1 "$FOLD/hdd/etc/debian_version")
   [ "$IAM" = 'ubuntu' ] && ubuntu_version="$IMG_VERSION"
   [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
 
@@ -3584,7 +3606,7 @@ exit_function() {
   echo
   echo "  https://robot.your-server.de"
   echo
-  
+
   report_id="$(report_config)"
   report_debuglog $report_id
   cleanup
