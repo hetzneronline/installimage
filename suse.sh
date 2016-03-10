@@ -108,7 +108,7 @@ generate_new_ramdisk() {
   # blacklist i915
   local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
   {
-    echo '### $COMPANY - installimage'
+    echo "### $COMPANY - installimage"
     echo '### i915 driver blacklisted due to various bugs'
     echo '### especially in combination with nomodeset'
     echo 'blacklist i915'
@@ -136,7 +136,7 @@ generate_new_ramdisk() {
   else 
     local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT"
     {
-      echo '### $COMPANY - installimage'
+      echo "### $COMPANY - installimage"
       echo 'add_dracutmodules+="lvm mdraid"'
       echo 'add_drivers+="raid0 raid1 raid10 raid456"'
       #echo 'early_microcode="no"'
