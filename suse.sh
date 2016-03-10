@@ -134,9 +134,9 @@ generate_new_ramdisk() {
     fi
 #  elif [ "$SUSEVERSION" -ge 132 ]; then
   else 
-    local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT"
+    local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
     {
-      echo '### $COMPANY - installimage'
+      echo "### $COMPANY - installimage"
       echo 'add_dracutmodules+="lvm mdraid"'
       echo 'add_drivers+="raid0 raid1 raid10 raid456"'
       #echo 'early_microcode="no"'
