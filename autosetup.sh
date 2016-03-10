@@ -76,7 +76,8 @@ echo -e "\033[01;33m  Press X to continue immediately ...\033[00m"
 echo -e "\033[01;31m  Installation will DELETE ALL DATA ON DISK(s)!"
 echo -e "\033[01;33m  Press CTRL-C to abort now!\033[00m"
 echo -n "  => "
-for i in $(seq 1 20) ; do
+local -i i=0
+for ((i=1; i<=20; i++)); do
   echo -n "."
   read -r -t1 -n1 anykey
   if [ "$anykey" = "x" ] || [ "$anykey" = "X" ]; then
