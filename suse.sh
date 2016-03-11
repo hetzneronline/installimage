@@ -108,7 +108,7 @@ generate_new_ramdisk() {
   # blacklist i915
   local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
   {
-    echo '### $COMPANY - installimage'
+    echo "### $COMPANY - installimage"
     echo '### i915 driver blacklisted due to various bugs'
     echo '### especially in combination with nomodeset'
     echo 'blacklist i915'

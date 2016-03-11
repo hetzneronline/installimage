@@ -37,7 +37,7 @@ setup_network_config() {
       echo "NETWORKING=yes"
     } > "$NETWORKFILE"
 
-    rm -f $FOLD/hdd/etc/sysconfig/network-scripts/ifcfg-en*
+    rm -f "$FOLD/hdd/etc/sysconfig/network-scripts/ifcfg-en*"
 
     CONFIGFILE="$FOLD/hdd/etc/sysconfig/network-scripts/ifcfg-$1"
     ROUTEFILE="$FOLD/hdd/etc/sysconfig/network-scripts/route-$1"
@@ -97,12 +97,11 @@ setup_network_config() {
         echo "IPV6_DEFAULTGW=${10}"
         echo "IPV6_DEFAULTDEV=$1"
       } >> "$CONFIGFILE"
-      
-    fi 
+    fi
 
     # set duplex/speed
     if ! isNegotiated && ! isVServer; then
-      echo 'ETHTOOL_OPTS="speed 100 duplex full autoneg off"' >> $CONFIGFILE
+      echo 'ETHTOOL_OPTS="speed 100 duplex full autoneg off"' >> "$CONFIGFILE"
     fi
 
     # remove all hardware info from image (CentOS 5)
@@ -121,7 +120,7 @@ generate_config_mdadm() {
     {
       echo "DEVICE partitions"
       echo "MAILADDR root"
-    } > $FOLD/hdd$mdadmconf
+    } > "$FOLD/hdd$mdadmconf"
     execute_chroot_command "mdadm --examine --scan >> $mdadmconf"; declare -i EXITCODE=$?
     return $EXITCODE
   fi
@@ -149,7 +148,7 @@ generate_new_ramdisk() {
       HDDDEV=""
       for hddmodule in $MODULES; do
         if [ "$hddmodule" != "powernow-k8" ] && [ "$hddmodule" != "via82cxxx" ] && [ "$hddmodule" != "atiixp" ]; then
-          echo "alias scsi_hostadapter$HDDDEV $hddmodule" >> $modulesfile
+          echo "alias scsi_hostadapter$HDDDEV $hddmodule" >> "$modulesfile"
           HDDDEV="$((HDDDEV + 1))"
         fi
       done
@@ -170,7 +169,7 @@ generate_new_ramdisk() {
     if [ "$IMG_VERSION" -ge 70 ] ; then
       local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
       {
-        echo '### $COMPANY - installimage'
+        echo "### $COMPANY - installimage"
         echo 'add_dracutmodules+="lvm mdraid"'
         echo 'add_drivers+="raid0 raid1 raid10 raid456"'
         #echo 'early_microcode="no"'
@@ -179,7 +178,7 @@ generate_new_ramdisk() {
         echo 'lvmconf="yes"'
         echo 'mdadmconf="yes"'
         echo 'persistent_policy="by-uuid"'
-      } > $dracutfile
+      } > "$dracutfile"
     fi
 
     if [ "$IMG_VERSION" -ge 70 ] ; then 
@@ -227,7 +226,7 @@ setup_cpufreq() {
         } >> "$cpufreqconf"
       else
         debug "# Setting: cpufreq modprobe to amd"
-        echo "modprobe powernow-k8 >> /dev/null 2>&1" >> $cpufreqconf
+        echo "modprobe powernow-k8 >> /dev/null 2>&1" >> "$cpufreqconf"
       fi
       echo "cpupower frequency-set --governor $1 >> /dev/null 2>&1" >> "$cpufreqconf"
       chmod a+x "$cpufreqconf" 2>> "$DEBUGFILE"
@@ -255,11 +254,11 @@ generate_config_grub() {
   fi
   [ -f "$DMAPFILE" ] && rm "$DMAPFILE"
 
-  local i=0
-  for i in $(seq 1 $COUNT_DRIVES) ; do
-    local j="$[$i-1]"
-    local disk="$(eval echo "\$DRIVE"$i)"
-    echo "(hd$j) $disk" >> $DMAPFILE
+  local -i i=0
+  for ((i=1; i<=COUNT_DRIVES; i++)); do
+    local j; j="$((i - 1))"
+    local disk; disk="$(eval echo "\$DRIVE"$i)"
+    echo "(hd$j) $disk" >> "$DMAPFILE"
   done
   cat "$DMAPFILE" >> "$DEBUGFILE"
 
@@ -277,7 +276,7 @@ generate_config_grub() {
     PARTNUM=$(echo "$SYSTEMBOOTDEVICE" | rev | cut -c1)
 
     if [ "$SWRAID" = "0" ]; then
-      PARTNUM="$[$PARTNUM - 1]"
+      PARTNUM="$((PARTNUM - 1))"
     fi
 
     rm -rf "$FOLD/hdd/boot/grub/*" >> /dev/null 2>&1
@@ -300,9 +299,9 @@ generate_config_grub() {
     lspci -n | grep -q '8086:10d3' && aspm='pcie_aspm=off' || aspm=''
 
     if [ "$IMG_VERSION" -ge 60 ]; then 
-      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE rd_NO_LUKS rd_NO_DM nomodeset $elevator $aspm" >> $BFILE
+      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE rd_NO_LUKS rd_NO_DM nomodeset $elevator $aspm" >> "$BFILE"
     else
-      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE nomodeset" >> $BFILE
+      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE nomodeset" >> "$BFILE"
     fi
     INITRD=''
     if [ -f "$FOLD/hdd/boot/initrd-$1.img" ]; then
@@ -311,11 +310,11 @@ generate_config_grub() {
     if [ -f "$FOLD/hdd/boot/initramfs-$1.img" ]; then
      INITRD="initramfs"
     fi
-    if [ -n $INITRD ]; then
-      echo "initrd /boot/$INITRD-$1.img" >> $BFILE
+    if [ -n "$INITRD" ]; then
+      echo "initrd /boot/$INITRD-$1.img" >> "$BFILE"
     fi
     echo "" >> "$BFILE"
-  
+
     uuid_bugfix
   # TODO: let grubby add its own stuff (SYSFONT, LANG, KEYTABLE)
 #  if [ $IMG_VERSION -lt 60 ] ; then 
@@ -398,8 +397,8 @@ randomize_cpanel_mysql_passwords() {
   local cphulkdconf="$FOLD/hdd/var/cpanel/hulkd/password"
   local cphulkdpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c16)
   local rootpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c8)
-  local mysqlcommand="UPDATE mysql.user SET password=PASSWORD(\""$cphulkdpass"\") WHERE user='cphulkd'; \
-  UPDATE mysql.user SET password=PASSWORD(\""$rootpass"\") WHERE user='root';\nFLUSH PRIVILEGES;"
+  local mysqlcommand="UPDATE mysql.user SET password=PASSWORD('$cphulkdpass') WHERE user='cphulkd'; \
+  UPDATE mysql.user SET password=PASSWORD('$rootpass') WHERE user='root';\nFLUSH PRIVILEGES;"
   echo "$mysqlcommand" > "$FOLD/hdd/tmp/pwchange.sql"
   debug "changing mysql passwords"
   execute_chroot_command "service mysql start --skip-grant-tables --skip-networking >/dev/null 2>&1"; EXITCODE=$?
@@ -415,7 +414,7 @@ randomize_cpanel_mysql_passwords() {
     echo "[client]"
     echo "user=root"
     echo "pass=$rootpass"
-  } > $FOLD/hdd/root/.my.cnf
+  } > "$FOLD/hdd/root/.my.cnf"
 
   return "$EXITCODE"
 }
