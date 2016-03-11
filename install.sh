@@ -121,8 +121,29 @@ test "$IMAGE_PATH_TYPE" = "http" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 inc_step
 status_busy "Deleting partitions"
 
-unmount_all
-stop_lvm_raid
+# Unmount all partitions and print an error message if it fails
+output=$(unmount_all) ; EXITCODE=$?
+if [ $EXITCODE -ne 0 ] ; then
+  echo ""
+  echo -e "${RED}ERROR unmounting device(s):$NOCOL"
+  echo "$output"
+  echo ""
+  echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
+  echo "Please unmount used devices manually or reboot the rescuesystem and retry."
+  echo ""
+  exit 1
+fi
+
+stop_lvm_raid ; EXITCODE=$?
+if [ $EXITCODE -ne 0 ] ; then
+  echo ""
+  echo -e "${RED}ERROR stopping LVM and/or RAID device(s):$NOCOL"
+  echo ""
+  echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
+  echo "Please stop used lvm/raid manually or reboot the rescuesystem and retry."
+  echo ""
+  exit 1
+fi
 
 for part_inc in $(seq 1 $COUNT_DRIVES) ; do
   if [ "$(eval echo \$FORMAT_DRIVE${part_inc})" = "1" -o "$SWRAID" = "1" -o $part_inc -eq 1 ] ; then

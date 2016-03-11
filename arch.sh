@@ -137,7 +137,7 @@ generate_config_grub() {
   if [ "$SWRAID" = "1" ] ;  then
     local i=2
     while [ "$(eval echo "\$DRIVE"$i)" ]; do
-      local targetdrive="$(eval echo "\$DRIVE"$i)"
+      local targetdrive; targetdrive="$(eval echo "\$DRIVE$i")"
       execute_chroot_command "grub-install --no-floppy --recheck $targetdrive 2>&1"
       declare -i EXITCODE=$?
       let i=i+1

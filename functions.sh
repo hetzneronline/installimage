@@ -103,19 +103,18 @@ generate_menu() {
 #    RAWLIST=$(ls -1 "$IMAGESPATH" | grep -i -e "^$1\|^old_$1\|^suse\|^old_suse")
   if [ "$1" = "Virtualization" ]; then
     RAWLIST=""
-    RAWLIST=$(find "$IMAGESPATH/*" -maxdepth 0 -name "CoreOS*" -printf '%f\n')
+    RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Wheezy"
   elif [ "$1" = "old_images" ]; then
-    RAWLIST=$(find "$OLDIMAGESPATH/*" -maxdepth 0 -printf '%f\n')
+    # skip CPANEL images and signatures files from list
+    RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n'|sort)
     FINALIMAGEPATH="$OLDIMAGESPATH"
   else
-    RAWLIST=$(ls -1 "$IMAGESPATH" | grep -i -e "^$1\|^old_$1")
+    # skip CPANEL images and signatures files from list
+    RAWLIST=$(find "$IMAGESPATH"/* -maxdepth 1 -type f -not -name "*cpanel*" -a -regextype sed -regex ".*/\(old_\)\?$1.*" -a -not -regex '.*\.sig$' -printf '%f\n'|sort)
   fi
-  # Remove CPANEL image and signature files from list
-  RAWLIST="$(echo "$RAWLIST" |tr ' ' '\n' |egrep -i -v "cpanel|.sig$")"
   # check if 32-bit rescue is activated and disable 64-bit images then
-  ARCH="$(uname -m)"
-  if [ "$ARCH" != "x86_64" ]; then
+  if [ "$(uname -m)" != "x86_64" ]; then
     RAWLIST="$(echo "$RAWLIST" |tr ' ' '\n' |grep -v "\-64\-[a-zA-Z]")"
   fi
   # generate formatted list for usage with "dialog"
@@ -259,9 +258,9 @@ create_config() {
       local raid_levels="0 1 5 6 10"
       # set default raidlevel
       local default_level="$DEFAULTTWODRIVESWRAIDLEVEL"
-      if [ $COUNT_DRIVES -eq 3 ] ; then
+      if [ "$COUNT_DRIVES" -eq 3 ] ; then
         default_level="$DEFAULTTHREEDRIVESWRAIDLEVEL"
-      elif [ $COUNT_DRIVES -gt 3 ] ; then
+      elif [ "$COUNT_DRIVES" -gt 3 ] ; then
         default_level="$DEFAULTFOURDRIVESWRAIDLEVEL"
       fi
 
@@ -275,13 +274,13 @@ create_config() {
         fi
 
         # no raidlevel 5 if less then 3 hdds
-        [ "$level" -eq 5 ] && [ $COUNT_DRIVES -lt 3 ] && continue
+        [ "$level" -eq 5 ] && [ "$COUNT_DRIVES" -lt 3 ] && continue
 
         # no raidlevel 6 if less then 4 hdds
-        [ "$level" -eq 6 ] && [ $COUNT_DRIVES -lt 4 ] && continue
+        [ "$level" -eq 6 ] && [ "$COUNT_DRIVES" -lt 4 ] && continue
 
         # no raidlevel 10 if less then 2 hdds
-        [ "$level" -eq 10 ] && [ $COUNT_DRIVES -lt 2 ] && continue
+        [ "$level" -eq 10 ] && [ "$COUNT_DRIVES" -lt 2 ] && continue
 
         # create list of all possible raidlevels
         if [ -z "$avail_level" ] ; then
@@ -577,9 +576,9 @@ create_config() {
 getdrives() {
   local DRIVES;
 #  local DRIVES="$(sfdisk -s 2>/dev/null | sort -u | grep -e "/dev/[hsv]d" | cut -d: -f1)"
-  DRIVES="$(ls -1 /sys/block | egrep 'nvme[0-9]n[0-9]$|[hsv]d[a-z]$')"
-# this should be better;
-#  DRIVES="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \)   -printf '%f\n')"
+#  DRIVES="$(ls -1 /sys/block | egrep 'nvme[0-9]n[0-9]$|[hsv]d[a-z]$')"
+# this is better:
+  DRIVES="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n')"
   local i=1
 
   #cast drives into an array
@@ -1468,7 +1467,7 @@ stop_lvm_raid() {
   test -x /etc/init.d/lvm && /etc/init.d/lvm stop &>/dev/null
   test -x /etc/init.d/lvm2 && /etc/init.d/lvm2 stop &>/dev/null
 
-  dmsetup remove_all
+  dmsetup remove_all > /dev/null 2>&1
   
   test -x "$(which mdadm)" && for i in $(cat /proc/mdstat | grep md | cut -d ' ' -f1); do
     [ -e /dev/$i ] && mdadm -S /dev/$i >> /dev/null 2>&1
@@ -1485,13 +1484,13 @@ delete_partitions() {
     mdadm --zero-superblock $raidmember 2> /dev/null
   done
   # clean RAID information in superblock of blockdevice
-  mdadm --zero-superblock $1 2> /dev/null
+  mdadm --zero-superblock "$1" 2> /dev/null
 
   #delete GPT and MBR
-  sgdisk -Z $1 1>/dev/null 2>/dev/null
+  sgdisk -Z "$1" 1>/dev/null 2>/dev/null
 
   # clean mbr boot code
-  dd if=/dev/zero of=$1 bs=512 count=1 >/dev/null 2>&1 ; EXITCODE=$?
+  dd if=/dev/zero of="$1" bs=512 count=1 >/dev/null 2>&1 ; EXITCODE=$?
 
   # re-read partition table
   partprobe 2>/dev/null
@@ -1901,8 +1900,8 @@ make_swraid() {
           components="$components $TARGETDISK$p$PARTNUM"
         done
 
-        local array_metadata=$metadata
-        local array_raidlevel=$SWRAIDLEVEL
+        local array_metadata="$metadata"
+        local array_raidlevel="$SWRAIDLEVEL"
         local can_assume_clean=''
 
         # lilo and GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
@@ -1919,8 +1918,8 @@ make_swraid() {
             can_assume_clean='--assume-clean'
           fi
         fi
-        echo "Array RAID Level is: \"$array_raidlevel\" - $can_assume_clean" | debugoutput
-        echo "Array metadata is: \"$array_metadata\"" | debugoutput
+        debug "Array RAID Level is: '$array_raidlevel' - $can_assume_clean"
+        debug "Array metadata is: '$array_metadata'"
 
         yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $can_assume_clean $components 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
 
@@ -2700,10 +2699,8 @@ copy_mtab() {
 
 generate_new_sshkeys() {
   if [ "$1" ]; then
-#    rm -rf $FOLD/hdd/etc/ssh/ssh_host_* 2>&1 | debugoutput
-
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_key" ]; then
-      rm -f "$FOLD/hdd/etc/ssh/ssh_host_k*" 2>&1 | debugoutput
+      rm -f "$FOLD"/hdd/etc/ssh/ssh_host_k* 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t rsa1 -b 1024 -f /etc/ssh/ssh_host_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
        return $EXITCODE
@@ -2713,7 +2710,7 @@ generate_new_sshkeys() {
     fi
 
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_dsa_key" ]; then
-      rm -f "$FOLD/hdd/etc/ssh/ssh_host_dsa_*" 2>&1 | debugoutput
+      rm -f "$FOLD"/hdd/etc/ssh/ssh_host_dsa_* 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
@@ -2723,7 +2720,7 @@ generate_new_sshkeys() {
     fi
 
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_rsa_key" ]; then
-      rm -f "$FOLD/hdd/etc/ssh/ssh_host_rsa_*" 2>&1 | debugoutput
+      rm -f "$FOLD"/hdd/etc/ssh/ssh_host_rsa_* 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
@@ -2732,14 +2729,8 @@ generate_new_sshkeys() {
       debug "skipping rsa key gen"
     fi
 
-    # create ecdsa keys for Ubuntu 11.04, Opensuse 12.1, Debian 7.0, CentOS 7.0 and any version above
-#    if [ "$IAM" = "arch" ] || 
-#       [ "$IAM" = "ubuntu"  -a  "$IMG_VERSION" -ge 1104 ] || 
-#       [ "$IAM" = "suse"  -a  "$IMG_VERSION" -ge 121 ] || 
-#       [ "$IAM" = "debian" -a  "$IMG_VERSION" -ge 70 ] || 
-#       [ "$IAM" = "centos" -a "$IMG_VERSION" -ge 70 ]; then
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_ecdsa_key" ]; then
-      rm -f "$FOLD/hdd/etc/ssh/ssh_host_ecdsa_*" 2>&1 | debugoutput
+      rm -f "$FOLD"/hdd/etc/ssh/ssh_host_ecdsa_* 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t ecdsa -f /etc/ssh/ssh_host_ecdsa_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
@@ -2748,12 +2739,8 @@ generate_new_sshkeys() {
       debug "skipping ecdsa key gen"
     fi
 
-#    if [ "$IAM" = "arch" ] || 
-#       [ "$IAM" = "debian"  -a  "$IMG_VERSION" -ge 80 ] || 
-#       [ "$IAM" = "ubuntu"  -a  "$IMG_VERSION" -ge 1404 ] || 
-#       [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 132 ]; then
     if [ -f "$FOLD/hdd/etc/ssh/ssh_host_ed25519_key" ]; then
-      rm -f "$FOLD/hdd/etc/ssh/ssh_host_ed25519_*" 2>&1 | debugoutput
+      rm -f "$FOLD"/hdd/etc/ssh/ssh_host_ed25519_* 2>&1 | debugoutput
       execute_chroot_command "ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N '' >/dev/null"; EXITCODE=$?
       if [ "$EXITCODE" -ne "0" ]; then
         return $EXITCODE
