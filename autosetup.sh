@@ -3,13 +3,8 @@
 #
 # skip menu - use "autosetup" file
 #
-# originally written by Florian Wicke and David Mayr
 # (c) 2008-2016, Hetzner Online GmbH
 #
-# Contributors
-# * Markus Schade
-# * Thore Bödecker
-# * Tim Meusel
 
 
 # read global variables and functions
@@ -76,7 +71,6 @@ echo -e "\033[01;33m  Press X to continue immediately ...\033[00m"
 echo -e "\033[01;31m  Installation will DELETE ALL DATA ON DISK(s)!"
 echo -e "\033[01;33m  Press CTRL-C to abort now!\033[00m"
 echo -n "  => "
-local -i i=0
 for ((i=1; i<=20; i++)); do
   echo -n "."
   read -r -t1 -n1 anykey

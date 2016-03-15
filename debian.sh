@@ -3,14 +3,8 @@
 #
 # Debian specific functions
 #
-# originally written by Florian Wicke and David Mayr
 # (c) 2008-2016, Hetzner Online GmbH
 #
-# Contributors
-# * Markus Schade
-# * Matthias Übler
-# * Thore Bödecker
-# * Tim Meusel
 
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
@@ -112,8 +106,8 @@ generate_config_mdadm() {
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
   if [ -n "$1" ]; then
-    local outfile=$(find "$FOLD"/hdd/boot -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
-    local kvers=$(echo "$outfile" |cut -d "-" -f2-)
+    local outfile; outfile=$(find "$FOLD"/hdd/boot -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
+    local kvers; kvers=$(echo "$outfile" |cut -d "-" -f2-)
     debug "# Kernel Version found: $kvers"
 
     if [ "$IMG_VERSION" -ge 60 ]; then
@@ -244,7 +238,7 @@ run_os_specific_functions() {
   #
   debug "# Testing if mysql is installed and if this is a LAMP image and setting new debian-sys-maint password"
   if [ -f "$FOLD/hdd/etc/mysql/debian.cnf" ] ; then
-    if [[ "$IMAGE_FILE" =~ lamp ]]; then
+    if [[ "${IMAGE_FILE,,}" =~ lamp ]]; then
       randomize_maint_mysql_pass || return 1
     fi
   fi
@@ -261,9 +255,7 @@ randomize_mdadm_checkarray_cronjob_time() {
     day=$(((RANDOM % 28) + 1))
     debug "# Randomizing cronjob run time for mdadm checkarray: day $day @ $hour:$minute"
 
-    sed -i \
-      -e "s/^57 0 \* \* 0 /$minute $hour $day \* \* /" \
-      -e 's/ && \[ \$(date +\\%d) -le 7 \]//' \
+    sed -i -e "s/^[* 0-9]*root/$minute $hour $day * * root/" -e "s/ &&.*]//" \
       "$mdcron"
   else
     debug "# No /etc/cron.d/mdadm found to randomize cronjob run time"
@@ -274,29 +266,29 @@ randomize_mdadm_checkarray_cronjob_time() {
 # randomize mysql password for debian-sys-maint in LAMP image
 #
 randomize_maint_mysql_pass() {
-  local SQLCONFIG="$FOLD/hdd/etc/mysql/debian.cnf"
-  local MYCNF="$FOLD/hdd/root/.my.cnf"
-  local PMA_DBC_CNF="$FOLD/hdd/etc/dbconfig-common/phpmyadmin.conf"
-  local PMA_SEC_CNF="$FOLD/hdd/var/lib/phpmyadmin/blowfish_secret.inc.php"
+  local sqlconfig; sqlconfig="$FOLD/hdd/etc/mysql/debian.cnf"
+  local mycnf; mycnf="$FOLD/hdd/root/.my.cnf"
+  local pma_dbc_cnf; pma_dbc_cnf="$FOLD/hdd/etc/dbconfig-common/phpmyadmin.conf"
+  local pma_sec_cnf; pma_sec_cnf="$FOLD/hdd/var/lib/phpmyadmin/blowfish_secret.inc.php"
   # generate PW for user debian-sys-maint, root and phpmyadmin
-  #NEWPASS=$(cat /dev/urandom | strings | head -c 512 | md5sum | cut -b -16)
-  #ROOTPASS=$(cat /dev/urandom | tr -dc _A-Z-a-z-0-9 | head -c8)
-  local DEBIANPASS=$(pwgen -s 16 1)
-  local ROOTPASS=$(pwgen -s 16 1)
-  local PMAPASS=$(pwgen -s 16 1)
-  local PMASEC=$(pwgen -s 24 1)
-  if [ -f "$PMA_SEC_CNF" ]; then
-    echo -e "<?php\n\$cfg['blowfish_secret'] = '$PMASEC';" > "$PMA_SEC_CNF"
+  local debianpass; debianpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c16)
+  local rootpass; rootpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c16)
+  local pma_pass; pma_pass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c16)
+  local pma_sec; pma_sec=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c24)
+  if [ -f "$pma_sec_cnf" ]; then
+    echo -e "<?php\n\$cfg['blowfish_secret'] = '$pma_sec';" > "$pma_sec_cnf"
   fi
-  MYSQLCOMMAND="USE mysql;\nUPDATE user SET password=PASSWORD('$DEBIANPASS') WHERE user='debian-sys-maint'; \
-  UPDATE user SET password=PASSWORD('$ROOTPASS') WHERE user='root'; \
-  UPDATE user SET password=PASSWORD('$PMAPASS') WHERE user='phpmyadmin';\nFLUSH PRIVILEGES;"
+  MYSQLCOMMAND="USE mysql; \
+  UPDATE user SET password=PASSWORD('$debianpass') WHERE user='debian-sys-maint'; \
+  UPDATE user SET password=PASSWORD('$rootpass') WHERE user='root'; \
+  UPDATE user SET password=PASSWORD('$pma_pass') WHERE user='phpmyadmin'; \
+  FLUSH PRIVILEGES;"
   echo -e "$MYSQLCOMMAND" > "$FOLD/hdd/etc/mysql/pwchange.sql"
   execute_chroot_command "/etc/init.d/mysql start >>/dev/null 2>&1"
   execute_chroot_command "mysql --defaults-file=/etc/mysql/debian.cnf < /etc/mysql/pwchange.sql >>/dev/null 2>&1"; EXITCODE=$?
   execute_chroot_command "/etc/init.d/mysql stop >>/dev/null 2>&1"
-  sed -i s/password.*/"password = $DEBIANPASS"/g "$SQLCONFIG" 
-  sed -i s/dbc_dbpass=.*/"dbc_dbpass='$PMAPASS'"/g "$PMA_DBC_CNF" 
+  sed -i s/password.*/"password = $debianpass"/g "$sqlconfig" 
+  sed -i s/dbc_dbpass=.*/"dbc_dbpass='$pma_pass'"/g "$pma_dbc_cnf" 
   execute_chroot_command "DEBIAN_FRONTEND=noninteractive dpkg-reconfigure phpmyadmin"
   rm "$FOLD/hdd/etc/mysql/pwchange.sql"
 
@@ -306,12 +298,12 @@ randomize_maint_mysql_pass() {
   {
     echo "[client]"
     echo "user=root"
-    echo "password=$ROOTPASS"
-  } > "$MYCNF"
+    echo "password=$rootpass"
+  } > "$mycnf"
 
   # write password file and erase script
   cp "$SCRIPTPATH/password.txt" "$FOLD/hdd/"
-  sed -i -e "s#<password>#$ROOTPASS#" "$FOLD/hdd/password.txt"
+  sed -i -e "s#<password>#$rootpass#" "$FOLD/hdd/password.txt"
   chmod 600 "$FOLD/hdd/password.txt"
   echo -e "\nNote: Your MySQL password is in /password.txt (delete this with \"erase_password_note\")\n" >> "$FOLD/hdd/etc/motd.tail"
   cp "$SCRIPTPATH/erase_password_note" "$FOLD/hdd/usr/local/bin/"
@@ -322,17 +314,19 @@ randomize_maint_mysql_pass() {
 
 
 debian_grub_fix() {
-  MAPPER="$FOLD/hdd/dev/mapper"
-  TEMPFILE="$FOLD/hdd/tmp"
+  local mapper="$FOLD/hdd/dev/mapper"
+  local tempfile="$FOLD/hdd/tmp/mapper.tmp"
 
-  ls -l "$MAPPER" > "$TEMPFILE/tmp.tmp"
-  cat $TEMPFILE/tmp.tmp | grep -v "total" | grep -v "crw" | while read line; do
-    VOLGROUP=$(echo "$line" | cut -d " " -f9)
-    DMDEVICE=$(echo "$line" | cut -d "/" -f2)
+  ls -l "$mapper" > "$tempfile"
+  grep -v "total" "$tempfile" | grep -v "crw" | while read -r line; do
+    local dmdevice volgroup
+    volgroup=$(echo "$line" | cut -d " " -f9)
+    dmdevice=$(echo "$line" | cut -d "/" -f2)
 
-    rm "$MAPPER/$VOLGROUP"
-    cp -R "$FOLD/hdd/dev/$DMDEVICE" "$MAPPER/$VOLGROUP"
+    rm "$mapper/$volgroup"
+    cp -R "$FOLD/hdd/dev/$dmdevice" "$mapper/$volgroup"
   done
+  rm "$tempfile"
 }
 
 # vim: ai:ts=2:sw=2:et

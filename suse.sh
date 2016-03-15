@@ -3,15 +3,8 @@
 #
 # OpenSUSE specific functions 
 #
-# originally written by Florian Wicke and David Mayr
 # (c) 2007-2016, Hetzner Online GmbH
 #
-# Contributors
-# * Markus Schade
-# * Jonas Keidel
-# * Matthias Übler
-# * Thore Bödecker
-# * Tim Meusel
 
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"

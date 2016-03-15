@@ -3,15 +3,8 @@
 #
 # Ubuntu specific functions
 #
-# originally written by Florian Wicke and David Mayr
 # (c) 2007-2016, Hetzner Online GmbH
 #
-# Contributors
-# * Markus Schade
-# * Jonas Keidel
-# * Matthias Übler
-# * Thore Bödecker
-# * Tim Meusel
 
 # setup_network_config "$ETH" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK"
 setup_network_config() {
@@ -29,7 +22,7 @@ setup_network_config() {
       printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
     } >> "$UDEVFILE"
 
-    if [ $IMG_VERSION -lt 1510 ]; then
+    if [ "$IMG_VERSION" -lt 1510 ]; then
       CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
 
       {
@@ -40,7 +33,7 @@ setup_network_config() {
         echo ""
       } > "$CONFIGFILE"
       if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-        echo "# device: $1" >> $CONFIGFILE
+        echo "# device: $1" >> "$CONFIGFILE"
         if is_private_ip "$3" && isVServer; then
           {
             echo "auto  $1"
@@ -94,7 +87,7 @@ setup_network_config() {
         echo ""
       } > "$CONFIGFILE"
 
-      echo "[Network]" >> $CONFIGFILE
+      echo "[Network]" >> "$CONFIGFILE"
       if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
         debug "setting up ipv6 networking $8/$9 via ${10}"
         { 
@@ -157,8 +150,8 @@ generate_config_mdadm() {
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
   if [ "$1" ]; then
-    local outfile=$(find "$FOLD"/hdd/boot -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
-    local kvers=$(echo "$outfile" |cut -d "-" -f2-)
+    local outfile; outfile=$(find "$FOLD/hdd/boot" -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
+    local kvers; kvers=$(echo "$outfile" |cut -d "-" -f2-)
     debug "# Kernel Version found: $kvers"
 
     if [ "$IMG_VERSION" -ge 1204 ]; then
@@ -182,14 +175,14 @@ generate_new_ramdisk() {
  
     # just make sure that we do not accidentally try to install a bootloader
     # when we haven't configured grub yet
-    sed -i "s/do_bootloader = yes/do_bootloader = no/" $FOLD/hdd/etc/kernel-img.conf
+    sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
 
     # well, we might just as well update all initramfs and stop findling around
     # to find out which kernel version is the latest
     execute_chroot_command "update-initramfs -u -k $kvers"; EXITCODE=$?
 
     # re-enable updates to grub
-    sed -i "s/do_bootloader = no/do_bootloader = yes/" $FOLD/hdd/etc/kernel-img.conf
+    sed -i "s/do_bootloader = no/do_bootloader = yes/" "$FOLD/hdd/etc/kernel-img.conf"
 
     return $EXITCODE
   fi
@@ -204,8 +197,8 @@ setup_cpufreq() {
       echo "# cpu frequency scaling"
     } > "$cpufreqconf"
     if isVServer; then
-      echo 'ENABLE="false"' > $loadcpufreqconf
-      echo 'ENABLE="false"' >> $cpufreqconf
+      echo 'ENABLE="false"' > "$loadcpufreqconf"
+      echo 'ENABLE="false"' >> "$cpufreqconf"
     else
       {
         echo 'ENABLE="true"'
@@ -279,10 +272,9 @@ generate_config_grub() {
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
   # only install grub2 in mbr of all other drives if we use swraid
-  local i=0
-  for i in $(seq 1 $COUNT_DRIVES) ; do
-    if [ $SWRAID -eq 1 -o $i -eq 1 ] ;  then
-      local disk="$(eval echo "\$DRIVE"$i)"
+  for ((i=1; i<=COUNT_DRIVES; i++)); do
+    if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
+      local disk; disk="$(eval echo "\$DRIVE$i")"
       execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
     fi
   done
@@ -291,7 +283,7 @@ generate_config_grub() {
 	
   PARTNUM=$(echo "$SYSTEMBOOTDEVICE" | rev | cut -c1)
   if [ "$SWRAID" = "0" ]; then
-    PARTNUM="$[$PARTNUM - 1]"
+    PARTNUM="$((PARTNUM - 1))"
   fi
 
   return "$EXITCODE"
@@ -307,16 +299,15 @@ run_os_specific_functions() {
 }
 
 randomize_mdadm_checkarray_cronjob_time() {
-  if [ -e "$FOLD/hdd/etc/cron.d/mdadm" -a "$(grep checkarray "$FOLD/hdd/etc/cron.d/mdadm")" ]; then
-    hour=$((($RANDOM % 4) + 1))
-    minute=$((($RANDOM % 59) + 1))
-    day=$((($RANDOM % 28) + 1))
+  local mdcron; mdcron="$FOLD/hdd/etc/cron.d/mdadm"
+  if [ -f "$mdcron" ] && grep -q checkarray "$mdcron"; then
+    hour=$(((RANDOM % 4) + 1))
+    minute=$(((RANDOM % 59) + 1))
+    day=$(((RANDOM % 28) + 1))
     debug "# Randomizing cronjob run time for mdadm checkarray: day $day @ $hour:$minute"
 
-    sed -i \
-      -e "s/^57 0 \* \* 0 /$minute $hour $day \* \* /" \
-      -e 's/ && \[ \$(date +\\%d) -le 7 \]//' \
-      "$FOLD/hdd/etc/cron.d/mdadm"
+    sed -i -e "s/^[* 0-9]*root/$minute $hour $day * * root/" -e "s/ &&.*]//" \
+      "$mdcron"
   else
     debug "# No /etc/cron.d/mdadm found to randomize cronjob run time"
   fi
@@ -326,15 +317,16 @@ ubuntu_grub_fix() {
   local mapper="$FOLD/hdd/dev/mapper"
   local tempfile="$FOLD/hdd/tmp/mapper.tmp"
 
-  ls -l $mapper > $tempfile
-  cat $tempfile | grep -v "total" | grep -v "crw" | while read line; do
-    local volgroup=$(echo $line | cut -d " " -f9)
-    local dmdevice=$(echo $line | cut -d "/" -f2)
+  ls -l "$mapper" > "$tempfile"
+  grep -v "total" "$tempfile" | grep -v "crw" | while read -r line; do
+    local dmdevice volgroup
+    volgroup=$(echo "$line" | cut -d " " -f9)
+    dmdevice=$(echo "$line" | cut -d "/" -f2)
 
-    rm $mapper/$volgroup
-    cp -R $FOLD/hdd/dev/$dmdevice $mapper/$volgroup
+    rm "$mapper/$volgroup"
+    cp -R "$FOLD/hdd/dev/$dmdevice" "$mapper/$volgroup"
   done
-  rm $tempfile
+  rm "$tempfile"
 }
 
 # vim: ai:ts=2:sw=2:et

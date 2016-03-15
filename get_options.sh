@@ -3,8 +3,7 @@
 # read config
 #. /tmp/install.vars
 #
-# originally written by David Mayr
-# (c) 2009-2015, Hetzner Online GmbH
+# (c) 2009-2016, Hetzner Online GmbH
 #
 
 

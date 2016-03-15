@@ -3,14 +3,8 @@
 #
 # functions
 #
-# originally written by Florian Wicke and David Mayr
 # (c) 2007-2016, Hetzner Online GmbH
 #
-# Contributors
-# * Markus Schade
-# * Jonas Keidel
-# * Thore Bödecker
-# * Tim Meusel
 
 
 # nil settings parsed out of the config
@@ -105,6 +99,7 @@ generate_menu() {
     RAWLIST=""
     RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Wheezy"
+    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
   elif [ "$1" = "old_images" ]; then
     # skip CPANEL images and signatures files from list
     RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n'|sort)
@@ -144,11 +139,12 @@ generate_menu() {
     Proxmox-Virtualization-Environment*)
       case "$IMAGENAME" in
         Proxmox-Virtualization-Environment-on-Debian-Wheezy) export PROXMOX_VERSION="3" ;;
+        Proxmox-Virtualization-Environment-on-Debian-Jessie) export PROXMOX_VERSION="4" ;;
       esac
       cp "$SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION" /post-install
       chmod 0755 /post-install
       PROXMOX=true
-      IMAGENAME=$(eval echo \\$PROXMOX${PROXMOX_VERSION}_BASE_IMAGE)
+      IMAGENAME=$(eval echo \$PROXMOX${PROXMOX_VERSION}_BASE_IMAGE)
       DEFAULTPARTS=""
       DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot  ext3  512M"
       DEFAULTPARTS="$DEFAULTPARTS\nPART  lvm    vg0    all\n"
@@ -355,7 +351,7 @@ create_config() {
     # or to proxmox if chosen
     if [ "$PROXMOX" = "true" ]; then
       echo -e "## This must be a FQDN otherwise installation will fail\n## \n" >> "$CNF"
-      DEFAULT_HOSTNAME="Proxmox-VE.localdomain"
+      DEFAULT_HOSTNAME="Proxmox-VE.yourdomain.localdomain"
     fi
     # or to the hostname passed through options
     [ "$OPT_HOSTNAME" ] && DEFAULT_HOSTNAME="$OPT_HOSTNAME"
@@ -365,16 +361,16 @@ create_config() {
 
     ## Calculate how much hardisk space at raid level 0,1,5,6,10
     RAID0=0
-    local small_hdd="$(smallest_hd)"
-    local small_hdd_size="$[$(blockdev --getsize64 $small_hdd)/1024/1024/1024]"
-    RAID0=$[$small_hdd_size*$COUNT_DRIVES]
+    local small_hdd; small_hdd="$(smallest_hd)"
+    local small_hdd_size; small_hdd_size="$(($(blockdev --getsize64 "$small_hdd")/1024/1024/1024))"
+    RAID0=$((small_hdd_size*COUNT_DRIVES))
     RAID1=$small_hdd_size
     if [ $COUNT_DRIVES -ge 3 ] ; then
-      RAID5=$[$RAID0-$small_hdd_size]
+      RAID5=$((RAID0-small_hdd_size))
     fi
     if [ $COUNT_DRIVES -ge 4 ] ; then
-      RAID6=$[$RAID0-2*$small_hdd_size]
-      RAID10=$[$RAID0/2]
+      RAID6=$((RAID0-2*small_hdd_size))
+      RAID10=$((RAID0/2))
     fi
 
     # partitions
@@ -577,7 +573,7 @@ getdrives() {
   local DRIVES;
 #  local DRIVES="$(sfdisk -s 2>/dev/null | sort -u | grep -e "/dev/[hsv]d" | cut -d: -f1)"
 #  DRIVES="$(ls -1 /sys/block | egrep 'nvme[0-9]n[0-9]$|[hsv]d[a-z]$')"
-# this is better:
+# this should be better;
   DRIVES="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n')"
   local i=1
 
@@ -586,7 +582,7 @@ getdrives() {
 
   for drive in ${DRIVES[*]} ; do
     # if we have just one drive, add it. Otherwise check that multiple drives are at least HDDMINSIZE
-    if [ ${#DRIVES[@]} -eq 1 ] || [ ! $(fdisk -s /dev/$drive 2>/dev/null || echo 0) -lt "$HDDMINSIZE" ] ; then
+    if [ ${#DRIVES[@]} -eq 1 ] || [ ! "$(fdisk -s "/dev/$drive" 2>/dev/null || echo 0)" -lt "$HDDMINSIZE" ] ; then
       eval DRIVE$i="/dev/$drive"
       let i=i+1
     fi
@@ -617,15 +613,17 @@ if [ "$1" ]; then
   # another special hidden configure option: force image validation
   # if set to 1: force validation
   FORCE_SIGN="$(grep -m1 -e ^FORCE_SIGN "$1" |awk '{print $2}')"
+  export FORCE_SIGN
 
   # hidden configure option:   
   # if set to 1: force setting root password even if ssh keys are
   # provided
   FORCE_PASSWORD="$(grep -m1 -e ^FORCE_PASSWORD "$1" |awk '{print $2}')"
+  export FORCE_PASSWORD
 
   # get all disks from configfile
   local used_disks=1
-  for i in $(seq 1 $COUNT_DRIVES) ; do
+  for ((i=1; i<=COUNT_DRIVES; i++)); do
     disk="$(grep -m1 -e ^DRIVE$i "$1" | awk '{print $2}')"
     if [ -n "$disk" ] ; then
       export DRIVE$i
@@ -659,22 +657,22 @@ if [ "$1" ]; then
   echo "$PART_LINES" > /tmp/part_lines.tmp
   i=0
   while read PART_LINE ; do
-    i=$[$i+1]
-    PART_MOUNT[$i]="$(echo $PART_LINE | awk '{print $2}')"
-    PART_FS[$i]="$(echo $PART_LINE | awk '{print $3}')"
+    i=$((i+1))
+    PART_MOUNT[$i]="$(echo "$PART_LINE" | awk '{print $2}')"
+    PART_FS[$i]="$(echo "$PART_LINE" | awk '{print $3}')"
     PART_SIZE[$i]="$(translate_unit "$(echo "$PART_LINE" | awk '{ print $4 }')")"
     MOUNT_POINT_SIZE[$i]=${PART_SIZE[$i]}
     #calculate new partition size if software raid is enabled and it is not /boot or swap
     if [ "$SWRAID" = "1" ]; then
       if [ "${PART_MOUNT[$i]}" != "/boot" -a "${PART_SIZE[$i]}" != "all" -a "${PART_MOUNT[$i]}" != "swap" ]; then
         if [ "$SWRAIDLEVEL" = "0" ]; then
-          PART_SIZE[$i]=$((${PART_SIZE[$i]}/$COUNT_DRIVES))
+          PART_SIZE[$i]=$((${PART_SIZE[$i]}/COUNT_DRIVES))
         elif [ "$SWRAIDLEVEL" = "5" ]; then
-          PART_SIZE[$i]=$((${PART_SIZE[$i]}/($COUNT_DRIVES-1)))
+          PART_SIZE[$i]=$((${PART_SIZE[$i]}/(COUNT_DRIVES-1)))
         elif [ "$SWRAIDLEVEL" = "6" ]; then
-          PART_SIZE[$i]=$((${PART_SIZE[$i]}/($COUNT_DRIVES-2)))
+          PART_SIZE[$i]=$((${PART_SIZE[$i]}/(COUNT_DRIVES-2)))
         elif [ "$SWRAIDLEVEL" = "10" ]; then
-          PART_SIZE[$i]=$((${PART_SIZE[$i]}/($COUNT_DRIVES/2)))
+          PART_SIZE[$i]=$((${PART_SIZE[$i]}/(COUNT_DRIVES/2)))
         fi
       fi
     fi
@@ -734,8 +732,8 @@ if [ "$1" ]; then
 
   IMAGE="$(grep -m1 -e ^IMAGE $1 | awk '{print $2}')"
   [ -e "$wd/$IMAGE" ] && IMAGE="$wd/$IMAGE"
-  IMAGE_PATH="$(dirname $IMAGE)/"
-  IMAGE_FILE="$(basename $IMAGE)"
+  IMAGE_PATH="$(dirname "$IMAGE")/"
+  IMAGE_FILE="$(basename "$IMAGE")"
   case $IMAGE_PATH in
     https:*|http:*|ftp:*) IMAGE_PATH_TYPE="http" ;;
     /*) IMAGE_PATH_TYPE="local" ;;
@@ -1318,7 +1316,7 @@ validate_vars() {
 
   if [ "$BOOTLOADER" == "grub" ]; then
     # check dos partition sizes for centos
-    local result="$(check_dos_partitions)"
+    local result="$(check_dos_partitions '')"
 
     if [ -n "$result" ]; then
       if [ "$result" == "PART_OVERSIZED" ]; then
@@ -3487,7 +3485,7 @@ translate_unit() {
           factor=1048576
           ;;
       esac
-      echo $(($value * $factor))
+      echo $((value * factor))
       return 0
     fi
   done
@@ -3504,23 +3502,23 @@ translate_unit() {
 # installations by the Robot. The script removes itself afterwards.
 #
 install_robot_script() {
-  VERSION=$(echo $IMAGENAME | cut -d- -f2)
-  cp $SCRIPTPATH/robot.sh $FOLD/hdd/
-  chmod +x $FOLD/hdd/robot.sh
-  sed -i -e "s#^URL=?#URL=\"$ROBOTURL\"#" $FOLD/hdd/robot.sh
+#  VERSION=$(echo $IMAGENAME | cut -d- -f2)
+  cp "$SCRIPTPATH/robot.sh" "$FOLD/hdd/"
+  chmod +x "$FOLD/hdd/robot.sh"
+  sed -i -e "s#^URL=?#URL=\"$ROBOTURL\"#" "$FOLD/hdd/robot.sh"
     case "$IAM" in
       debian|ubuntu)
-        sed -e 's/^exit 0$//' -i $FOLD/hdd/etc/rc.local
-        echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> $FOLD/hdd/etc/rc.local
+        sed -e 's/^exit 0$//' -i "$FOLD/hdd/etc/rc.local"
+        echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> "$FOLD/hdd/etc/rc.local"
         ;;
       centos)
-        sed -e 's/^exit 0$//' -i $FOLD/hdd/etc/rc.d/rc.local
-        echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> $FOLD/hdd/etc/rc.d/rc.local
-        chmod +x $FOLD/hdd/etc/rc.d/rc.local 1>/dev/null 2>&1
+        sed -e 's/^exit 0$//' -i "$FOLD/hdd/etc/rc.d/rc.local"
+        echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> "$FOLD/hdd/etc/rc.d/rc.local"
+        chmod +x "$FOLD/hdd/etc/rc.d/rc.local" 1>/dev/null 2>&1
         ;;
       suse)
         # needs suse 12.2 or higher
-        echo "bash /robot.sh" >> $FOLD/hdd/etc/init.d/boot.local
+        echo "bash /robot.sh" >> "$FOLD/hdd/etc/init.d/boot.local"
         ;;
     esac
 }
@@ -3531,7 +3529,7 @@ report_config() {
   local report_ip="$STATSSERVER"
   local report_status=""
 
-  report_status="$(curl -m 10 -s -k -X POST -T $config_file "https://${report_ip}/api/${HWADDR}/image/new")"
+  report_status="$(curl -m 10 -s -k -X POST -T "$config_file" "https://${report_ip}/api/${HWADDR}/image/new")"
   echo "report install.conf to rz-admin: ${report_status}" | debugoutput
 
   echo "${report_status}" 
@@ -3547,7 +3545,7 @@ report_debuglog() {
   local report_ip="$STATSSERVER"
   local report_status=""
 
-  report_status="$(curl -m 10 -s -k -X POST -T $DEBUGFILE "https://${report_ip}/api/${HWADDR}/image/${log_id}/log")"
+  report_status="$(curl -m 10 -s -k -X POST -T "$DEBUGFILE" "https://${report_ip}/api/${HWADDR}/image/${log_id}/log")"
   echo "report debug.txt to rz-admin: ${report_status}" | debugoutput
 
   return 0
@@ -3562,13 +3560,13 @@ cleanup() {
   debug "# Cleaning up..."
 
   while read line ; do
-    mount="$(echo $line | grep $FOLD | cut -d' ' -f2)"
+    mount="$(echo "$line" | grep "$FOLD" | cut -d' ' -f2)"
     if [ -n "$mount" ] ; then
-      umount -l $mount >> /dev/null 2>&1
+      umount -l "$mount" >> /dev/null 2>&1
     fi
   done < /proc/mounts
 
-  rm -rf $FOLD >> /dev/null 2>&1
+  rm -rf "$FOLD" >> /dev/null 2>&1
   rm -rf /tmp/install.vars 2>&1
   rm -rf /tmp/*.tmp 2>&1
 }
@@ -3595,13 +3593,13 @@ exit_function() {
   echo
 
   report_id="$(report_config)"
-  report_debuglog $report_id
+  report_debuglog "$report_id"
   cleanup
 }
 
 #function to check if it is a intel or amd cpu
 function check_cpu () {
-  if [ "$(cat /proc/cpuinfo | grep GenuineIntel)" ]; then
+  if grep -q GenuineIntel /proc/cpuinfo; then
     MODEL="intel"
   else
     MODEL="amd"
@@ -3614,31 +3612,31 @@ function check_cpu () {
 
 #get the smallest harddrive
 function smallest_hd() {
-  local smallest_drive_space="$(blockdev --getsize64 $DRIVE1 2>/dev/null)"
+  local smallest_drive_space; smallest_drive_space="$(blockdev --getsize64 "$DRIVE1" 2>/dev/null)"
   local smallest_drive=$DRIVE1
   for i in $(seq 1 $COUNT_DRIVES); do
-    if [ "$smallest_drive_space" -gt "$(blockdev --getsize64 "$(eval echo "\$DRIVE"$i)")" ]; then
-      smallest_drive_space="$(blockdev --getsize64 "$(eval echo "\$DRIVE"$i)")"
-      smallest_drive="$(eval echo "\$DRIVE"$i)"
+    if [ "$smallest_drive_space" -gt "$(blockdev --getsize64 "$(eval echo "\$DRIVE$i")")" ]; then
+      smallest_drive_space="$(blockdev --getsize64 "$(eval echo "\$DRIVE$i")")"
+      smallest_drive="$(eval echo "\$DRIVE$i")"
     fi
   done
 
-  echo $smallest_drive
+  echo "$smallest_drive"
 
   return 0
 }
 
 function largest_hd() {
-  LARGEST_DRIVE_SPACE="$(blockdev --getsize64 $DRIVE1)"
+  LARGEST_DRIVE_SPACE="$(blockdev --getsize64 "$DRIVE1")"
   LARGEST_DRIVE=$DRIVE1
   for i in $(seq 1 $COUNT_DRIVES); do
-    if [ "$LARGEST_DRIVE_SPACE" -lt "$(blockdev --getsize64 "$(eval echo "\$DRIVE"$i)")" ]; then
-      LARGEST_DRIVE_SPACE="$(blockdev --getsize64 "$(eval echo "\$DRIVE"$i)")"
-      LARGEST_DRIVE="$(eval echo "\$DRIVE"$i)"
+    if [ "$LARGEST_DRIVE_SPACE" -lt "$(blockdev --getsize64 "$(eval echo "\$DRIVE$i")")" ]; then
+      LARGEST_DRIVE_SPACE="$(blockdev --getsize64 "$(eval echo "\$DRIVE$i")")"
+      LARGEST_DRIVE="$(eval echo "\$DRIVE$i")"
     fi
   done
 
-  echo $LARGEST_DRIVE
+  echo "$LARGEST_DRIVE"
 
   return 0
 }
@@ -3646,11 +3644,17 @@ function largest_hd() {
 # get the drives which are connected through an USB port
 function getUSBFlashDrives() {
   for i in $(seq 1 $COUNT_DRIVES); do
-    DEV=$(eval echo "\$DRIVE"$i)
+    DEV=$(eval echo "\$DRIVE$i")
     # remove string '/dev/'
-    DEV=$(echo $DEV | sed -e 's/\/dev\///')
-    if [ -n "$(ls -l /sys/block/$DEV/ | grep usb)" ]; then
-      echo "/dev/${DEV}"
+    local withoutdev; withoutdev=${DEV##*/}
+    local removable;
+    if [ -e "/sys/block/$withoutdev/removable" ]; then
+      removable=$(cat "/sys/block/$withoutdev/removable")
+    else
+      removable=0
+    fi
+    if [ "$removable" -eq 1 ]; then
+      echo "${DEV}"
     fi
   done
 
@@ -3661,17 +3665,17 @@ function getUSBFlashDrives() {
 function getHDDsNotInToleranceRange() {
   # RANGE in percent relative to smallest hdd
   local RANGE=135
-  local smallest_hdd="$(smallest_hd)"
-  local smallest_hdd_size="$(blockdev --getsize64 $smallest_hdd)"
-  local max_size=$[ $smallest_hdd_size * $RANGE / 100 ]
+  local smallest_hdd; smallest_hdd="$(smallest_hd)"
+  local smallest_hdd_size; smallest_hdd_size="$(blockdev --getsize64 "$smallest_hdd")"
+  local max_size=$(( smallest_hdd_size * RANGE / 100 ))
   debug "checking if hdd sizes are within tolerance. min: $smallest_hdd_size / max: $max_size"
   for i in $(seq 1 $COUNT_DRIVES); do
-    if [ "$(blockdev --getsize64 "$(eval echo "\$DRIVE"$i)")" -gt "$max_size" ]; then
-      echo $(eval echo "\$DRIVE"$i)
+    if [ "$(blockdev --getsize64 "$(eval echo "\$DRIVE$i")")" -gt "$max_size" ]; then
+      eval echo "\$DRIVE$i"
       debug "DRIVE$i not in range"
     else
       debug "DRIVE$i in range"
-      echo "$(blockdev --getsize64 "$(eval echo "\$DRIVE"$i)")" | debugoutput
+      blockdev --getsize64 "$(eval echo "\$DRIVE$i")" | debugoutput
     fi
   done
 
@@ -3681,49 +3685,52 @@ function getHDDsNotInToleranceRange() {
 uuid_bugfix() {
     debug "# change all device names to uuid (e.g. for ide/pata transition)"
     TEMPFILE="$(mktemp)"
-    sed -n 's|^/dev/\([hsv]d[a-z][1-9][0-9]\?\).*|\1|p' < $FOLD/hdd/etc/fstab > "$TEMPFILE"
+    sed -n 's|^/dev/\([hsv]d[a-z][1-9][0-9]\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" > "$TEMPFILE"
     while read LINE; do
-      UUID="$(blkid -o value -s UUID /dev/$LINE)"
+      UUID="$(blkid -o value -s UUID "/dev/$LINE")"
       # not quite perfect. We need to match /dev/sda1 but not /dev/sda10.
       # device name may not always be followed by whitespace
-      [ -e $FOLD/hdd/etc/fstab ] && sed -i "s|^/dev/${LINE} |# /dev/${LINE} during Installation (RescueSystem)\nUUID=${UUID} |" $FOLD/hdd/etc/fstab
-      [ -e $FOLD/hdd/boot/grub/grub.cfg ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" $FOLD/hdd/boot/grub/grub.cfg
-      [ -e $FOLD/hdd/boot/grub/grub.conf ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" $FOLD/hdd/boot/grub/grub.conf
-      [ -e $FOLD/hdd/boot/grub/menu.lst ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" $FOLD/hdd/boot/grub/menu.lst
-      [ -e $FOLD/hdd/etc/lilo.conf ] && sed -i "s|append=\"root=/dev/${LINE}|append=\"root=UUID=${UUID}|" $FOLD/hdd/etc/lilo.conf
-      [ -e $FOLD/hdd/etc/lilo.conf ] && sed -i "s|/dev/${LINE}|\"UUID=${UUID}\"|" $FOLD/hdd/etc/lilo.conf
-    done < $TEMPFILE
+      [ -e "$FOLD/hdd/etc/fstab" ] && sed -i "s|^/dev/${LINE} |# /dev/${LINE} during Installation (RescueSystem)\nUUID=${UUID} |" "$FOLD/hdd/etc/fstab"
+      [ -e "$FOLD/hdd/boot/grub/grub.cfg" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.cfg"
+      [ -e "$FOLD/hdd/boot/grub/grub.conf" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.conf"
+      [ -e "$FOLD/hdd/boot/grub/menu.lst" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/menu.lst"
+      [ -e "$FOLD/hdd/etc/lilo.conf" ] && sed -i "s|append=\"root=/dev/${LINE}|append=\"root=UUID=${UUID}|" "$FOLD/hdd/etc/lilo.conf"
+      [ -e "$FOLD/hdd/etc/lilo.conf" ] && sed -i "s|/dev/${LINE}|\"UUID=${UUID}\"|" "$FOLD/hdd/etc/lilo.conf"
+    done < "$TEMPFILE"
     rm "$TEMPFILE"
     return 0
 }
 
 # param 1: /dev/sda (e.g)
 function hdinfo() {
-  local withoutdev= vendor= name= logical_nr=
+  local withoutdev;
+  local vendor;
+  local name; 
+  local logical_nr;
   withoutdev=${1##*/}
-  if [ -e /sys/block/$withoutdev/device/vendor ]; then
-    vendor="$(cat /sys/block/$withoutdev/device/vendor | tr -d ' ')"
+  if [ -e "/sys/block/$withoutdev/device/vendor" ]; then
+    vendor="$(tr -d ' ' < "/sys/block/$withoutdev/device/vendor")"
   fi
   
   case "$vendor" in
     LSI)
-      logical_nr="$(ls /sys/block/$withoutdev/device/scsi_device/ | cut -d: -f3)"
-      name="$(megacli -ldinfo -L$logical_nr -aall | grep Name | cut -d: -f2)"
+      logical_nr="$(find "/sys/block/$withoutdev/device/scsi_device/*" -maxdepth 0 -type d | cut -d: -f3)"
+      name="$(megacli -ldinfo -L"$logical_nr" -aall | grep Name | cut -d: -f2)"
       [ -z "$name" ] && name="no name"
       echo "# LSI RAID (LD $logical_nr): $name"
       ;;
     Adaptec)
-      logical_nr="$(cat /sys/block/$withoutdev/device/model 2>&1 | awk '{print $2}')"
-      name="$(arcconf GETCONFIG 1 LD $logical_nr | grep "Logical device name" | sed 's/.*: \(.*\)/\1/g')"
+      logical_nr="$(awk '{print $2}' < "/sys/block/$withoutdev/device/model" 2>&1)"
+      name="$(arcconf GETCONFIG 1 LD "$logical_nr" | grep "Logical device name" | sed 's/.*: \(.*\)/\1/g')"
       [ -z "$name" ] && name="no name"
       echo "# Adaptec RAID (LD $logical_nr): $name"
       ;;
     AMCC)
-      logical_nr="$(ls /sys/block/$withoutdev/device/scsi_device/ | cut -d: -f4)"
+      logical_nr="$(find "/sys/block/$withoutdev/device/scsi_device/*" -maxdepth 0 -type d | cut -d: -f4)"
       echo "# 3ware RAID (LD $logical_nr)"
       ;;
     ATA)
-      name="$(hdparm -i $1 | grep Model | sed 's/ Model=\(.*\), Fw.*/\1/g')"
+      name="$(hdparm -i "$1" | grep Model | sed 's/ Model=\(.*\), Fw.*/\1/g')"
       echo "# Onboard: $name"
       ;;
     *)
@@ -3737,9 +3744,9 @@ function hdinfo() {
 function isNegotiated() {
 # search for first NIC which has an IP
 for i in $(ifconfig -a | grep eth | cut -d " " -f 1); do
-  if [ -n "$(ip a show $i | grep "inet [1-9]")" ]; then
+  if ip a show "$i" | grep -q "inet [1-9]"; then
     #check if we got autonegotiated
-    if [ -n "$(mii-tool 2>/dev/null | grep "negotiated")" ]; then
+    if mii-tool 2>/dev/null | grep -q "negotiated"]; then
       return 0
     else
       return 1
@@ -3782,18 +3789,18 @@ function part_test_size() {
   if [ "$FORCE_GPT" = "2" ]; then
     debug "Forcing use of GPT as directed"
     GPT=1
-    PART_COUNT=$[$PART_COUNT+1]
+    PART_COUNT=$((PART_COUNT+1))
     return 0
   fi
 
-  local dev=$(smallest_hd)
+  local dev; dev=$(smallest_hd)
   if [ "$SWRAID" -eq 0 ]; then
     dev=$DRIVE1
   fi
-  local DRIVE_SIZE=$(blockdev --getsize64 $dev)
-  DRIVE_SIZE=$[ $DRIVE_SIZE / 1024 / 1024 ]
+  local DRIVE_SIZE; DRIVE_SIZE=$(blockdev --getsize64 "$dev")
+  DRIVE_SIZE=$(( DRIVE_SIZE / 1024 / 1024 ))
 
-  if [ $DRIVE_SIZE -ge $LIMIT ] || [ "$FORCE_GPT" = "1" ]; then
+  if [ "$DRIVE_SIZE" -ge $LIMIT ] || [ "$FORCE_GPT" = "1" ]; then
     # use only GPT if not CentOS or OpenSuSE newer than 12.2
     if [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 ]; then
       if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
@@ -3801,7 +3808,7 @@ function part_test_size() {
       else 
         echo "using GPT (drive size bigger then 2TB or requested)" | debugoutput
         GPT=1
-        PART_COUNT=$[$PART_COUNT+1]
+        PART_COUNT=$((PART_COUNT+1))
       fi
     else
       echo "cannot use GPT (but drive size is bigger then 2TB)" | debugoutput
@@ -3831,25 +3838,25 @@ function check_dos_partitions() {
   local temp_size=0
   local result=''
   local found_all_part=''
-  local dev=$(smallest_hd)
+  local dev; dev=$(smallest_hd)
   if [ "$SWRAID" -eq 0 ]; then
     dev=$DRIVE1
   fi
 
-  local DRIVE_SIZE=$(blockdev --getsize64 $dev)
-  DRIVE_SIZE=$[ $DRIVE_SIZE / 1024 / 1024 ]
+  local DRIVE_SIZE; DRIVE_SIZE=$(blockdev --getsize64 "$dev")
+  DRIVE_SIZE=$(( DRIVE_SIZE / 1024 / 1024 ))
 
-  if [ $DRIVE_SIZE -lt $LIMIT ]; then
+  if [ "$DRIVE_SIZE" -lt $LIMIT ]; then
     return 0
   fi
 
-  echo "DRIVE size is: $DRIVE_SIZE" | debugoutput
+  debug "DRIVE size is: $DRIVE_SIZE"
   
   # check if all primary partitions (without "all") are within the 2TB Limit
   for i in $(seq 1 $PART_COUNT); do
     #check only primary partitions
     if [ "${PART_SIZE[$i]}" != "all" ]; then
-       if [ $i -lt 4 ]; then
+       if [ "$i" -lt 4 ]; then
          PART_WO_ALL_SIZE_PRIM="$(echo ${PART_SIZE[$i]} + $PART_WO_ALL_SIZE_PRIM | bc)"
        fi
        # MS-DOS partitions may not start above 2TiB either
@@ -3865,12 +3872,12 @@ function check_dos_partitions() {
     fi
   done
 
-  echo "partitions without \"all\" sum up to $PART_WO_ALL_SIZE" | debugoutput
-  echo "primary partitions without \"all\" sum up to $PART_WO_ALL_SIZE_PRIM" | debugoutput
+  debug "partitions without 'all' sum up to $PART_WO_ALL_SIZE"
+  debug "primary partitions without 'all' sum up to $PART_WO_ALL_SIZE_PRIM"
 
   # now check how big an "all" partition is
   # MS-DOS partitions may not start above 2TiB either
-  if [ $PART_WO_ALL_SIZE -gt $LIMIT ]; then
+  if [ "$PART_WO_ALL_SIZE" -gt $LIMIT ]; then
     if [ "$found_all_part" = "yes" ] ; then
       [ -z $result ] && result="PART_ALL_BEGIN_OVER_LIMIT"
     fi
@@ -3886,14 +3893,14 @@ function check_dos_partitions() {
 
     PART_ALL_SIZE=$(echo "$DRIVE_SIZE - $PART_WO_ALL_SIZE_PRIM - $temp_size" | bc)
     echo "Part_all_size is: $PART_ALL_SIZE" | debugoutput
-    if [ $PART_ALL_SIZE -gt $LIMIT ]; then
+    if [ "$PART_ALL_SIZE" -gt $LIMIT ]; then
       PART_ALL_SIZE=$(echo "$LIMIT - $temp_size" | bc)
       [ -z $result ] && result="PART_CHANGED_ALL"
     fi
   # if we have no more than 3 partitions
   else
     PART_ALL_SIZE=$(echo "$DRIVE_SIZE - $PART_WO_ALL_SIZE" | bc)
-    if [ $PART_ALL_SIZE -gt $LIMIT ]; then
+    if [ "$PART_ALL_SIZE" -gt $LIMIT ]; then
       PART_ALL_SIZE=$LIMIT
       [ -z $result ] && result="PART_CHANGED_ALL"
     fi
@@ -3926,7 +3933,7 @@ set_udev_rules() {
 
  ETHCOUNT="$(ifconfig -a | grep -c eth)"
  if [ "$ETHCOUNT" -gt "1" ]; then
-    cp $UDEVPFAD/70-persistent-net.rules $FOLD/hdd$UDEVPFAD/
+    cp "$UDEVPFAD/70-persistent-net.rules" "$FOLD/hdd$UDEVPFAD/"
     #Testeinbau
    if [ "$IAM" = "centos" ]; then
      # need to remove these parts of the rule for centos, 
@@ -3934,7 +3941,7 @@ set_udev_rules() {
      # plus a new  ifcfg- for the new rule, which duplicates
      # the config but does not match the MAC of the interface
      # after renaming. Terrible mess.
-     sed -i 's/ ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL==\"eth\*\"//g' $FOLD/hdd$UDEVPFAD/70-persistent-net.rules
+     sed -i 's/ ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL==\"eth\*\"//g' "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
    fi
    for NIC in /sys/class/net/*; do
      INTERFACE=${NIC##*/}
@@ -3944,9 +3951,9 @@ set_udev_rules() {
      #Separate udev-rules for openSUSE 12.3 in function "suse_fix" below !!!
      if [ -n "$iptest"  ] && [ "$iptest" != "192.168" ] && [ "$INTERFACE" != "eth0" ] && [ "$INTERFACE" != "lo" ]; then
        debug "# renaming active $INTERFACE to eth0 via udev in installed system"
-       sed -i  "s/$INTERFACE/dummy/" $FOLD/hdd$UDEVPFAD/70-persistent-net.rules
-       sed -i  "s/eth0/$INTERFACE/" $FOLD/hdd$UDEVPFAD/70-persistent-net.rules
-       sed -i  "s/dummy/eth0/" $FOLD/hdd$UDEVPFAD/70-persistent-net.rules
+       sed -i  "s/$INTERFACE/dummy/" "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
+       sed -i  "s/eth0/$INTERFACE/" "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
+       sed -i  "s/dummy/eth0/" "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
        fix_eth_naming "$INTERFACE" 
      fi
    done
@@ -4009,14 +4016,14 @@ suse_netdev_fix() {
     FILE_NET_NEW="/etc/sysconfig/network/ifcfg-net0"
     execute_chroot_command "mv $FILE_NET $FILE_NET_NEW";
     execute_chroot_command "sed -i  's/eth0/net0/g' $FILE_NET_NEW";
-    sed -i  's/eth\([0-9]\)/net\1/g' $FOLD/hdd$UDEVPFAD/70-persistent-net.rules
+    sed -i  's/eth\([0-9]\)/net\1/g' "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
 }
 
 is_private_ip() {
- if [ "$1" ]; then
-   local first="$(echo $1 | cut -d '.' -f 1)"
-   local second="$(echo $1 | cut -d '.' -f 2)"
-   local third="$(echo $1 | cut -d '.' -f 3)"
+ if [ -n "$1" ]; then
+   local first; first="$(echo "$1" | cut -d '.' -f 1)"
+   local second; second="$(echo "$1" | cut -d '.' -f 2)"
+
    case "$first" in
      10)
        debug "detected private ip ($first.$second.x)"

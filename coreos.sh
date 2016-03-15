@@ -3,12 +3,7 @@
 #
 # CoreOS specific functions
 #
-# originally written by Markus Schade
-# (c) 2014-2015, Hetzner Online GmbH
-#
-# Contributors
-# * Thore Bödecker
-# * Tim Meusel
+# (c) 2014-2016, Hetzner Online GmbH
 #
 # This file isn't ready for production!
 #

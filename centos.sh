@@ -3,14 +3,8 @@
 #
 # CentOS specific functions
 #
-# originally written by Florian Wicke and David Mayr
 # (c) 2008-2016, Hetzner Online GmbH
 #
-# Contributors
-# * Markus Schade
-# * Thore Bödecker
-# * Tim Meusel
-
 
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
@@ -28,7 +22,7 @@ setup_network_config() {
       printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
     } > "$UDEVFILE"
 
-    local upper_mac="$(echo "$2" | awk '{ print toupper($0) }')"
+    local upper_mac; upper_mac="$(echo "$2" | awk '{ print toupper($0) }')"
 
     NETWORKFILE="$FOLD/hdd/etc/sysconfig/network"
     {
@@ -131,7 +125,7 @@ generate_new_ramdisk() {
   if [ "$1" ]; then
 
     # pick the latest kernel
-    VERSION="$(ls -r -1 $FOLD/hdd/boot/vmlinuz-* | head -n1 |cut -d '-' -f 2-)"
+    VERSION="$(find "$FOLD/hdd/boot/" -name "vmlinuz-*" | cut -d '-' -f 2- | sort -V | tail -1)"
 
     if [ "$IMG_VERSION" -lt 60 ] ; then
       local modulesfile="$FOLD/hdd/etc/modprobe.conf"
@@ -257,7 +251,7 @@ generate_config_grub() {
   local -i i=0
   for ((i=1; i<=COUNT_DRIVES; i++)); do
     local j; j="$((i - 1))"
-    local disk; disk="$(eval echo "\$DRIVE"$i)"
+    local disk; disk="$(eval echo "\$DRIVE$i")"
     echo "(hd$j) $disk" >> "$DMAPFILE"
   done
   cat "$DMAPFILE" >> "$DEBUGFILE"
@@ -378,8 +372,8 @@ run_os_specific_functions() {
   fi
 
   # selinux autorelabel if enabled
-  egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux)" &&
-    touch "$FOLD/hdd/.autorelabel"
+  egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux" &&
+  touch "$FOLD/hdd/.autorelabel"
 
   return 0
 }
@@ -394,16 +388,46 @@ setup_cpanel() {
 # randomize mysql passwords in cpanel image
 #
 randomize_cpanel_mysql_passwords() {
-  local cphulkdconf="$FOLD/hdd/var/cpanel/hulkd/password"
-  local cphulkdpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c16)
-  local rootpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c8)
-  local mysqlcommand="UPDATE mysql.user SET password=PASSWORD('$cphulkdpass') WHERE user='cphulkd'; \
-  UPDATE mysql.user SET password=PASSWORD('$rootpass') WHERE user='root';\nFLUSH PRIVILEGES;"
-  echo "$mysqlcommand" > "$FOLD/hdd/tmp/pwchange.sql"
+  local cphulkdconf; cphulkdconf="$FOLD/hdd/var/cpanel/hulkd/password"
+  local cphulkdpass; cphulkdpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c16)
+  local rootpass; rootpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c8)
+  local mysqlcommand; 
+  mysqlcommand="UPDATE mysql.user SET password=PASSWORD('$cphulkdpass') WHERE user='cphulkd'; \
+    UPDATE mysql.user SET password=PASSWORD('$rootpass') WHERE user='root'; \
+    FLUSH PRIVILEGES;"
+  echo -e "$mysqlcommand" > "$FOLD/hdd/tmp/pwchange.sql"
   debug "changing mysql passwords"
-  execute_chroot_command "service mysql start --skip-grant-tables --skip-networking >/dev/null 2>&1"; EXITCODE=$?
-  execute_chroot_command "mysql < /tmp/pwchange.sql >/dev/null 2>&1"; EXITCODE=$?
-  execute_chroot_command "service mysql stop >/dev/null 2>&1"
+  if [ "$IMG_VERSION" -lt 70 ] ; then
+    execute_chroot_command "service mysql start --skip-grant-tables --skip-networking >/dev/null 2>&1"; EXITCODE=$?
+    execute_chroot_command "mysql < /tmp/pwchange.sql >/dev/null 2>&1"; EXITCODE=$?
+    execute_chroot_command "service mysql stop >/dev/null 2>&1"
+  else
+    local override_dir="$FOLD/hdd/etc/systemd/system/mysql.service.d"
+    local mysql_override="$override_dir/override.conf"
+    mkdir -p "$override_dir"
+    {
+      echo "[Service]"
+      echo "ExecStart="
+      echo "ExecStart=/usr/bin/mysqld_safe --skip-grant-tables --skip-networking"
+    } > "$mysql_override"
+    local helper_script=${FOLD}/hdd/helper.sh
+    {
+      echo '#!/usr/bin/env bash'
+      echo 'trap "rm ${0}" EXIT'
+      echo 'systemctl start mysql.service'
+      echo 'echo ERROR > /tmp/buff'
+      # mysql becomes unresponsive from time to time
+      echo 'while cat /tmp/buff | grep -q ERROR; do'
+      echo '  mysql < /tmp/pwchange.sql &> /tmp/buff'
+      echo 'done'
+      echo 'rm /tmp/buff'
+      echo 'systemctl stop mysql.service'
+    } > "${helper_script}"
+    chmod a+x "${helper_script}"
+    execute_command_within_a_systemd_nspawn_container "/helper.sh"; EXITCODE=$?
+    rm -rf "$override_dir"
+  fi
+
   cp "$cphulkdconf" "$cphulkdconf.old"
   sed s/pass.*/"pass=\"$cphulkdpass\""/g "$cphulkdconf.old" > "$cphulkdconf"
   rm "$FOLD/hdd/tmp/pwchange.sql"
@@ -413,7 +437,7 @@ randomize_cpanel_mysql_passwords() {
   {
     echo "[client]"
     echo "user=root"
-    echo "pass=$rootpass"
+    echo "password=$rootpass"
   } > "$FOLD/hdd/root/.my.cnf"
 
   return "$EXITCODE"
@@ -436,7 +460,7 @@ modify_wwwacct() {
   local wfile="$FOLD/hdd/$wwwacct"
 
   debug "setting hostname in ${wwwacct}"
-  echo "HOST ${SETHOSTNAME}" >> "$wfile"
+  echo "HOST ${NEWHOSTNAME}" >> "$wfile"
 
   debug "setting IP in ${wwwacct}"
   echo "ADDR ${IPADDR}" >> "$wfile"

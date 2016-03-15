@@ -1,0 +1,21 @@
+Copyright (C) 2007-2016, Hetzner Online GmbH
+
+The scripts were written by developers of Hetzner Online GmbH and are
+maintained and extended by them. The scripts are written in bash and are
+available in the rescue system. They can be used and modified freely. 
+Hetzner Online GmbH assumes no liability for any damage caused by changing the
+scripts and excludes any support for guides that include changes to the script.
+
+Installimage was originally written by
+* David Mayr
+* Florian Wicke
+
+and extended by:
+* Jonas Keidel
+* Markus Schade
+* Matthias Übler
+
+Contributions by external developers:
+* Thore Bödecker
+* Tim Meusel
+

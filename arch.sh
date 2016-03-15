@@ -3,12 +3,8 @@
 #
 # Archlinux specific functions
 #
-# originally written by Markus Schade
 # (c) 2013-2016, Hetzner Online GmbH
 #
-# Contributors
-# * Thore Bödecker
-# * Tim Meusel
 
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"

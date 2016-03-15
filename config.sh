@@ -3,8 +3,7 @@
 #
 # set all necessary vars and functions
 #
-# originally written by Florian Wicke and David Mayr
-# (c) 2007-2015, Hetzner Online GmbH
+# (c) 2007-2016, Hetzner Online GmbH
 #
 
 
@@ -70,6 +69,7 @@ OSMENULIST=$OSMENULIST'old_images (!!NO_SUPPORT!!) '
 OSMENULIST=$OSMENULIST'custom_image (blanco_config_for_user_images) '
 
 export PROXMOX3_BASE_IMAGE="Debian-79-wheezy-64-minimal"
+export PROXMOX4_BASE_IMAGE="Debian-83-jessie-64-minimal"
 
 export RED="\033[1;31m"
 export GREEN="\033[1;32m"
