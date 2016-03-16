@@ -652,8 +652,8 @@ if [ "$1" ]; then
   [ "$SWRAIDLEVEL" = "" ] && SWRAIDLEVEL="1"
 
   PARTS_SUM_SIZE="0"
-  PART_COUNT="$(grep -c -e '^PART' $1)"
-  PART_LINES="$(grep -e '^PART ' $1)"
+  PART_COUNT="$(grep -c -e '^PART' "$1")"
+  PART_LINES="$(grep -e '^PART ' "$1")"
   echo "$PART_LINES" > /tmp/part_lines.tmp
   i=0
   while read PART_LINE ; do
@@ -678,7 +678,7 @@ if [ "$1" ]; then
     fi
     echo "${PART_MOUNT[$i]} : ${PART_SIZE[$i]}" | debugoutput
     if [ "${PART_SIZE[$i]}" != "all" ]; then
-      PARTS_SUM_SIZE="$(echo ${PART_SIZE[$i]} + $PARTS_SUM_SIZE | bc)"
+      PARTS_SUM_SIZE=$(( ${PART_SIZE[$i]} + PARTS_SUM_SIZE ))
     fi
     if [ "${PART_MOUNT[$i]}" = "/" ]; then
       HASROOT="true"
@@ -686,17 +686,17 @@ if [ "$1" ]; then
   done < /tmp/part_lines.tmp
   
   # get LVM volume group config
-  LVM_VG_COUNT="$(egrep -c '^PART *lvm ' $1)"
-  LVM_VG_ALL="$(egrep '^PART *lvm ' $1)"
+  LVM_VG_COUNT="$(egrep -c '^PART *lvm ' "$1")"
+  LVM_VG_ALL="$(egrep '^PART *lvm ' "$1")"
   
   # void the check var
   LVM_VG_CHECK=""
-  for i in $(seq 1 $LVM_VG_COUNT); do
+  for ((i=1; i<=LVM_VG_COUNT; i++)); do
     LVM_VG_LINE="$(echo "$LVM_VG_ALL" | head -n$i | tail -n1)"
     #LVM_VG_PART[$i]=$i #"$(echo $LVM_VG_LINE | awk '{print $2}')"
     LVM_VG_PART[$i]=$(echo "$PART_LINES" | egrep -n '^PART *lvm ' | head -n$i | tail -n1 | cut -d: -f1)
-    LVM_VG_NAME[$i]="$(echo $LVM_VG_LINE | awk '{print $3}')"
-    LVM_VG_SIZE[$i]="$(translate_unit "$(echo $LVM_VG_LINE | awk '{print $4}')")"
+    LVM_VG_NAME[$i]="$(echo "$LVM_VG_LINE" | awk '{print $3}')"
+    LVM_VG_SIZE[$i]="$(translate_unit "$(echo "$LVM_VG_LINE" | awk '{print $4}')")"
     
     if [ "${LVM_VG_SIZE[$i]}" != "all" ] ; then
       LVM_VG_CHECK="$i $LVM_VG_CHECK"
@@ -704,20 +704,21 @@ if [ "$1" ]; then
   done
   
   # get LVM logical volume config
-  LVM_LV_COUNT="$(grep -c -e "^LV " $1)"
-  LVM_LV_ALL="$(grep -e "^LV " $1)"
-  for i in $(seq 1 $LVM_LV_COUNT); do
+  LVM_LV_COUNT="$(grep -c -e "^LV " "$1")"
+  LVM_LV_ALL="$(grep -e "^LV " "$1")"
+  for ((i=1; i<=LVM_LV_COUNT; i++)); do
     LVM_LV_LINE="$(echo "$LVM_LV_ALL" | head -n$i | tail -n1)"
-    LVM_LV_VG[$i]="$(echo $LVM_LV_LINE | awk '{print $2}')"
+    LVM_LV_VG[$i]="$(echo "$LVM_LV_LINE" | awk '{print $2}')"
     LVM_LV_VG_SIZE[$i]="$(echo "$LVM_VG_ALL" | grep "${LVM_LV_VG[$i]}" | awk '{print $4}')"
-    LVM_LV_NAME[$i]="$(echo $LVM_LV_LINE | awk '{print $3}')"
-    LVM_LV_MOUNT[$i]="$(echo $LVM_LV_LINE | awk '{print $4}')"
-    LVM_LV_FS[$i]="$(echo $LVM_LV_LINE | awk '{print $5}')"
+    LVM_LV_NAME[$i]="$(echo "$LVM_LV_LINE" | awk '{print $3}')"
+    LVM_LV_MOUNT[$i]="$(echo "$LVM_LV_LINE" | awk '{print $4}')"
+    LVM_LV_FS[$i]="$(echo "$LVM_LV_LINE" | awk '{print $5}')"
     LVM_LV_SIZE[$i]="$(translate_unit "$(echo "$LVM_LV_LINE" | awk '{ print $6 }')")"
     # we only add LV sizes to PART_SUM_SIZE if the appropiate volume group has
     # "all" as size (otherwise we would count twice: SIZE of VG + SIZE of LVs of VG)
     if [ "${LVM_LV_SIZE[$i]}" != "all" ] && [ "${LVM_LV_VG_SIZE[$i]}" == "all" ]; then
-      PARTS_SUM_SIZE="$(echo ${LVM_LV_SIZE[$i]} + $PARTS_SUM_SIZE | bc)"
+      PARTS_SUM_SIZE=$(( ${LVM_LV_SIZE[$i]} + PARTS_SUM_SIZE ))
+      PARTS_SUM_SIZE=$(( ${LVM_LV_SIZE[$i]} + PARTS_SUM_SIZE ))
     fi
     if [ "${LVM_LV_MOUNT[$i]}" = "/" ]; then
       HASROOT="true"
@@ -730,7 +731,7 @@ if [ "$1" ]; then
   [ "$LVM_VG_COUNT" != "0" -a "$LVM_LV_COUNT" != "0" ] && LVM="1" || LVM="0"
   
 
-  IMAGE="$(grep -m1 -e ^IMAGE $1 | awk '{print $2}')"
+  IMAGE="$(grep -m1 -e ^IMAGE "$1" | awk '{print $2}')"
   [ -e "$wd/$IMAGE" ] && IMAGE="$wd/$IMAGE"
   IMAGE_PATH="$(dirname "$IMAGE")/"
   IMAGE_FILE="$(basename "$IMAGE")"
@@ -748,19 +749,20 @@ if [ "$1" ]; then
     *.bin.bz2|*.bin.bz) IMAGE_FILE_TYPE="bbz" ;;
   esac
   
-  BOOTLOADER="$(grep -m1 -e ^BOOTLOADER $1 |awk '{print $2}')"
+  BOOTLOADER="$(grep -m1 -e ^BOOTLOADER "$1" |awk '{print $2}')"
   if [ "$BOOTLOADER" = "" ]; then
     BOOTLOADER=$(echo "$DEFAULTLOADER" | awk '{ print $2 }')
   fi
-  BOOTLOADER=$(echo $BOOTLOADER | tr [:upper:] [:lower:])
+  BOOTLOADER="${BOOTLOADER,,}"
 
-  NEWHOSTNAME=$(grep -m1 -e ^HOSTNAME $1 | awk '{print $2}')
+  NEWHOSTNAME=$(grep -m1 -e ^HOSTNAME "$1" | awk '{print $2}')
 
-  GOVERNOR="$(grep -m1 -e ^GOVERNOR $1 |awk '{print $2}')"
+  GOVERNOR="$(grep -m1 -e ^GOVERNOR "$1" |awk '{print $2}')"
   if [ "$GOVERNOR" = "" ]; then GOVERNOR="$DEFAULTGOVERNOR"; fi
 
   SYSTEMDEVICE="$DRIVE1"
-  SYSTEMREALDEVICE="$DRIVE1"
+  # this var appear to be unused. keep it for safety
+  #SYSTEMREALDEVICE="$DRIVE1"
   
 fi
 }
@@ -822,20 +824,22 @@ validate_vars() {
   fi
 
   # test if $SWRAIDLEVEL is either 0 or 1
-  if [ "$SWRAID" = "1" -a "$SWRAIDLEVEL" != "0" -a "$SWRAIDLEVEL" != "1" -a "$SWRAIDLEVEL" != "5" -a "$SWRAIDLEVEL" != "6" -a "$SWRAIDLEVEL" != "10" ]; then
-    graph_error "ERROR: Value for SWRAIDLEVEL is not correct"
-    return 1
+  if [ "$SWRAID" = "1" ] && [ "$SWRAIDLEVEL" != "0" ] && 
+    [ "$SWRAIDLEVEL" != "1" ] && [ "$SWRAIDLEVEL" != "5" ] && 
+    [ "$SWRAIDLEVEL" != "6" ] && [ "$SWRAIDLEVEL" != "10" ]; then
+      graph_error "ERROR: Value for SWRAIDLEVEL is not correct"
+      return 1
   fi
 
   # check for valid drives
   local drive_array=( $DRIVE1 )
-  for i in $(seq 1 $COUNT_DRIVES) ; do
-    local format="$(eval echo \$FORMAT_DRIVE$i)"
-    local drive="$(eval echo \$DRIVE$i)"
-    if [ $i -gt 1 ] ; then
+  for ((i=1; i<=COUNT_DRIVES; i++)); do
+    local format; format="$(eval echo "\$FORMAT_DRIVE$i")"
+    local drive; drive="$(eval echo "\$DRIVE$i")"
+    if [ "$i" -gt 1 ] ; then
       for j in $(seq 0 $((${#drive_array[@]} - 1))); do
-        if [ ${drive_array[$j]} = $drive ]; then
-          graph_error "Duplicate DRIVE definition. $drive used for DRIVE$[$j+1] and DRIVE$i"
+        if [ "${drive_array[$j]}" = "$drive" ]; then
+          graph_error "Duplicate DRIVE definition. $drive used for DRIVE$((j+1)) and DRIVE$i"
         fi
       done
       drive_array=( "${drive_array[@]}" "$drive" )
@@ -857,7 +861,7 @@ validate_vars() {
       fi
 
       # test if drive is not busy
-      CHECK="$(hdparm -z $drive 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
+      CHECK="$(hdparm -z "$drive" 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
       if [ "$CHECK" ]; then
         graph_error "ERROR: DRIVE$i is busy - cannot access device $drive"
         return 1
@@ -890,7 +894,7 @@ validate_vars() {
     if [ "$SWRAIDLEVEL" = "0" -o "$SWRAIDLEVEL" = "5" -o "$SWRAIDLEVEL" = "6" -o "$SWRAIDLEVEL" = "10" ]; then
       TMPCHECK=0
 
-      for i in $(seq 1 $PART_COUNT); do
+      for ((i=1; i<=PART_COUNT; i++)); do
         if [ "${PART_MOUNT[$i]}" = "/boot" ]; then
           TMPCHECK=1
         fi
@@ -906,33 +910,33 @@ validate_vars() {
   # calculate drive_sum_size
   if [ "$SWRAID" = "0" ] ; then
     # just the first hdd is used so we need the size of DRIVE1
-    DRIVE_SUM_SIZE=$(blockdev --getsize64 $DRIVE1)
+    DRIVE_SUM_SIZE=$(blockdev --getsize64 "$DRIVE1")
     echo "Size of the first hdd is: $DRIVE_SUM_SIZE" | debugoutput 
   else
-    local smallest_hdd=$(smallest_hd)
-    DRIVE_SUM_SIZE="$(blockdev --getsize64 $smallest_hdd)"
+    local smallest_hdd; smallest_hdd=$(smallest_hd)
+    DRIVE_SUM_SIZE="$(blockdev --getsize64 "$smallest_hdd")"
     # this variable is used later when determining what disk to use as reference
     # when drives of different sizes are in a system
     SMALLEST_HDD_SIZE=$DRIVE_SUM_SIZE 
-    SMALLEST_HDD_SIZE=$[$SMALLEST_HDD_SIZE / 1024 / 1024]
+    SMALLEST_HDD_SIZE=$((SMALLEST_HDD_SIZE / 1024 / 1024))
     echo "Size of smallest drive is $DRIVE_SUM_SIZE" | debugoutput 
     if [ "$SWRAIDLEVEL" = "0" ]; then
-      DRIVE_SUM_SIZE=$[$DRIVE_SUM_SIZE * $COUNT_DRIVES]
+      DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE * COUNT_DRIVES))
     elif [ "$SWRAIDLEVEL" = "5" ]; then
-      DRIVE_SUM_SIZE=$[$DRIVE_SUM_SIZE * ($COUNT_DRIVES - 1)]
+      DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE * (COUNT_DRIVES - 1) ))
     elif [ "$SWRAIDLEVEL" = "6" ]; then
-      DRIVE_SUM_SIZE=$[$DRIVE_SUM_SIZE * ($COUNT_DRIVES - 2)]
+      DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE * (COUNT_DRIVES - 2) ))
     elif [ "$SWRAIDLEVEL" = "10" ]; then
-      DRIVE_SUM_SIZE=$[$DRIVE_SUM_SIZE * ($COUNT_DRIVES / 2)]
+      DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE * (COUNT_DRIVES / 2) ))
     fi
-    echo "Calculated size of array is: $DRIVE_SUM_SIZE" | debugoutput 
+    debug "Calculated size of array is: $DRIVE_SUM_SIZE"
   fi
 
-  DRIVE_SUM_SIZE=$[$DRIVE_SUM_SIZE / 1024 / 1024]
-  for i in $(seq 1 $PART_COUNT); do
+  DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE / 1024 / 1024))
+  for ((i=1; i<=PART_COUNT; i++)); do
     if [ "${PART_SIZE[$i]}" = "all" ]; then
       # make sure that the all partition has at least 1G available
-      DRIVE_SUM_SIZE=$[$DRIVE_SUM_SIZE - 1024]   
+      DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE - 1024))
     fi
   done
 
@@ -940,14 +944,14 @@ validate_vars() {
   # test if /boot or / is mounted outside the LVM
   if [ "$LVM" = "1" ]; then
     TMPCHECK=0
-    for i in $(seq 1 $PART_COUNT); do
+    for ((i=1; i<=PART_COUNT; i++)); do
       if [ "${PART_MOUNT[$i]}" = "/boot" ]; then
         TMPCHECK=1
       fi
     done
 
     if [ "$TMPCHECK" = "0" ]; then
-      for i in $(seq 1 $PART_COUNT); do
+      for ((i=1; i<=PART_COUNT; i++)); do
         if [ "${PART_MOUNT[$i]}" = "/" ]; then
           TMPCHECK=1
         fi
@@ -961,23 +965,23 @@ validate_vars() {
   fi
 
   # Check if /boot or / is mounted on one of the first three partitions.
-  if [ $PART_COUNT -gt 3 ]; then
+  if [ "$PART_COUNT" -gt 3 ]; then
     tmp=0
 
-    for i in $(seq 1 $PART_COUNT); do
+    for ((i=1; i<=PART_COUNT; i++)); do
       if [ "${PART_MOUNT[$i]}" = "/boot" ]; then
         tmp=$i
         break
       fi
     done
 
-    if [ $tmp -gt 3 ]; then
+    if [ "$tmp" -gt 3 ]; then
       graph_error "ERROR: /boot must be mounted on a primary partition"
       return 1
     fi
 
     if [ $tmp -eq 0 ]; then
-      for i in $(seq 4 $PART_COUNT); do
+      for ((i=4; i<=PART_COUNT; i++)); do
         if [ "${PART_MOUNT[$i]}" = "/" ]; then
           graph_error "ERROR: / must be mounted on a primary partition"
           return 1
@@ -991,17 +995,17 @@ validate_vars() {
   if [ "$PART_COUNT" -gt "0" ]; then
   WARNBTRFS=0 
     # test each partition line
-    for i in $(seq 1 $PART_COUNT); do
+    for ((i=1; i<=PART_COUNT; i++)); do
     
       # test if the mountpoint is valid (start with / or swap or lvm)
-      CHECK="$(echo ${PART_MOUNT[$i]} | grep -e "^none\|^/\|^swap$\|^lvm$")"
+      CHECK="$(echo "${PART_MOUNT[$i]}" | grep -e "^none\|^/\|^swap$\|^lvm$")"
       if [ -z "$CHECK" ]; then
         graph_error "ERROR: Mountpoint for partition $i is not correct"
         return 1
       fi
       
       # test if the filesystem is one of our supportet types (btrfs/ext2/ext3/ext4/reiserfs/xfs/swap)
-      CHECK="$(echo ${PART_FS[$i]} |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^lvm$")"
+      CHECK="$(echo "${PART_FS[$i]}" |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^lvm$")"
       if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
         graph_error "ERROR: Filesystem for partition $i is not correct"
         return 1
@@ -1018,7 +1022,7 @@ validate_vars() {
       fi
 
       # we can't use bsdtar on non ext2/3/4 partitions
-      CHECK=$(echo ${PART_FS[$i]} |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$")
+      CHECK=$(echo "${PART_FS[$i]}" |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$")
       if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
         export TAR="tar"
         echo "setting TAR to GNUtar" | debugoutput
@@ -3746,7 +3750,7 @@ function isNegotiated() {
 for i in $(ifconfig -a | grep eth | cut -d " " -f 1); do
   if ip a show "$i" | grep -q "inet [1-9]"; then
     #check if we got autonegotiated
-    if mii-tool 2>/dev/null | grep -q "negotiated"]; then
+    if mii-tool 2>/dev/null | grep -q "negotiated"; then
       return 0
     else
       return 1

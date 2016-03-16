@@ -24,7 +24,7 @@ setup_network_config() {
       echo "### $COMPANY - installimage"
       echo "# device: $1"
       printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
-    } >> "$UDEVFILE"
+    } > "$UDEVFILE"
 
     {
       echo "### $COMPANY - installimage"
