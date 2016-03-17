@@ -11,7 +11,7 @@ setup_network_config() {
   if [ -n "$1" ] && [ -n "$2" ]; then
     if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
       UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
-    elif [ "$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules" ]; then
+    elif [ -f "$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules" ]; then
       UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
     else
       UDEVFILE="/dev/null"
@@ -39,14 +39,14 @@ setup_network_config() {
             echo "auto  $1"
             echo "iface $1 inet dhcp"
           } >> "$CONFIGFILE"
-        else 
+        else
           {
             echo "auto  $1"
             echo "iface $1 inet static"
             echo "  address   $3"
             echo "  netmask   $5"
             echo "  gateway   $6"
-            if ! is_private_ip "$3"; then 
+            if ! is_private_ip "$3"; then
               echo "  # default route to access subnet"
               echo "  up route add -net $7 netmask $5 gw $6 $1"
             fi
@@ -90,7 +90,7 @@ setup_network_config() {
       echo "[Network]" >> "$CONFIGFILE"
       if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
         debug "setting up ipv6 networking $8/$9 via ${10}"
-        { 
+        {
           echo "Address=$8/$9"
           echo "Gateway=${10}"
           echo ""
@@ -172,7 +172,7 @@ generate_new_ramdisk() {
         echo "blacklist mei-me"
       } > "$blacklist_conf"
     fi
- 
+
     # just make sure that we do not accidentally try to install a bootloader
     # when we haven't configured grub yet
     sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
@@ -215,7 +215,7 @@ setup_cpufreq() {
 # this is just to generate an error and should never be reached
 # because we dropped support for lilo on ubuntu since 12.04
 generate_config_lilo() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
     return 1
   fi
 }
@@ -223,7 +223,7 @@ generate_config_lilo() {
 # this is just to generate an error and should never be reached
 # because we dropped support for lilo on ubuntu since 12.04
 write_lilo() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
     return 1
   fi
 }
@@ -268,7 +268,7 @@ generate_config_grub() {
 
   # create /run/lock if it didn't exist because it is needed by grub-mkconfig
   mkdir -p "$FOLD/hdd/run/lock"
-	
+
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
   # only install grub2 in mbr of all other drives if we use swraid
@@ -280,7 +280,7 @@ generate_config_grub() {
   done
 
   uuid_bugfix
-	
+
   PARTNUM=$(echo "$SYSTEMBOOTDEVICE" | rev | cut -c1)
   if [ "$SWRAID" = "0" ]; then
     PARTNUM="$((PARTNUM - 1))"
