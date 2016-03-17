@@ -14,6 +14,8 @@ setup_network_config() {
     CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-$C_SHORT.network"
     UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
+    local CIDR; CIDR=$(netmask_cidr_conv "$SUBNETMASK")
+
     {
       echo "### $COMPANY - installimage"
       echo "# device: $1"
