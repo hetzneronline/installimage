@@ -14,7 +14,7 @@ setup_network_config() {
     CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-$C_SHORT.network"
     UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
-    { 
+    {
       echo "### $COMPANY - installimage"
       echo "# device: $1"
       printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
@@ -31,7 +31,7 @@ setup_network_config() {
     echo "[Network]" >> "$CONFIGFILE"
     if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
-      { 
+      {
         echo "Address=$8/$9"
         echo "Gateway=${10}"
         echo ""
@@ -46,7 +46,7 @@ setup_network_config() {
         echo ""
       } >> "$CONFIGFILE"
 
-      if ! is_private_ip "$3"; then 
+      if ! is_private_ip "$3"; then
         {
           echo "[Route]"
           echo "Destination=$7/$CIDR"
@@ -63,7 +63,7 @@ setup_network_config() {
 
 # generate_config_mdadm "NIL"
 generate_config_mdadm() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
     local mdadmconf="/etc/mdadm.conf"
     {
       echo "DEVICE partitions"
@@ -77,7 +77,7 @@ generate_config_mdadm() {
 
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
     local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
     {
       echo "### $COMPANY - installimage"
@@ -101,7 +101,7 @@ generate_new_ramdisk() {
 }
 
 setup_cpufreq() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
     if ! isVServer; then
       local cpufreqconf=''
       cpufreqconf="$FOLD/hdd/etc/default/cpupower"
@@ -119,7 +119,7 @@ setup_cpufreq() {
 # Generate the GRUB bootloader configuration.
 #
 generate_config_grub() {
-  EXITCODE=0
+  declare -i EXITCODE=0
   execute_chroot_command "rm -rf /boot/grub; mkdir -p /boot/grub/ >> /dev/null 2>&1"
   execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset\"/"'
   execute_chroot_command 'sed -i /etc/default/grub -e "s/^#GRUB_TERMINAL_OUTPUT=.*/GRUB_TERMINAL_OUTPUT=console/"'
@@ -127,7 +127,7 @@ generate_config_grub() {
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
   execute_chroot_command "grub-install --no-floppy --recheck $DRIVE1 2>&1"
-  declare -i EXITCODE=$?
+  EXITCODE=$?
 
   # only install grub2 in mbr of all other drives if we use swraid
   if [ "$SWRAID" = "1" ] ;  then
@@ -170,7 +170,7 @@ validate_image() {
 # extract image file to hdd
 extract_image() {
   LANG=C pacstrap -m -a "$FOLD/hdd" base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget 2>&1 | debugoutput
-
+  declare -i EXITCODE=$?
   if [ "$EXITCODE" -eq "0" ]; then
     cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput
 
@@ -192,7 +192,6 @@ extract_image() {
       echo "FONT=LatArCyrHeb-16"
     } > "$FOLD/hdd/etc/vconsole.conf"
 
-    
     return 0
   else
     return 1
