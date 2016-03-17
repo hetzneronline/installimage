@@ -4066,4 +4066,14 @@ is_private_ip() {
  fi
 }
 
+# netmask_cidr_conv "$SUBNETMASK"
+netmask_cidr_conv() {
+  oct2nils=( [255]=0 [254]=1 [252]=2 [248]=3 [240]=4 [224]=5 [192]=6 [128]=7 [0]=8 )
+  local IFS='.' cidr; cidr=0
+  for oct in $1; do
+    cidr=$((cidr + oct2nils[oct]))
+  done
+  echo $cidr
+}
+
 # vim: ai:ts=2:sw=2:et
