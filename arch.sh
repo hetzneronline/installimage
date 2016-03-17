@@ -14,7 +14,7 @@ setup_network_config() {
     CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-$C_SHORT.network"
     UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
 
-    { 
+    {
       echo "### $COMPANY - installimage"
       echo "# device: $1"
       printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
@@ -31,7 +31,7 @@ setup_network_config() {
     echo "[Network]" >> "$CONFIGFILE"
     if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
-      { 
+      {
         echo "Address=$8/$9"
         echo "Gateway=${10}"
         echo ""
@@ -46,7 +46,7 @@ setup_network_config() {
         echo ""
       } >> "$CONFIGFILE"
 
-      if ! is_private_ip "$3"; then 
+      if ! is_private_ip "$3"; then
         {
           echo "[Route]"
           echo "Destination=$7/$CIDR"
@@ -192,7 +192,7 @@ extract_image() {
       echo "FONT=LatArCyrHeb-16"
     } > "$FOLD/hdd/etc/vconsole.conf"
 
-    
+
     return 0
   else
     return 1
