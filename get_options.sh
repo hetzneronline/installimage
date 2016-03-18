@@ -73,7 +73,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:" OPTION ; do
       else
         msg="=> FAILED: config file $OPT_CONFIGFILE for autosetup not found"
         debug "$msg"
-        echo "${RED}$msg${NOCOL}"
+        echo -e "${RED}$msg${NOCOL}"
         exit 1
       fi
       debug "# use config file $OPT_CONFIGFILE for autosetup"
@@ -97,7 +97,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:" OPTION ; do
       else
         msg="=> FAILED: post-install file $OPT_POSTINSTALLFILE not found or not executable"
         debug "$msg"
-        echo "${RED}$msg${NOCOL}"
+        echo -e "${RED}$msg${NOCOL}"
         exit 1
       fi
       debug "# use post-install file $OPT_POSTINSTALLFILE"
@@ -226,7 +226,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:" OPTION ; do
      else
         msg="=> FAILED: cannot install ssh-keys without a source"
         debug "$msg"
-        echo "${RED}$msg${NOCOL}"
+        echo -e "${RED}$msg${NOCOL}"
         exit 1
      fi
      ;;
@@ -244,7 +244,7 @@ fi
 if [ "$OPT_USE_SSHKEYS" -a -z "$OPT_SSHKEYS_URL" ]; then
         msg="=> FAILED: Should install SSH keys, but key URL not set."
         debug "$msg"
-        echo "${RED}$msg${NOCOL}"
+        echo -e "${RED}$msg${NOCOL}"
         exit 1
 fi
 
