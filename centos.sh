@@ -419,7 +419,7 @@ randomize_cpanel_mysql_passwords() {
       echo 'systemctl stop mysql.service'
     } > "${helper_script}"
     chmod a+x "${helper_script}"
-    execute_command_within_a_systemd_nspawn_container "/helper.sh"; EXITCODE=$?
+    execute_nspawn_command "/helper.sh"; EXITCODE=$?
     rm -rf "$override_dir"
   fi
 

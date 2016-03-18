@@ -32,7 +32,7 @@ BOOTLOADER=""
 GOVERNOR=""
 # this var is probably not used anymore. keep it for safety
 #SFDISKPARTS=""
-COUNT_DRIVES="0"
+COUNT_DRIVES=0
 # this var is probably not used anymore. keep it for safety
 #LAST_PART_START=""
 # this var is probably not used anymore. keep it for safety
@@ -3244,7 +3244,7 @@ create_hostname() {
 }
 
 # Executes a command within a systemd-nspawn container <command>
-execute_command_within_a_systemd_nspawn_container() {
+execute_nspawn_command() {
   local command="${1}"
 
   local mount_point_blacklist=/dev
@@ -3421,7 +3421,7 @@ install_plesk() {
   COMPONENTLIST="$(for component in $COMPONENTS; do echo -n "--install-component $component "; done)"
  
   if readlink --canonicalize /sbin/init | grep --quiet systemd && readlink --canonicalize $FOLD/hdd/sbin/init | grep --quiet systemd; then
-    execute_command_within_a_systemd_nspawn_container "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
+    execute_nspawn_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
   else
     execute_chroot_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
   fi
