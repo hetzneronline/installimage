@@ -44,7 +44,7 @@ format_partitions() {
 # extract image file to hdd
 extract_image() {
   local COMPRESSION=""
-  if [ "$1" -a "$2" ]; then
+  if [ -n "$1" ] && [ -n "$2" ]; then
     case "$2" in
       bin)
         COMPRESSION=""
@@ -235,25 +235,25 @@ EOF
 
 # copy_ssh_keys $OPT_SSHKEYS_URL 
 copy_ssh_keys() {
-   if [ -n "$1" ]; then
-     local key_url="$1"
-     echo "ssh_authorized_keys:" >> "$CLOUDINIT"
-     case $key_url in
-       https:*|http:*|ftp:*)
-         wget "$key_url" -O "$FOLD/authorized_keys"
-         while read -r line; do
-           echo -e "  - $line" >> "$CLOUDINIT"
-         done < "$FOLD/authorized_keys"
-       ;;
-       *)
+  if [ -n "$1" ]; then
+    local key_url="$1"
+    echo "ssh_authorized_keys:" >> "$CLOUDINIT"
+    case $key_url in
+      https:*|http:*|ftp:*)
+        wget "$key_url" -O "$FOLD/authorized_keys"
+        while read -r line; do
+          echo -e "  - $line" >> "$CLOUDINIT"
+        done < "$FOLD/authorized_keys"
+      ;;
+      *)
         while read -r line; do
           echo "  - $line" >> "$CLOUDINIT"
         done < "$key_url"
-       ;;
-     esac
-   else
-     return 1
-   fi
+      ;;
+    esac
+  else
+    return 1
+  fi
 }
 
 
