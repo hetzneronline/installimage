@@ -31,6 +31,7 @@ setup_network_config() {
       echo "# Loopback device:"
       echo "auto lo"
       echo "iface lo inet loopback"
+      echo "iface lo inet6 loopback"
       echo ""
     } > "$CONFIGFILE"
 

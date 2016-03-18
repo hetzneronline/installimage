@@ -22,6 +22,8 @@ setup_network_config() {
       printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
     } > "$UDEVFILE"
 
+    [ -d "$FOLD/hdd/etc/systemd/network" ] && rm -f "$FOLD"/hdd/etc/systemd/network/*
+
     if [ "$IMG_VERSION" -lt 1510 ]; then
       CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
 
@@ -30,6 +32,7 @@ setup_network_config() {
         echo "# Loopback device:"
         echo "auto lo"
         echo "iface lo inet loopback"
+        echo "iface lo inet6 loopback"
         echo ""
       } > "$CONFIGFILE"
       if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
