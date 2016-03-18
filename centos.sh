@@ -38,10 +38,10 @@ setup_network_config() {
 
     {
       echo "### $COMPANY - installimage"
-      echo "#" 
+      echo "#"
     } > "$CONFIGFILE"
 
-    if ! is_private_ip "$3"; then 
+    if ! is_private_ip "$3"; then
       {
         echo "# Note for customers who want to create bridged networking for virtualisation:"
         echo "# Gateway is set in separate file"
@@ -310,12 +310,7 @@ generate_config_grub() {
     echo "" >> "$BFILE"
 
     uuid_bugfix
-  # TODO: let grubby add its own stuff (SYSFONT, LANG, KEYTABLE)
-#  if [ $IMG_VERSION -lt 60 ] ; then 
-#   execute_chroot_command "/sbin/new-kernel-pkg --package kernel --install $VERSION"; EXITCODE=$?
-#  else 
-#   execute_chroot_command "/sbin/new-kernel-pkg --install $VERSION"; EXITCODE=$?
-#  fi
+  # TODO: add grubby stuff (SYSFONT, LANG, KEYTABLE)
   else
     if isVServer; then
       execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto elevator=noop\"/"'
@@ -323,7 +318,7 @@ generate_config_grub() {
       execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto\"/"'
     fi
 
-    [ -e "$FOLD/hdd/boot/grub2/grub.cfg" ] && rm "$FOLD/hdd/boot/grub2/grub.cfg"
+    rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
     execute_chroot_command "grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1"; declare -i EXITCODE="$?"
 
   fi
