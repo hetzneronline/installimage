@@ -718,7 +718,6 @@ if [ "$1" ]; then
     # "all" as size (otherwise we would count twice: SIZE of VG + SIZE of LVs of VG)
     if [ "${LVM_LV_SIZE[$i]}" != "all" ] && [ "${LVM_LV_VG_SIZE[$i]}" == "all" ]; then
       PARTS_SUM_SIZE=$(( ${LVM_LV_SIZE[$i]} + PARTS_SUM_SIZE ))
-      PARTS_SUM_SIZE=$(( ${LVM_LV_SIZE[$i]} + PARTS_SUM_SIZE ))
     fi
     if [ "${LVM_LV_MOUNT[$i]}" = "/" ]; then
       HASROOT="true"
