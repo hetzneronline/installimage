@@ -122,7 +122,7 @@ generate_config_mdadm() {
 
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
 
     # pick the latest kernel
     VERSION="$(find "$FOLD/hdd/boot/" -name "vmlinuz-*" | cut -d '-' -f 2- | sort -V | tail -1)"
@@ -175,14 +175,14 @@ generate_new_ramdisk() {
       } > "$dracutfile"
     fi
 
-    if [ "$IMG_VERSION" -ge 70 ] ; then 
+    if [ "$IMG_VERSION" -ge 70 ] ; then
       execute_chroot_command "/sbin/dracut -f --kver $VERSION"
       declare -i EXITCODE=$?
     else
-      if [ "$IMG_VERSION" -ge 60 ] ; then 
+      if [ "$IMG_VERSION" -ge 60 ] ; then
         execute_chroot_command "/sbin/new-kernel-pkg --mkinitrd --dracut --depmod --install $VERSION"
         declare -i EXITCODE=$?
-      else 
+      else
         execute_chroot_command "/sbin/new-kernel-pkg --package kernel --mkinitrd --depmod --install $VERSION"
         declare -i EXITCODE=$?
       fi
@@ -292,7 +292,7 @@ generate_config_grub() {
     # and causes problems with Intel 82574L NICs (onboard-NIC Asus P8B WS - EX6/EX8, addon NICs)
     lspci -n | grep -q '8086:10d3' && aspm='pcie_aspm=off' || aspm=''
 
-    if [ "$IMG_VERSION" -ge 60 ]; then 
+    if [ "$IMG_VERSION" -ge 60 ]; then
       echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE rd_NO_LUKS rd_NO_DM nomodeset $elevator $aspm" >> "$BFILE"
     else
       echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE nomodeset" >> "$BFILE"
@@ -331,7 +331,7 @@ write_grub() {
     for ((i=1; i<=COUNT_DRIVES; i++)); do
       if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
         local disk; disk="$(eval echo "\$DRIVE"$i)"
-        execute_chroot_command "grub2-install --no-floppy --recheck $disk 2>&1" 
+        execute_chroot_command "grub2-install --no-floppy --recheck $disk 2>&1"
         declare -i EXITCODE=$?
       fi
     done
@@ -368,7 +368,7 @@ run_os_specific_functions() {
 
   # selinux autorelabel if enabled
   egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux" &&
-  touch "$FOLD/hdd/.autorelabel"
+    touch "$FOLD/hdd/.autorelabel"
 
   return 0
 }
@@ -386,7 +386,7 @@ randomize_cpanel_mysql_passwords() {
   local cphulkdconf; cphulkdconf="$FOLD/hdd/var/cpanel/hulkd/password"
   local cphulkdpass; cphulkdpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c16)
   local rootpass; rootpass=$(tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c8)
-  local mysqlcommand; 
+  local mysqlcommand;
   mysqlcommand="UPDATE mysql.user SET password=PASSWORD('$cphulkdpass') WHERE user='cphulkd'; \
     UPDATE mysql.user SET password=PASSWORD('$rootpass') WHERE user='root'; \
     FLUSH PRIVILEGES;"

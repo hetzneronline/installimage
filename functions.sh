@@ -571,9 +571,6 @@ create_config() {
 
 getdrives() {
   local DRIVES;
-#  local DRIVES="$(sfdisk -s 2>/dev/null | sort -u | grep -e "/dev/[hsv]d" | cut -d: -f1)"
-#  DRIVES="$(ls -1 /sys/block | egrep 'nvme[0-9]n[0-9]$|[hsv]d[a-z]$')"
-# this should be better;
   DRIVES="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n')"
   local i=1
 
@@ -684,11 +681,11 @@ if [ "$1" ]; then
       HASROOT="true"
     fi
   done < /tmp/part_lines.tmp
-  
+
   # get LVM volume group config
   LVM_VG_COUNT="$(egrep -c '^PART *lvm ' "$1")"
   LVM_VG_ALL="$(egrep '^PART *lvm ' "$1")"
-  
+
   # void the check var
   LVM_VG_CHECK=""
   for ((i=1; i<=LVM_VG_COUNT; i++)); do
@@ -697,12 +694,12 @@ if [ "$1" ]; then
     LVM_VG_PART[$i]=$(echo "$PART_LINES" | egrep -n '^PART *lvm ' | head -n$i | tail -n1 | cut -d: -f1)
     LVM_VG_NAME[$i]="$(echo "$LVM_VG_LINE" | awk '{print $3}')"
     LVM_VG_SIZE[$i]="$(translate_unit "$(echo "$LVM_VG_LINE" | awk '{print $4}')")"
-    
+
     if [ "${LVM_VG_SIZE[$i]}" != "all" ] ; then
       LVM_VG_CHECK="$i $LVM_VG_CHECK"
     fi
   done
-  
+
   # get LVM logical volume config
   LVM_LV_COUNT="$(grep -c -e "^LV " "$1")"
   LVM_LV_ALL="$(grep -e "^LV " "$1")"
@@ -723,12 +720,10 @@ if [ "$1" ]; then
       HASROOT="true"
     fi
   done
-  
-  
 
   # is LVM activated?
   [ "$LVM_VG_COUNT" != "0" -a "$LVM_LV_COUNT" != "0" ] && LVM="1" || LVM="0"
-  
+
 
   IMAGE="$(grep -m1 -e ^IMAGE "$1" | awk '{print $2}')"
   [ -e "$wd/$IMAGE" ] && IMAGE="$wd/$IMAGE"
@@ -762,7 +757,7 @@ if [ "$1" ]; then
   SYSTEMDEVICE="$DRIVE1"
   # this var appear to be unused. keep it for safety
   #SYSTEMREALDEVICE="$DRIVE1"
-  
+
 fi
 }
 
@@ -771,33 +766,33 @@ fi
 # validate_vars "CONFIGFILE"
 validate_vars() {
  if [ "$1" ]; then
-  
+
   read_vars "$1"
 
   # test if IMAGEPATH is given
   if [ -z "$IMAGE_PATH" ]; then
    graph_error "ERROR: No valid IMAGEPATH"
-   return 1  
+   return 1
   fi
-  
+
   # test if PATHTYPE is a supported type
   CHECK="$(echo $IMAGE_PATH_TYPE |grep -i -e "^http$\|^nfs$\|^local$")"
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: No valid PATHTYPE"
-   return 1  
+   return 1
   fi
-  
+
   # test if IMAGEFILE is given
   if [ -z "$IMAGE_FILE" ]; then
    graph_error "ERROR: No valid IMAGEFILE"
-   return 1  
+   return 1
   fi
-  
+
   # test if FILETYPE is a supported type
   CHECK="$(echo $IMAGE_FILE_TYPE |grep -i -e "^tar$\|^tgz$\|^tbz$\|^txz$\|^bin$\|^bbz$")"
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images"
-   return 1  
+   return 1
   fi
 
   whoami "$IMAGE_FILE"
@@ -808,14 +803,14 @@ validate_vars() {
     graph_error "ERROR: Value for DRIVE1 is not correct: $DRIVE1 "
     return 1
   fi
-  
+
   # test if $DRIVE1 is not busy
 #  CHECK="$(hdparm -z $DRIVE1 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
 #  if [ "$CHECK" ]; then
 #    graph_error "ERROR: DRIVE1 is busy - cannot access device $DRIVE1 "
 #    return 1
 #  fi
-  
+
   # test if $SWRAID has not 0 or 1 as parameter
   if [ "$SWRAID" != "0" -a "$SWRAID" != "1" ]; then
     graph_error "ERROR: Value for SWRAID is not correct"
@@ -939,7 +934,7 @@ validate_vars() {
     fi
   done
 
-  
+
   # test if /boot or / is mounted outside the LVM
   if [ "$LVM" = "1" ]; then
     TMPCHECK=0
@@ -995,21 +990,21 @@ validate_vars() {
   WARNBTRFS=0 
     # test each partition line
     for ((i=1; i<=PART_COUNT; i++)); do
-    
+
       # test if the mountpoint is valid (start with / or swap or lvm)
       CHECK="$(echo "${PART_MOUNT[$i]}" | grep -e "^none\|^/\|^swap$\|^lvm$")"
       if [ -z "$CHECK" ]; then
         graph_error "ERROR: Mountpoint for partition $i is not correct"
         return 1
       fi
-      
+
       # test if the filesystem is one of our supportet types (btrfs/ext2/ext3/ext4/reiserfs/xfs/swap)
       CHECK="$(echo "${PART_FS[$i]}" |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^lvm$")"
       if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
         graph_error "ERROR: Filesystem for partition $i is not correct"
         return 1
       fi
-      
+
       if [ "${PART_FS[$i]}" = "reiserfs" -a "$IAM" = "centos" ]; then
         graph_error "ERROR: centos doesn't support reiserfs"
         return 1
@@ -1031,20 +1026,20 @@ validate_vars() {
         graph_error "ERROR: CentOS older than 6.2 doesn't support btrfs"
         return 1
       fi
-      
+
       # test if "all" is at the last partition entry
       ### TODO: correct this for LVM
       if [ "${PART_SIZE[$i]}" = "all" -a "$i" -lt "$PART_COUNT" ]; then
         graph_error "ERROR: Partition size \"all\" has to be on the last partition"
         return 1
       fi
-   
+
       # Check if the partition size is a valid number
       if [ "${PART_SIZE[$i]}" != "all" -a "$(echo "${PART_SIZE[$i]}" | sed "s/[0-9]//g")" != "" -o "${PART_SIZE[$i]}" = "0" ]; then
         graph_error "ERROR: The size of the partiton PART ${PART_MOUNT[$i]} is not a valid number"
         return 1
       fi
-	
+
 
       # check if /boot partition has at least 200M
       if [ "${PART_MOUNT[$i]}" = "/boot" -a "${PART_SIZE[$i]}" != "all" ]; then
@@ -1067,7 +1062,7 @@ validate_vars() {
           graph_error "ERROR: /boot partiton will not work properly with xfs"
           return 1
         fi
-      
+
         if [ "${PART_MOUNT[$i]}" = "/" -a "${PART_FS[$i]}" = "xfs" ]; then
           TMPCHECK="0"
           if [ "$IAM" = "centos"  -a "$IMG_ARCH" = "32" ]; then
@@ -1085,16 +1080,16 @@ validate_vars() {
           fi
         fi
       fi
-    
+
     done
     if [ "$WARNBTRFS" = "1" ]; then
-	graph_notice "WARNING: the btrfs filesystem is still under development. Data loss may occur!"
+      graph_notice "WARNING: the btrfs filesystem is still under development. Data loss may occur!"
     fi
   else
    graph_error "ERROR: The config has no partitions"
    return 1
   fi
-  
+
 
   # test if there are lvs in the configfile
   if [ "$LVM_VG_COUNT" -gt "0" ]; then
@@ -1114,13 +1109,13 @@ validate_vars() {
   CHECK="$(echo $BOOTLOADER |grep -i -e "^grub$\|^lilo$")"
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: No valid BOOTLOADER"
-   return 1  
+   return 1
   fi
-  
+
   if [ "$BOOTLOADER" = "lilo" ]; then
     if [ "$IAM" = "arch" ] ||
        [ "$IAM" = "coreos" ] ||
-       [ "$IAM" = "centos" ] || 
+       [ "$IAM" = "centos" ] ||
        [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] || 
        [ "$IAM" = "debian" -a "$IMG_VERSION" -ge 70 ] || 
        [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 122 ]; then
@@ -1128,24 +1123,24 @@ validate_vars() {
          return 1
     fi
   fi
-  
+
 
   CHECK=$(echo $GOVERNOR |grep -i -e "^powersave$\|^performance$\|^ondemand$")
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: No valid GOVERNOR"
-   return 1  
+   return 1
   fi
-  
-  
+
+
   # LVM checks
   if [ "$LVM" = "0" -a "$LVM_VG_COUNT" != "0" ] ; then
     graph_error "ERROR: There are volume groups defined, but no logical volumes are defined"
-    return 1  
+    return 1
   fi
 
   if [ "$LVM" = "0" -a "$LVM_LV_COUNT" != "0" ] ; then
     graph_error "ERROR: There are logical volumes defined, but no volume groups are defined"
-    return 1  
+    return 1
   fi
 
   for lv_id in $(seq 1 $LVM_LV_COUNT) ; do
@@ -1153,7 +1148,7 @@ validate_vars() {
     lv_mountp="${LVM_LV_MOUNT[$lv_id]}"
     lv_fs="${LVM_LV_FS[$lv_id]}"
     lv_vg="${LVM_LV_VG[$lv_id]}"
-    
+
 
     # test if the mountpoint is valid (start with / or swap)
     CHECK="$(echo $lv_mountp | grep -e "^/\|^swap$")"
@@ -1161,7 +1156,7 @@ validate_vars() {
       graph_error "ERROR: Mountpoint for LV '${LVM_LV_NAME[$lv_id]}' is not correct"
       return 1
     fi
-    
+
     # test if the filesystem is one of our supportet types (ext2/ext3/reiserfs/xfs/swap)
     CHECK="$(echo $lv_fs |grep -e "^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$")"
     if [ -z "$CHECK" ]; then
@@ -1186,12 +1181,12 @@ validate_vars() {
 #      graph_error "ERROR: centos doesn't support xfs on partition /"
 #      return 1
 #    fi
-    
+
     if [ "$lv_size" != "all" -a "$(echo "$lv_size" | sed "s/[0-9]//g")" != "" -o "$lv_size" = "0" ]; then
       graph_error "ERROR: size of LV '${LVM_LV_NAME[$lv_id]}' is not a valid number"
       return 1
     fi
-    
+
     if [ "$lv_mountp" = "/" -a "$lv_size" != "all" ]; then
       if [ "$lv_size" -lt "1500" ]; then
         graph_error "ERROR: Your / partition has to be at least 1500M"
@@ -1250,18 +1245,18 @@ validate_vars() {
         sum_size=$[$sum_size + ${LVM_LV_SIZE[$lv_id]}]
       fi
     done
-    
+
     if [ $vg_size -lt $sum_size ] ; then
       graph_error "ERROR: You are going to use more space than your VG $vg_name has available."
       return 1
     fi
-    
+
   done
-  
+
   #check for identical mountpoints listed in "PART" and "LV"
 
   local mounts_as_string=""
-  
+
   # list all mountpoints without the 'lvm' and 'swap' keyword
   for i in $(seq 1 $PART_COUNT); do
       if [ ${PART_MOUNT[$i]} != "lvm" -a ${PART_MOUNT[$i]} != "swap" ]; then
@@ -1302,12 +1297,12 @@ validate_vars() {
                  \nDiff: $diff MiB"
     return 1
   fi
-  
+
   if [ "$HASROOT" != "true" ]; then
     graph_error "ERROR: You dont have a partition for /"
     return 1
   fi
-  
+
   if [ "$OPT_INSTALL" ]; then
     if [ $(echo $OPT_INSTALL | grep -i "PLESK") ]; then
         if [ "$IAM" != "centos" -a "$IAM" != "debian" ]; then
@@ -1340,7 +1335,7 @@ validate_vars() {
       fi
     fi
   fi
-  
+
   if [ "$BOOTLOADER" == "lilo" ]; then
     graph_notice "WARNING: Lilo is deprecated and no longer supported. Please consider using grub"
   fi
@@ -1469,7 +1464,7 @@ stop_lvm_raid() {
   test -x /etc/init.d/lvm2 && /etc/init.d/lvm2 stop &>/dev/null
 
   dmsetup remove_all > /dev/null 2>&1
-  
+
   test -x "$(which mdadm)" && for i in $(cat /proc/mdstat | grep md | cut -d ' ' -f1); do
     [ -e /dev/$i ] && mdadm -S /dev/$i >> /dev/null 2>&1
   done
@@ -1555,7 +1550,7 @@ function get_end_of_partition {
   if [ "$SWRAID" -eq "1" ] && [ $DEVSIZE -gt $smallest_hdd_space ]; then
     DEV=$smallest_hdd
   fi
-  
+
   local LAST=$(blockdev --getsize64 $DEV)
   # make the partition at least 1 MiB if all else fails
   local END=[$START+1048576]
@@ -1754,7 +1749,7 @@ create_partitions() {
 #    LAST_PART_START="$(parted -s $1 unit s print | tail -n 2 | head -n 1 | awk '{print$2}' | rev | cut -c 2- | rev)"
 #    LAST_PART_END="$(parted -s $1 unit s print | tail -n 2 | head -n 1 | awk '{print$3}' |rev | cut -c 2- | rev)"
 #    DISK_SIZE_SECTORS="$(parted -s $1 unit s print | grep Disk | awk '{print$3}' | rev | cut -c 2- | rev)"
-  
+
 #    SECTOR_DIFF=$((DISK_SIZE_SECTORS-LAST_PART_END))
 
 #    if [ "$SWRAID" = "1" ]; then
@@ -1777,7 +1772,7 @@ create_partitions() {
   echo "deactivate all dm-devices with dmraid and dmsetup" | debugoutput
   dmraid -a no 2>&1 | debugoutput
   dmsetup remove_all 2>&1 | debugoutput
-  
+
  return $EXITCODE
  fi
 }
@@ -1837,7 +1832,7 @@ make_swraid() {
     fstab=$1
 
     dmsetup remove_all
-	
+
     count=0
     PARTNUM=0
     LASTDRIVE="$(eval echo \$DRIVE${COUNT_DRIVES})"
@@ -1876,7 +1871,7 @@ make_swraid() {
         fi
     fi
     [ "$IAM" == "suse" -a "$IMG_VERSION" -lt 123 ] && metadata="--metadata=0.90"
-    
+
     while read line ; do
       PARTNUM="$(next_partnum $count)"
       echo "Line is: \"$line\"" | debugoutput
@@ -1890,7 +1885,7 @@ make_swraid() {
 
       # create raid array
       if echo $line | grep $LASTDRIVE >/dev/null ; then
-        
+
         local raid_device="/dev/md/$count"
         local components=""
         local n=0
@@ -2019,7 +2014,7 @@ make_lvm() {
       fi
 
       debug "# Creating LV $vg/$lv ($size MiB)"
-      lvcreate --name $lv --size $size $vg 2>&1 | debugoutput
+      lvcreate --yes --name $lv --size $size $vg 2>&1 | debugoutput
       test $? -eq 0 || return 1
     done
 
@@ -2043,7 +2038,7 @@ format_partitions() {
     DEV="$1"
     FS="$2"
     EXITCODE=0
-      
+
     # reread partition table after some break
     sleep 4
     hdparm -z $1 >/dev/null 2>/dev/null
@@ -2077,7 +2072,7 @@ mount_partitions() {
   if [ "$1" -a "$2" ]; then
     fstab="$1"
     basedir="$2"
-    
+
     ROOTDEVICE="$(cat $fstab | grep " / " | cut -d " " -f 1)"
     SYSTEMROOTDEVICE="$ROOTDEVICE"
     SYSTEMBOOTDEVICE="$SYSTEMROOTDEVICE"
@@ -2260,10 +2255,10 @@ validate_image() {
         # image file valid
         return 0
       else
-	    # image file not valid
+       # image file not valid
         return 1
       fi
-    else  
+    else
       # no detached sign found
       return 2
     fi
@@ -3121,7 +3116,7 @@ generate_config_lilo() {
     echo -e "  initrd=/boot/initrd-$VERSION" >> $BFILE
   fi
   echo -e "" >> $BFILE
- 
+
 
     return 0
   fi
@@ -3227,7 +3222,7 @@ create_hostname() {
   SECOND="$(echo $1 | cut -d '.' -f 2)"
   THIRD="$(echo $1 | cut -d '.' -f 3)"
   FOURTH="$(echo $1 | cut -d '.' -f 4)"
-  
+
   if [ -z "$FIRST" -o -z "$SECOND" -o -z "$THIRD" -o -z "$FOURTH" ]; then
     return 1
   fi
@@ -3236,7 +3231,7 @@ create_hostname() {
   else
     GENERATEDHOSTNAME="static.$FIRST-$SECOND-$THIRD-$FOURTH.clients.your-server.de"
   fi
-  
+
   echo $GENERATEDHOSTNAME
   return 0
 
@@ -3366,7 +3361,7 @@ check_plesk_subversion() {
   latest_release="$(echo -e "$output" | grep "PLESK_${main_version}" | head -n1 | awk '{print $2}')"
 
   [ -n "$latest_release" ] && echo "$latest_release"
-    
+
 }
 
 #
@@ -3379,7 +3374,7 @@ install_plesk() {
   # we need the installer first
   wget http://mirror.hetzner.de/tools/parallels/plesk/$IMAGENAME -O $FOLD/hdd/pleskinstaller 2>&1 | debugoutput
   chmod a+x $FOLD/hdd/pleskinstaller >> /dev/null
-  
+
   # if there was no version specified, take our standard version
   if [ "$plesk_version" == "plesk" ]; then
     debug "install standard version"
@@ -3390,7 +3385,7 @@ install_plesk() {
     # check if we want a main version and should detect the latest subversion
     local main_version="${plesk_version#plesk_}"
     local latest_sub=""
-    
+
     [ -n "$main_version" ] && latest_sub="$(check_plesk_subversion "$main_version")"
     if [ -z "$latest_sub" ]; then
       echo "Could not determine latest subversion of Plesk $main_version"
@@ -3418,16 +3413,16 @@ install_plesk() {
   # COMPONENTS="common psa-autoinstaller mod-bw mod_phyton postfix ruby mailman horde psa-firewall spamassassin pmm bind"
   COMPONENTS="awstats bind config-troubleshooter dovecot drweb heavy-metal-skin horde l10n mailman mod-bw mod_fcgid mod_python mysqlgroup nginx panel php5.6 phpgroup pmm postfix proftpd psa-firewall roundcube spamassassin Troubleshooter webalizer web-hosting webservers"
   COMPONENTLIST="$(for component in $COMPONENTS; do echo -n "--install-component $component "; done)"
- 
+
   if readlink --canonicalize /sbin/init | grep --quiet systemd && readlink --canonicalize $FOLD/hdd/sbin/init | grep --quiet systemd; then
     execute_nspawn_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
   else
     execute_chroot_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
   fi
   rm -rf $FOLD/hdd/pleskinstaller >/dev/null 2>&1
-  
+
   return $EXITCODE
-  
+
 }
 
 install_omsa() {
@@ -3452,7 +3447,7 @@ install_omsa() {
     execute_chroot_command "mkdir -p /run/lock"
     execute_chroot_command "aptitude update >/dev/null"
     execute_chroot_command "aptitude --without-recommends -y install srvadmin-base srvadmin-idracadm srvadmin-idrac7"; EXITCODE=$?
-    return $EXITCODE  
+    return $EXITCODE
   elif [ "$IAM" = "centos" ]; then
     execute_chroot_command "yum -y install perl" 
     execute_chroot_command "wget -q -O - http://linux.dell.com/repo/hardware/latest/bootstrap.cgi | bash"
@@ -3462,7 +3457,7 @@ install_omsa() {
     return 0
   fi
   /etc/init.d/instsvcdrv start >/dev/null
-  
+
 }
 
 #
@@ -3496,7 +3491,7 @@ translate_unit() {
   echo "$1"
   return 0
 }
- 
+
 
 #
 # install_robot_script
@@ -3714,7 +3709,7 @@ function hdinfo() {
   if [ -e "/sys/block/$withoutdev/device/vendor" ]; then
     vendor="$(tr -d ' ' < "/sys/block/$withoutdev/device/vendor")"
   fi
-  
+
   case "$vendor" in
     LSI)
       logical_nr="$(find "/sys/block/$withoutdev/device/scsi_device/*" -maxdepth 0 -type d | cut -d: -f3)"
@@ -3749,7 +3744,7 @@ function isNegotiated() {
 for i in $(ifconfig -a | grep eth | cut -d " " -f 1); do
   if ip a show "$i" | grep -q "inet [1-9]"; then
     #check if we got autonegotiated
-    if mii-tool 2>/dev/null | grep -q "negotiated"; then
+    if echo $(mii-tool) 2>/dev/null | grep -q "negotiated"; then
       return 0
     else
       return 1
@@ -3823,7 +3818,7 @@ function part_test_size() {
 # if first param is "no_output" only correct size of "all" partition
 
 function check_dos_partitions() {
-  
+
   echo "check_dos_partitions" | debugoutput
   if [ "$FORCE_GPT" = "2" ] || [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 ] || [ "$BOOTLOADER" == "lilo" ]; then
     if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
@@ -3908,7 +3903,7 @@ function check_dos_partitions() {
       [ -z $result ] && result="PART_CHANGED_ALL"
     fi
   fi
-   
+
   for i in $(seq 1 $PART_COUNT); do
     if [ "${PART_SIZE[$i]}" == "all" ]; then
         PART_SIZE[$i]=$PART_ALL_SIZE
@@ -3979,7 +3974,7 @@ fix_eth_naming() {
        execute_chroot_command "sed -i 's/$1/eth0/g' $FILE"
      fi
    fi
- 
+
    # CentOS
    if [ "$IAM" = "centos" ]; then
      FILE="/etc/sysconfig/network-scripts/ifcfg-$1"
@@ -4014,7 +4009,7 @@ suse_netdev_fix() {
 # Workaround is to map the NICs to their own namespace (net0 instead of eth0)
 # until the fix is released
 # see https://bugzilla.novell.com/show_bug.cgi?id=809843
-    
+
     FILE_NET="/etc/sysconfig/network/ifcfg-eth0"
     FILE_NET_NEW="/etc/sysconfig/network/ifcfg-net0"
     execute_chroot_command "mv $FILE_NET $FILE_NET_NEW";

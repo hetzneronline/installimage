@@ -49,7 +49,7 @@ setup_network_config() {
           echo "  address   $3"
           echo "  netmask   $5"
           echo "  gateway   $6"
-          if ! is_private_ip "$3"; then 
+          if ! is_private_ip "$3"; then
             echo "  # default route to access subnet"
             echo "  up route add -net $7 netmask $5 gw $6 $1"
           fi
