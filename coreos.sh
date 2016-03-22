@@ -8,6 +8,8 @@
 # This file isn't ready for production!
 #
 
+# SCRIPTPATH will be exported in config.sh
+# shellcheck disable=SC2153
 export IMAGE_PUBKEY="$SCRIPTPATH/gpg/coreos-pubkey.asc"
 
 # create partitons on the given drive
@@ -209,7 +211,7 @@ set_ssh_rootlogin() {
      local permit="$1"
      case "$permit" in
        yes|no|without-password|forced-commands-only)
-        cat << EOF >> $CLOUDINIT
+        cat << EOF >> "$CLOUDINIT"
 write_files:
   - path: /etc/ssh/sshd_config
     permissions: 0600
@@ -238,11 +240,11 @@ copy_ssh_keys() {
   if [ -n "$1" ]; then
     local key_url="$1"
     echo "ssh_authorized_keys:" >> "$CLOUDINIT"
-    case $key_url in
+    case "$key_url" in
       https:*|http:*|ftp:*)
         wget "$key_url" -O "$FOLD/authorized_keys"
         while read -r line; do
-          echo -e "  - $line" >> "$CLOUDINIT"
+          echo "  - $line" >> "$CLOUDINIT"
         done < "$FOLD/authorized_keys"
       ;;
       *)
@@ -267,7 +269,7 @@ write_grub() {
 }
 
 add_coreos_oem_scripts() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
     local mntpath=$1
 
     # add netname simplify script (use eth names)
@@ -289,8 +291,8 @@ EOF
 
 INTERFACES=\$(ip link show | gawk -F ':' '/^[0-9]+/ { print \$2 }' | tr -d ' ' | sed 's/lo//')
 for iface in \${INTERFACES}; do
-	ip link set \${iface} down
-	udevadm test /sys/class/net/\${iface}
+  ip link set \${iface} down
+  udevadm test /sys/class/net/\${iface}
 done
 EOF
     chmod a+x "$scriptfile"

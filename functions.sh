@@ -86,7 +86,7 @@ echo_bold() {
 # generate_menu "SUBMENU"
 generate_menu() {
  # security check - just execute the function WITH parameters
- if [ "$1" ]; then
+ if [ -n "$1" ]; then
   # empty the menu
   MENULIST=""
   PROXMOX=false
@@ -131,11 +131,12 @@ generate_menu() {
   MENULIST="$MENULIST"'back . '
 
   # show menu and get result
+  # shellcheck disable=SC2086
   dialog --backtitle "$DIATITLE" --title "$1 images" --no-cancel --menu "choose image" 0 0 0 $MENULIST 2> "$FOLD/submenu.chosen"
   IMAGENAME=$(cat "$FOLD/submenu.chosen")
 
   # create proxmox post-install file if needed
-  case $IMAGENAME in 
+  case $IMAGENAME in
     Proxmox-Virtualization-Environment*)
       case "$IMAGENAME" in
         Proxmox-Virtualization-Environment-on-Debian-Wheezy) export PROXMOX_VERSION="3" ;;
@@ -189,7 +190,7 @@ create_config() {
       echo "##  HARD DISK DRIVE(S):"
       echo "## ===================="
       echo ""
-    }  >> "$CNF"
+    } >> "$CNF"
     [ $COUNT_DRIVES -gt 2 ] && echo "## PLEASE READ THE NOTES BELOW!" >> "$CNF"
     echo "" >> "$CNF"
 
@@ -248,7 +249,7 @@ create_config() {
         *) echo "SWRAID $DEFAULTSWRAID" >> "$CNF" ;;
       esac
 
-      echo "" >> "$CNF"
+      echo '' >> "$CNF"
 
       # available raidlevels
       local raid_levels="0 1 5 6 10"
@@ -287,23 +288,25 @@ create_config() {
       done
       [ -z "$set_level" ] && set_level="$default_level"
 
-      echo -e "## Choose the level for the software RAID < $avail_level >\n" >> "$CNF"
-      echo -e "SWRAIDLEVEL $set_level" >> "$CNF"
+      {
+        echo "## Choose the level for the software RAID < $avail_level >"
+        echo ""
+        echo "SWRAIDLEVEL $set_level"
+      } >> "$CNF"
     fi
-
 
     # bootloader
     # we no longer support lilo, so don't show this option if it isn't in the image
-    if [ "$IAM" = "arch" ] ||
-      [ "$IAM" = "coreos" ] ||
-      [ "$IAM" = "centos" ] ||
-      [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] ||
-      [ "$IAM" = "debian" -a "$IMG_VERSION" -ge 70 ] ||
-      [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 122 ]; then
+#    if [ "$IAM" = "arch" ] ||
+#      [ "$IAM" = "coreos" ] ||
+#      [ "$IAM" = "centos" ] ||
+#      [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] ||
+#      [ "$IAM" = "debian" -a "$IMG_VERSION" -ge 70 ] ||
+#      [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 122 ]; then
       NOLILO="true"
-    else
-      NOLILO=''
-    fi
+#    else
+#      NOLILO=''
+#    fi
 
     {
       echo ""
@@ -312,6 +315,7 @@ create_config() {
       echo "## ============"
       echo ""
     } >> "$CNF"
+
     if [ "$NOLILO" ]; then
       {
         echo ""
@@ -357,7 +361,6 @@ create_config() {
     [ "$OPT_HOSTNAME" ] && DEFAULT_HOSTNAME="$OPT_HOSTNAME"
     echo "HOSTNAME $DEFAULT_HOSTNAME" >> "$CNF"
     echo "" >> "$CNF"
-
 
     ## Calculate how much hardisk space at raid level 0,1,5,6,10
     RAID0=0
@@ -570,16 +573,16 @@ create_config() {
 }
 
 getdrives() {
-  local DRIVES;
-  DRIVES="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n')"
+  local drives;
+  drives="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n')"
   local i=1
 
   #cast drives into an array
-  DRIVES=( $DRIVES )
+  drives=( $drives )
 
-  for drive in ${DRIVES[*]} ; do
+  for drive in ${drives[*]} ; do
     # if we have just one drive, add it. Otherwise check that multiple drives are at least HDDMINSIZE
-    if [ ${#DRIVES[@]} -eq 1 ] || [ ! "$(fdisk -s "/dev/$drive" 2>/dev/null || echo 0)" -lt "$HDDMINSIZE" ] ; then
+    if [ ${#drives[@]} -eq 1 ] || [ ! "$(fdisk -s "/dev/$drive" 2>/dev/null || echo 0)" -lt "$HDDMINSIZE" ] ; then
       eval DRIVE$i="/dev/$drive"
       let i=i+1
     fi
@@ -594,13 +597,14 @@ getdrives() {
 # read all variables from config file
 # read_vars "CONFIGFILE"
 read_vars(){
-if [ "$1" ]; then
+if [ -n "$1" ]; then
   # count disks again, for setting COUNT_DRIVES correct after restarting installimage
   getdrives
 
   # special hidden configure option: create RAID1 and 10 with assume clean to
-  # avoid initial resync 
+  # avoid initial resync
   RAID_ASSUME_CLEAN="$(grep -m1 -e ^RAID_ASSUME_CLEAN "$1" |awk '{print $2}')"
+  export RAID_ASSUME_CLEAN
 
   # special hidden configure option: GPT usage
   # if set to 1, use GPT even on disks smaller than 2TiB
@@ -612,7 +616,7 @@ if [ "$1" ]; then
   FORCE_SIGN="$(grep -m1 -e ^FORCE_SIGN "$1" |awk '{print $2}')"
   export FORCE_SIGN
 
-  # hidden configure option:   
+  # hidden configure option:
   # if set to 1: force setting root password even if ssh keys are
   # provided
   FORCE_PASSWORD="$(grep -m1 -e ^FORCE_PASSWORD "$1" |awk '{print $2}')"
@@ -638,7 +642,7 @@ if [ "$1" ]; then
   done
 
   # get count of drives
-  COUNT_DRIVES="$((used_disks-1))"
+  COUNT_DRIVES=$((used_disks-1))
 
   # is RAID activated?
   SWRAID="$(grep -m1 -e ^SWRAID "$1" |awk '{print $2}')"
@@ -653,7 +657,7 @@ if [ "$1" ]; then
   PART_LINES="$(grep -e '^PART ' "$1")"
   echo "$PART_LINES" > /tmp/part_lines.tmp
   i=0
-  while read PART_LINE ; do
+  while read -r PART_LINE ; do
     i=$((i+1))
     PART_MOUNT[$i]="$(echo "$PART_LINE" | awk '{print $2}')"
     PART_FS[$i]="$(echo "$PART_LINE" | awk '{print $3}')"

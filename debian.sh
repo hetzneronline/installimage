@@ -82,7 +82,7 @@ setup_network_config() {
   fi
 }
 
-# generate_config_mdadmconf "NIL"
+# generate_config_mdadm "NIL"
 generate_config_mdadm() {
   local mdadmconf="/etc/mdadm/mdadm.conf"
   execute_chroot_command "/usr/share/mdadm/mkconf > $mdadmconf"; declare -i EXITCODE=$?
@@ -176,18 +176,12 @@ setup_cpufreq() {
 }
 
 #
-# generate_config_grub <version>
-#
 # Generate the GRUB bootloader configuration.
 #
 generate_config_grub() {
   declare -i EXITCODE=0
 
   local grubdefconf="$FOLD/hdd/etc/default/grub"
-
-  # do we still actually need this? grub-install should/will copy this, if not
-  # already present in image
-#  execute_chroot_command "mkdir -p /boot/grub/; cp -r /usr/lib/grub/* /boot/grub >> /dev/null 2>&1"
 
   # set linux_default in grub
   local grub_linux_default="nomodeset"
@@ -255,8 +249,7 @@ randomize_mdadm_checkarray_cronjob_time() {
     day=$(((RANDOM % 28) + 1))
     debug "# Randomizing cronjob run time for mdadm checkarray: day $day @ $hour:$minute"
 
-    sed -i -e "s/^[* 0-9]*root/$minute $hour $day * * root/" -e "s/ &&.*]//" \
-      "$mdcron"
+    sed -i -e "s/^[* 0-9]*root/$minute $hour $day * * root/" -e "s/ &&.*]//" "$mdcron"
   else
     debug "# No /etc/cron.d/mdadm found to randomize cronjob run time"
   fi
