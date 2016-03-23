@@ -3748,7 +3748,7 @@ function isNegotiated() {
 for i in $(ifconfig -a | grep eth | cut -d " " -f 1); do
   if ip a show "$i" | grep -q "inet [1-9]"; then
     #check if we got autonegotiated
-    if echo $(mii-tool) 2>/dev/null | grep -q "negotiated"; then
+    if echo $(mii-tool 2>/dev/null) | grep -q "negotiated"; then
       return 0
     else
       return 1
