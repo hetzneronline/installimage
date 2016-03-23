@@ -107,7 +107,7 @@ setup_network_config() {
   fi
 }
 
-# generate_mdadmconf "NIL"
+# generate_config_mdadm "NIL"
 generate_config_mdadm() {
   if [ -n "$1" ]; then
     local mdadmconf="/etc/mdadm.conf"
@@ -408,6 +408,7 @@ randomize_cpanel_mysql_passwords() {
     local helper_script=${FOLD}/hdd/helper.sh
     {
       echo '#!/usr/bin/env bash'
+      # shellcheck disable=SC2016
       echo 'trap "rm ${0}" EXIT'
       echo 'systemctl start mysql.service'
       echo 'echo ERROR > /tmp/buff'
