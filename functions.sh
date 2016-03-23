@@ -100,7 +100,7 @@ generate_menu() {
     RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Wheezy"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
-  elif [ "$1" = "old_images" ]; then
+  elif [ "$1" = "old images" ]; then
     # skip CPANEL images and signatures files from list
     RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n'|sort)
     FINALIMAGEPATH="$OLDIMAGESPATH"

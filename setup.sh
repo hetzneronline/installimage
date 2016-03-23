@@ -12,8 +12,8 @@
 
 # check if the script is temporary disabled due some maintenance or something
 debug "# checking if the script is disabled"
-if [ -f $DISABLEDFILE ]; then
- debug "=> script is DISABLED" 
+if [ -f "$DISABLEDFILE" ]; then
+ debug "=> script is DISABLED"
  echo_red "Due to maintenance the installimage-script is temporarily unavailable.\nWe are sorry for the inconvenience."
  exit 1
 fi
@@ -22,18 +22,18 @@ fi
 if [ "$OPT_AUTOMODE" ] ; then
 
   ### automatic mode ------------------------------------------------
-  
+
   debug "# AUTOMATIC MODE: start"
 
   # create config
   debug "# AUTOMATIC MODE: create config"
-  create_config $IMAGENAME ; EXITCODE=$?
+  create_config "$IMAGENAME" ; EXITCODE=$?
   if [ $EXITCODE != 0 ] ; then
     debug "=> FAILED"
     cleanup
     exit 1
   fi
-    
+
 
   # validate config
   VALIDATED="false"
@@ -49,15 +49,17 @@ if [ "$OPT_AUTOMODE" ] ; then
       VALIDATED="true"
     else
       debug "=> FAILED"
-      mcedit $FOLD/install.conf
+      mcedit "$FOLD/install.conf"
     fi
   done
 
   # display information about automatic mode
   echo -e "\n\033[01;32mStarting AUTOMATIC MODE\033[00m"
-  echo -e "\033[01;33mRunning unattended installimage installation ...\033[00m\n"
-  cat $FOLD/install.conf | grep -v "^#" | grep -v "^$"
-  echo -e "\n"
+  echo -e "\033[01;33mRunning unattended installimage installation ...\033[00m"
+  echo ""
+  grep -v "^#" "$FOLD/install.conf" | grep -v "^$"
+  echo ""
+  echo ""
 
   # print warning
   echo -e "\033[01;31mWARNING:"
@@ -66,16 +68,16 @@ if [ "$OPT_AUTOMODE" ] ; then
   echo -e "\033[01;31m  Installation will DELETE ALL DATA ON DISK(s)!"
   echo -e "\033[01;33m  Press CTRL-C to abort now!\033[00m"
   echo -n "  => "
-  for i in $(seq 1 20) ; do
+  for ((i=1; i<=20; i++)); do
     echo -n "."
-    read -t1 -n1 anykey
-    if [ "$anykey" = "x" -o "$anykey" = "X" ] ; then break ; fi
+    read -r -t1 -n1 anykey
+    if [ "$anykey" = "x" ] || [ "$anykey" = "X" ] ; then break ; fi
   done
   echo
 
   # start install
   debug "# AUTOMATIC MODE: start installation"
-  . $INSTALLFILE ; EXITCODE=$?
+  . "$INSTALLFILE" ; EXITCODE=$?
   [ $EXITCODE != 0 ] && debug "=> FAILED"
 
 else
@@ -93,29 +95,35 @@ else
       # display the image menu
       IMAGENAME=""
       debug "# starting menu..."
-      while [ -z "$IMAGENAME" -o "$IMAGENAME" = "back" ]; do
-        dialog --backtitle "$DIATITLE" --title "o/s list" --no-cancel --menu "choose o/s" 0 0 0 $OSMENULIST "exit" "" 2>$FOLD/mainmenu.chosen
-        MAINMENUCHOSEN=`cat $FOLD/mainmenu.chosen`
-        case $MAINMENUCHOSEN in
+      while [ -z "$IMAGENAME" ] || [ "$IMAGENAME" = "back" ]; do
+        OLDIFS="$IFS"
+        IFS=$'\n'
+
+        # we want $OSMENULIST to expand here
+        # shellcheck disable=SC2086
+        dialog --backtitle "$DIATITLE" --title "o/s list" --no-cancel --menu "choose o/s" 0 0 0 ${OSMENULIST[*]} "exit" "" 2>$FOLD/mainmenu.chosen
+        IFS="$OLDIFS"
+        MAINMENUCHOSEN=$(cat "$FOLD/mainmenu.chosen")
+        case "$MAINMENUCHOSEN" in
           "exit")
             debug "=> user exited from menu"
             cleanup
             exit 1
           ;;
-          "custom_image")
+          "custom image")
             IMAGENAME="custom"
           ;;
           *)
-            generate_menu $MAINMENUCHOSEN
+            generate_menu "$MAINMENUCHOSEN"
           ;;
         esac
       done
     fi
 
     debug "# chosen image: [ $IMAGENAME ]"
-    
+
     debug "# copy & create config..."
-    create_config $IMAGENAME; EXITCODE=$?
+    create_config "$IMAGENAME"; EXITCODE=$?
     if [ $EXITCODE != 0 ] ; then
       debug "=> FAILED"
       cleanup
@@ -131,7 +139,7 @@ else
     To accept all changes and continue the installation\n
     just save and exit the editor with F10.'
 
-    [ $COUNT_DRIVES -gt 1 ] && text=$text'\n\n\Z1  Please note!:  by default all disks are used for software raid\n
+    [ "$COUNT_DRIVES" -gt 1 ] && text=$text'\n\n\Z1  Please note!:  by default all disks are used for software raid\n
   change this to (SWRAID 0) if you want to leave your other harddisk(s)\n  untouched!\Zn'
 
     dialog --backtitle "$DIATITLE" --title " NOTICE " --colors --msgbox "$text" 14 75
@@ -139,8 +147,8 @@ else
     CANCELLED="false"
     while [ "$VALIDATED" = "false" ]; do
       debug "# starting mcedit..."
-      whoami $IMAGENAME
-      mcedit $FOLD/install.conf; EXITCODE=$?
+      whoami "$IMAGENAME"
+      mcedit "$FOLD/install.conf"; EXITCODE=$?
       [ $EXITCODE != 0 ] && debug "=> FAILED"
       debug "# validating vars..."
       validate_vars "$FOLD/install.conf"; EXITCODE=$?
@@ -157,23 +165,24 @@ else
     done
 
     if [ "$LVM" = "1" ]; then
-        graph_notice "Please note that ALL existing LVs and VGs will be removed during the installation!"       
+        graph_notice "Please note that ALL existing LVs and VGs will be removed during the installation!"
     fi
- 
 
-
-    
-    if [ "$CANCELLED" = "false" ]; then 
+    if [ "$CANCELLED" = "false" ]; then
       debug "# asking for confirmation..."
-      for i in $(seq 1 $COUNT_DRIVES) ; do
-        ask_format="$(eval echo \$FORMAT_DRIVE$i)"
-        ask_drive="$(eval echo \$DRIVE$i)"
-        if [ "$SWRAID" = "1" -o "$ask_format" = "1" -o $i -eq 1 ]; then
+      for ((i=1; i<=COUNT_DRIVES; i++)); do
+        ask_format="$(eval echo "\$FORMAT_DRIVE$i")"
+        ask_drive="$(eval echo "\$DRIVE$i")"
+        if [ "$SWRAID" = "1" ] || [ "$ask_format" = "1" ] || [ "$i" -eq 1 ]; then
           dialog --backtitle "$DIATITLE" --title "Confirmation" --colors --yesno "\n\Z1WARNING!: DATA ON THE FOLLOWING DRIVE WILL BE DELETED:\n\n $ask_drive\n\nDo you want to continue?\Zn\n" 0 0
           if [ $? -ne 0 ]; then
             debug "# Confirmation for drive $ask_drive NOT accepted"
             ACCEPTED=""
-            [ "$NOIMAGEMENU" ] && exit || break
+            if [ "$NOIMAGEMENU" ]; then
+              exit
+            else
+              break
+            fi
           else
             debug "# Confirmation for drive $ask_drive accepted"
             ACCEPTED="true"
@@ -185,8 +194,8 @@ else
 
 
   debug "# executing installfile..."
-  if [ -f $INSTALLFILE -a "$ACCEPTED" = "true" -a "$VALIDATED" = "true" -a "$IMAGENAME" ] ; then
-     . $INSTALLFILE ; EXITCODE=$?
+  if [ -f "$INSTALLFILE" ] && [ "$ACCEPTED" = "true" ] && [ "$VALIDATED" = "true" ] && [ -n "$IMAGENAME" ] ; then
+     . "$INSTALLFILE" ; EXITCODE=$?
   else
     debug "=> FAILED"
     echo -e "\n\033[01;31mERROR: Cant find files\033[00m"

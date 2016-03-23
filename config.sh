@@ -33,7 +33,7 @@ export C_SHORT="hetzner"
 
 export MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
 export STATSSERVER="213.133.99.103"
-export HDDMINSIZE="70000000"
+export HDDMINSIZE="7000000"
 
 export NAMESERVER=("213.133.98.98" "213.133.99.99" "213.133.100.100")
 export DNSRESOLVER_V6=("2a01:4f8:0:a111::add:9898" "2a01:4f8:0:a102::add:9999" "2a01:4f8:0:a0a1::add:1010")
@@ -59,14 +59,16 @@ export V6ONLY="0"
 
 # dialog settings
 export DIATITLE="$COMPANY"
-export OSMENULIST='Debian (official) '
-OSMENULIST=$OSMENULIST'Ubuntu (official) '
-OSMENULIST=$OSMENULIST'CentOS (official) '
-OSMENULIST=$OSMENULIST'openSUSE (official) '
-OSMENULIST=$OSMENULIST'Archlinux (!!NO_SUPPORT!!) '
-OSMENULIST=$OSMENULIST'Virtualization (!!NO_SUPPORT!!) '
-OSMENULIST=$OSMENULIST'old_images (!!NO_SUPPORT!!) '
-OSMENULIST=$OSMENULIST'custom_image (blanco_config_for_user_images) '
+export OSMENULIST=(
+"Debian"         "(official)"
+"Ubuntu"         "(official)"
+"CentOS"         "(official)"
+"openSUSE"       "(official)"
+"Archlinux"      "(!!NO_SUPPORT!!)"
+"Virtualization" "(!!NO_SUPPORT!!)"
+"old images"     "(!!NO_SUPPORT!!)"
+"custom image"   "(empty config for user images)"
+)
 
 export PROXMOX3_BASE_IMAGE="Debian-79-wheezy-64-minimal"
 export PROXMOX4_BASE_IMAGE="Debian-83-jessie-64-minimal"
