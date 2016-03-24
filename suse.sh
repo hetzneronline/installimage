@@ -9,12 +9,12 @@
 
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
 setup_network_config() {
-  if [ "$1" -a "$2" ]; then
+  if [ -n "$1" ] && [ -n "$2" ]; then
     # good we have a device and a MAC
 
     if [ -e "$FOLD/hdd/etc/os-release" ]; then
       SUSEVERSION="$(grep 'VERSION=' "$FOLD/hdd/etc/os-release" | cut -d '"' -f2 | sed -e 's/\.//')"
-    else 
+    else
       SUSEVERSION="$(grep VERSION "$FOLD/hdd/etc/SuSE-release" | cut -d ' '  -f3 | sed -e 's/\.//')"
     fi
     debug "# Version: ${SUSEVERSION}"
@@ -26,7 +26,7 @@ setup_network_config() {
       UDEVFILE="/dev/null"
     fi
     # Delete network udev rules
-#    rm $FOLD/hdd/etc/udev/rules.d/*-persistent-net.rules 2>&1 | debugoutput
+#    rm "$FOLD"/hdd/etc/udev/rules.d/*-persistent-net.rules 2>&1 | debugoutput
 
     {
       echo "### $COMPANY - installimage"
@@ -35,43 +35,49 @@ setup_network_config() {
     } > "$UDEVFILE"
 
     # remove any other existing config files
-    for i in `find "$FOLD/hdd/etc/sysconfig/network/" -name "*-eth*"`; do rm -rf "$i" >>/dev/null 2>&1; done
+    find "$FOLD/hdd/etc/sysconfig/network/" -name "*-eth*" -delete
 
     CONFIGFILE="$FOLD/hdd/etc/sysconfig/network/ifcfg-$1"
 
-    echo -e "### $COMPANY - installimage" > $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "# device: $1" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "BOOTPROTO='static'" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "MTU=''" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "STARTMODE='auto'" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "UNIQUE=''" >> $CONFIGFILE 2>>$DEBUGFILE
-    echo -e "USERCONTROL='no'" >> $CONFIGFILE 2>>$DEBUGFILE
+    {
+      echo "### $COMPANY - installimage"
+      echo "# device: $1"
+      echo "BOOTPROTO='static'"
+      echo "MTU=''"
+      echo "STARTMODE='auto'"
+      echo "UNIQUE=''"
+      echo "USERCONTROL='no'"
+    } > "$CONFIGFILE"
 
-    if [ "$1" -a "$2" -a "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
-      echo -e "REMOTE_IPADDR=''" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "BROADCAST='$4'" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "IPADDR='$3'" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "NETMASK='$5'" >> $CONFIGFILE 2>>$DEBUGFILE
-      echo -e "NETWORK='$7'" >> $CONFIGFILE 2>>$DEBUGFILE
+    if [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
+      {
+        echo "REMOTE_IPADDR=''"
+        echo "BROADCAST='$4'"
+        echo "IPADDR='$3'"
+        echo "NETMASK='$5'"
+        echo "NETWORK='$7'"
+      } >> "$CONFIGFILE"
 
-      echo -e "$7 $6 $5 $1" > $ROUTEFILE 2>>$DEBUGFILE
-      echo -e "$6 - 255.255.255.255 $1" >> $ROUTEFILE 2>>$DEBUGFILE
-      echo -e "default $6 - -" >> $ROUTEFILE 2>>$DEBUGFILE
+      {
+        echo "$7 $6 $5 $1"
+        echo "$6 - 255.255.255.255 $1"
+        echo "default $6 - -"
+      } > "$ROUTEFILE"
     fi
 
-    if [ "$8" -a "$9" -a "${10}" ]; then
+    if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
       debug "setting up ipv6 networking $8/$9 via ${10}"
-      if [ "$3" ]; then
-	# add v6 addr as an alias, if we have a v4 addr
-        echo -e "IPADDR_0='$8/$9'" >> $CONFIGFILE 2>>$DEBUGFILE
+      if [ -n "$3" ]; then
+        # add v6 addr as an alias, if we have a v4 addr
+        echo "IPADDR_0='$8/$9'" >> "$CONFIGFILE"
       else
-        echo -e "IPADDR='$8/$9'" >> $CONFIGFILE 2>>$DEBUGFILE
+        echo "IPADDR='$8/$9'" >> "$CONFIGFILE"
       fi
-      echo -e "default ${10} - $1" >> $ROUTEFILE 2>>$DEBUGFILE
-    fi 
+      echo "default ${10} - $1" >> "$ROUTEFILE"
+    fi
 
     if ! isNegotiated && ! isVServer; then
-      echo -e "ETHTOOL_OPTIONS=\"speed 100 duplex full autoneg off\"" >> $CONFIGFILE 2>>$DEBUGFILE
+      echo 'ETHTOOL_OPTIONS="speed 100 duplex full autoneg off"' >> "$CONFIGFILE"
     fi
 
     return 0
@@ -95,8 +101,6 @@ generate_config_mdadm() {
 generate_new_ramdisk() {
   [ "$1" ] || return 0
 
-  VERSION="$(find "$FOLD/hdd/boot/" -name "vmlinuz-*" | cut -d '-' -f 2- | sort -V | tail -1)"
-
   # blacklist i915
   local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
   {
@@ -106,7 +110,7 @@ generate_new_ramdisk() {
     echo 'blacklist i915'
   } > "$blacklist_conf"
 
-  if [ "$SUSEVERSION" -eq 132 -o "$SUSEVERSION" -eq 421 ]; then
+  if [ "$SUSEVERSION" -eq 132 ] || [ "$SUSEVERSION" -eq 421 ]; then
     # due to a bug within the 99suse dracut module an empty mduuid whitelist may be created
     # >  # mduuid
     # >  mduuid=$(getarg mduuid)
@@ -115,6 +119,7 @@ generate_new_ramdisk() {
     # >      echo "rd.md.uuid=$mduuid" >> /etc/cmdline.d/99-suse.conf
     # >      unset CMDLINE
     # >  fi
+    # shellcheck disable=SC2016
     sed -i 's/if \[ -n "$mduuid"\]; then/if [ -n "$mduuid" ]; then/g' "$FOLD/hdd/usr/lib/dracut/modules.d/99suse/parse-suse-initrd.sh"
   fi
 
@@ -125,7 +130,7 @@ generate_new_ramdisk() {
       sed -i 's/^NO_KMS_IN_INITRD=.*/NO_KMS_IN_INIRD="yes"/' "$f"
     fi
 #  elif [ "$SUSEVERSION" -ge 132 ]; then
-  else 
+  else
     local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
     {
       echo "### $COMPANY - installimage"
@@ -158,24 +163,18 @@ generate_new_ramdisk() {
   return $EXITCODE
 }
 
-
 setup_cpufreq() {
-  if [ "$1" ]; then
+  if [ -n "$1" ]; then
      # openSuSE defaults to the ondemand governor, so we don't need to set this at all
      # http://doc.opensuse.org/documentation/html/openSUSE/opensuse-tuning/cha.tuning.power.html
      # check release notes of furture releases carefully, if this has changed!
-     
-#    CPUFREQCONF="$FOLD/hdd/etc/init.d/boot.local"
-#    echo -e "### $COMPANY - installimage" > $CPUFREQCONF 2>>$DEBUGFILE
-#    echo -e "# cpu frequency scaling" >> $CPUFREQCONF 2>>$DEBUGFILE
-#    echo -e "cpufreq-set -g $1 -r >> /dev/null 2>&1" >> $CPUFREQCONF 2>>$DEBUGFILE
 
     return 0
   fi
 }
 
 #
-# generate_config_grub <version>
+# generate_config_grub
 #
 # Generate the GRUB bootloader configuration.
 #
@@ -242,7 +241,7 @@ write_grub() {
   for ((i=1; i<=COUNT_DRIVES; i++)); do
     if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
       local disk; disk="$(eval echo "\$DRIVE$i")"
-      execute_chroot_command "grub2-install --no-floppy --recheck $disk 2>&1" 
+      execute_chroot_command "grub2-install --no-floppy --recheck $disk 2>&1"
       declare -i EXITCODE=$?
     fi
   done
@@ -250,6 +249,7 @@ write_grub() {
 
   return "$EXITCODE"
 }
+
 #
 # os specific functions
 # for purpose of e.g. debian-sys-maint mysql user password in debian/ubuntu LAMP
