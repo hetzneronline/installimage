@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# OpenSUSE specific functions 
+# OpenSUSE specific functions
 #
 # (c) 2007-2016, Hetzner Online GmbH
 #

@@ -6,7 +6,6 @@
 # (c) 2008-2016, Hetzner Online GmbH
 #
 
-
 # read global variables and functions
 . /tmp/install.vars
 

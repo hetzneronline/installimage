@@ -60,14 +60,14 @@ export V6ONLY="0"
 # dialog settings
 export DIATITLE="$COMPANY"
 export OSMENULIST=(
-"Debian"         "(official)"
-"Ubuntu"         "(official)"
-"CentOS"         "(official)"
-"openSUSE"       "(official)"
-"Archlinux"      "(!!NO_SUPPORT!!)"
-"Virtualization" "(!!NO_SUPPORT!!)"
-"old images"     "(!!NO_SUPPORT!!)"
-"custom image"   "(empty config for user images)"
+"Debian"          "(official)"
+"Ubuntu"          "(official)"
+"CentOS"          "(official)"
+"openSUSE"        "(official)"
+"Archlinux"       "(!!NO SUPPORT!!)"
+"Virtualization"  "(!!NO SUPPORT!!)"
+"old images"      "(!!NO SUPPORT!!)"
+"custom image"    "(blanco config for user images)"
 )
 
 export PROXMOX3_BASE_IMAGE="Debian-79-wheezy-64-minimal"

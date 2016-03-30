@@ -6,7 +6,6 @@
 # (c) 2013-2016, Hetzner Online GmbH
 #
 
-
 # setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
 setup_network_config() {
   if [ -n "$1" ] && [ -n "$2" ]; then
@@ -114,7 +113,7 @@ setup_cpufreq() {
 }
 
 #
-# generate_config_grub <version>
+# generate_config_grub
 #
 # Generate the GRUB bootloader configuration.
 #
