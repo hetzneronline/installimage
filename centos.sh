@@ -262,6 +262,8 @@ generate_config_grub() {
   fi
 
   if [ "$IMG_VERSION" -lt 70 ] ; then
+    # we do add a symlink to boot because we always point to /boot/vmlinuz-*
+    # in the grub.conf below even if /boot is a separate partition
     execute_chroot_command "cd /boot; rm -rf boot; ln -s . boot >> /dev/null 2>&1"
     execute_chroot_command "mkdir -p /boot/grub/"
     #execute_chroot_command "grub-install --no-floppy $DRIVE1 2>&1"; EXITCODE=$?
