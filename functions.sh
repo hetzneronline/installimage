@@ -2377,7 +2377,7 @@ gather_network_information() {
 
 # setup_network_config "ETH" "HWADDR" "IPADDR" "BROADCAST" "SUBNETMASK" "GATEWAY" "NETWORK"
 setup_network_config() {
-  if [ "$1" -a "$2" -a "$3" -a "$4" -a "$5" -a "$6" -a "$7" ]; then
+  if [ "$1" ] && [ "$2" ] && [ "$3" ] && [ "$4" ] && [ "$5" ] && [ "$6" ] && [ "$7" ]; then
     return 1
   fi
 }
@@ -2528,7 +2528,7 @@ generate_resolvconf() {
 #      $FOLD/hdd/etc/sysconfig/network/config
 #    execute_chroot_command "netconfig update -f"
   fi
-#  else 
+#  else
     NAMESERVERFILE="$FOLD/hdd/etc/resolv.conf"
     echo -e "### $COMPANY installimage" > $NAMESERVERFILE
     echo -e "# nameserver config" >> $NAMESERVERFILE
@@ -3268,10 +3268,10 @@ execute_nspawn_command() {
   temp_files="${temp_files} ${temp_container_service_file}"
   temp_files="${temp_files} ${temp_umounted_mount_point_list}"
 
-  echo "Executing \"${command}\" within a systemd nspawn container" | debugoutput
+  echo "Executing '${command}' within a systemd nspawn container" | debugoutput
 
-  mkfifo ${temp_io_fifo}
-  mkfifo ${temp_retval_fifo}
+  mkfifo "${temp_io_fifo}"
+  mkfifo "${temp_retval_fifo}"
 
   ### ### ### ### ### ### ### ### ### ###
 
@@ -3311,42 +3311,40 @@ HEREDOC
 
   ### ### ### ### ### ### ### ### ### ###
 
-  touch ${temp_umounted_mount_point_list}
+  touch "${temp_umounted_mount_point_list}"
 
-  echo "Temporarily umounting blacklisted mount points in order to start the systemd nspawn container" | debugoutput
+  debug "Temporarily umounting blacklisted mount points in order to start the systemd nspawn container"
 
   while read entry; do
     for blacklisted_mount_point in ${mount_point_blacklist}; do
-      while read subentry; do
-        umount --verbose $(echo ${subentry} | awk '{ print $2 }') 2>&1 | debugoutput || return 1
-        echo ${subentry} | cat - ${temp_umounted_mount_point_list} | uniq --unique > ${temp_umounted_mount_point_list}2
-        mv ${temp_umounted_mount_point_list}2 ${temp_umounted_mount_point_list}
-      done < <(echo ${entry} | grep ${container_root_dir}${blacklisted_mount_point})
+      while read -r subentry; do
+        umount --verbose "$(echo "${subentry}" | awk '{ print $2 }')" 2>&1 | debugoutput || return 1
+        echo "${subentry}" | cat - "${temp_umounted_mount_point_list}" | uniq --unique > "${temp_umounted_mount_point_list}"2
+        mv "${temp_umounted_mount_point_list}"2 "${temp_umounted_mount_point_list}"
+      done < <(echo "${entry}" | grep "${container_root_dir}${blacklisted_mount_point}")
     done
-  done < <(cat /proc/mounts | tac -)
+  done < <(tac /proc/mounts)
 
-  echo "Starting the systemd nspawn container" | debugoutput
+  debug "Starting the systemd nspawn container"
 
   systemctl daemon-reload 2>&1 | debugoutput || return 1
-  systemctl start $(basename ${temp_container_service_file}) 2>&1 | debugoutput || return 1
+  systemctl start "$(basename ${temp_container_service_file})" 2>&1 | debugoutput || return 1
 
-  echo "${command}" > ${temp_io_fifo}
-  cat ${temp_io_fifo} | debugoutput
-  command_retval=$(cat ${temp_retval_fifo})
+  echo "${command}" > "${temp_io_fifo}"
+  debugoutput < "${temp_io_fifo}"
+  command_retval=$(cat "${temp_retval_fifo}")
 
-  while systemctl is-active $(basename ${temp_container_service_file}) &> /dev/null; do
+  while systemctl is-active "$(basename ${temp_container_service_file})" &> /dev/null; do
     sleep 2
   done
 
-  echo "The systemd nspawn container shut down" | debugoutput
+  debug "The systemd nspawn container shut down"
 
-  echo "Remounting temporarily umounted mount points" | debugoutput
+  debug "Remounting temporarily umounted mount points"
+  mount --all --fstab "${temp_umounted_mount_point_list}" --verbose 2>&1 | debugoutput || return 1
+  rm --force "${temp_files}"
 
-  mount --all --fstab ${temp_umounted_mount_point_list} --verbose 2>&1 | debugoutput || return 1
-
-  rm --force ${temp_files}
-
-  return ${command_retval}
+  return "${command_retval}"
 }
 
 # check for latest subversion of Plesk
@@ -3357,8 +3355,8 @@ check_plesk_subversion() {
 
   # test if pleskinstaller is already downloaded
   if [ ! -x "$FOLD/hdd/pleskinstaller" ] ; then
-    wget http://mirror.hetzner.de/tools/parallels/plesk/$IMAGENAME -O $FOLD/hdd/pleskinstaller 2>&1 | debugoutput
-    chmod a+x $FOLD/hdd/pleskinstaller >> /dev/null
+    wget "http://mirror.hetzner.de/tools/parallels/plesk/$IMAGENAME" -O "$FOLD/hdd/pleskinstaller" 2>&1 | debugoutput
+    chmod a+x "$FOLD/hdd/pleskinstaller" >> /dev/null
   fi
 
   output="$(execute_chroot_command_wo_debug "/pleskinstaller --select-product-id plesk --show-releases" 2>&1)"
@@ -3376,8 +3374,8 @@ install_plesk() {
   local plesk_version=$1
 
   # we need the installer first
-  wget http://mirror.hetzner.de/tools/parallels/plesk/$IMAGENAME -O $FOLD/hdd/pleskinstaller 2>&1 | debugoutput
-  chmod a+x $FOLD/hdd/pleskinstaller >> /dev/null
+  wget "http://mirror.hetzner.de/tools/parallels/plesk/$IMAGENAME" -O "$FOLD/hdd/pleskinstaller" 2>&1 | debugoutput
+  chmod a+x "$FOLD/hdd/pleskinstaller" >> /dev/null
 
   # if there was no version specified, take our standard version
   if [ "$plesk_version" == "plesk" ]; then
@@ -3405,7 +3403,7 @@ install_plesk() {
     # because there is no package and we would have to install via gem
     #
     # centos wants to have a fqdn for pleskinstallation
-    sed -i "s|$IMAGENAME|$IMAGENAME.yourdomain.localdomain $IMAGENAME|" $FOLD/hdd/etc/hosts
+    sed -i "s|$IMAGENAME|$IMAGENAME.yourdomain.localdomain $IMAGENAME|" "$FOLD/hdd/etc/hosts"
   fi
 
   if [ "$IAM" == "debian" -a "$IMG_VERSION" -ge 70 ]; then
@@ -3418,12 +3416,12 @@ install_plesk() {
   COMPONENTS="awstats bind config-troubleshooter dovecot drweb heavy-metal-skin horde l10n mailman mod-bw mod_fcgid mod_python mysqlgroup nginx panel php5.6 phpgroup pmm postfix proftpd psa-firewall roundcube spamassassin Troubleshooter webalizer web-hosting webservers"
   COMPONENTLIST="$(for component in $COMPONENTS; do echo -n "--install-component $component "; done)"
 
-  if readlink --canonicalize /sbin/init | grep --quiet systemd && readlink --canonicalize $FOLD/hdd/sbin/init | grep --quiet systemd; then
+  if readlink --canonicalize /sbin/init | grep --quiet systemd && readlink --canonicalize "$FOLD/hdd/sbin/init" | grep --quiet systemd; then
     execute_nspawn_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
   else
     execute_chroot_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
   fi
-  rm -rf $FOLD/hdd/pleskinstaller >/dev/null 2>&1
+  rm -rf "$FOLD/hdd/pleskinstaller" >/dev/null 2>&1
 
   return $EXITCODE
 
@@ -3444,8 +3442,8 @@ install_omsa() {
     if [ "$IAM" = "debian" ] && [ $IMG_VERSION -ge 70 ]; then
       codename="wheezy"
     fi
-    echo -e "\n# Community OMSA packages provided by linux.dell.com" >$REPOFILE
-    echo -e "deb http://linux.dell.com/repo/community/$IAM $codename openmanage\n" >>$REPOFILE
+    echo -e "\n# Community OMSA packages provided by linux.dell.com" > "$REPOFILE"
+    echo -e "deb http://linux.dell.com/repo/community/$IAM $codename openmanage\n" >> "$REPOFILE"
     execute_chroot_command "gpg --keyserver pool.sks-keyservers.net --recv-key 1285491434D8786F"
     execute_chroot_command "gpg -a --export 1285491434D8786F | apt-key add -"
     execute_chroot_command "mkdir -p /run/lock"
@@ -3453,9 +3451,9 @@ install_omsa() {
     execute_chroot_command "aptitude --without-recommends -y install srvadmin-base srvadmin-idracadm srvadmin-idrac7"; EXITCODE=$?
     return $EXITCODE
   elif [ "$IAM" = "centos" ]; then
-    execute_chroot_command "yum -y install perl" 
+    execute_chroot_command "yum -y install perl"
     execute_chroot_command "wget -q -O - http://linux.dell.com/repo/hardware/latest/bootstrap.cgi | bash"
-    execute_chroot_command "yum -y install srvadmin-base srvadmin-idrac7" 
+    execute_chroot_command "yum -y install srvadmin-base srvadmin-idrac7"
   else 
     debug "no OMSA packages available for this OS"
     return 0
