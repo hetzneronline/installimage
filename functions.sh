@@ -350,6 +350,7 @@ create_config() {
       echo "##"
       echo ""
     } >> "$CNF"
+
     # set default hostname to image name
     DEFAULT_HOSTNAME="$1"
     # or to proxmox if chosen
@@ -367,7 +368,7 @@ create_config() {
     local small_hdd; small_hdd="$(smallest_hd)"
     local small_hdd_size; small_hdd_size="$(($(blockdev --getsize64 "$small_hdd")/1024/1024/1024))"
     RAID0=$((small_hdd_size*COUNT_DRIVES))
-    RAID1=$small_hdd_size
+    RAID1="$small_hdd_size"
     if [ $COUNT_DRIVES -ge 3 ] ; then
       RAID5=$((RAID0-small_hdd_size))
     fi
@@ -485,7 +486,7 @@ create_config() {
       SWAPSIZE=$((RAM * 2 / 1024 + 1))
     elif [ "$RAM" -lt 8192 ]; then
       SWAPSIZE=$((RAM / 1024 + 1))
-    elif [ "$RAM" -lt 65535 ]; then 
+    elif [ "$RAM" -lt 65535 ]; then
       SWAPSIZE=$((RAM / 2 / 1024 + 1))
     fi
 
@@ -665,7 +666,7 @@ if [ -n "$1" ]; then
     MOUNT_POINT_SIZE[$i]=${PART_SIZE[$i]}
     #calculate new partition size if software raid is enabled and it is not /boot or swap
     if [ "$SWRAID" = "1" ]; then
-      if [ "${PART_MOUNT[$i]}" != "/boot" -a "${PART_SIZE[$i]}" != "all" -a "${PART_MOUNT[$i]}" != "swap" ]; then
+      if [ "${PART_MOUNT[$i]}" != "/boot" ] && [ "${PART_SIZE[$i]}" != "all" ] && [ "${PART_MOUNT[$i]}" != "swap" ]; then
         if [ "$SWRAIDLEVEL" = "0" ]; then
           PART_SIZE[$i]=$((${PART_SIZE[$i]}/COUNT_DRIVES))
         elif [ "$SWRAIDLEVEL" = "5" ]; then
@@ -726,19 +727,20 @@ if [ -n "$1" ]; then
   done
 
   # is LVM activated?
-  [ "$LVM_VG_COUNT" != "0" -a "$LVM_LV_COUNT" != "0" ] && LVM="1" || LVM="0"
+  [ "$LVM_VG_COUNT" != "0" ] && [ "$LVM_LV_COUNT" != "0" ] && LVM="1" || LVM="0"
 
 
   IMAGE="$(grep -m1 -e ^IMAGE "$1" | awk '{print $2}')"
+  # shellcheck disable=SC2154
   [ -e "$wd/$IMAGE" ] && IMAGE="$wd/$IMAGE"
   IMAGE_PATH="$(dirname "$IMAGE")/"
   IMAGE_FILE="$(basename "$IMAGE")"
-  case $IMAGE_PATH in
+  case "$IMAGE_PATH" in
     https:*|http:*|ftp:*) IMAGE_PATH_TYPE="http" ;;
     /*) IMAGE_PATH_TYPE="local" ;;
     *)  IMAGE_PATH_TYPE="nfs"   ;;
   esac
-  case $IMAGE_FILE in
+  case "$IMAGE_FILE" in
     *.tar) IMAGE_FILE_TYPE="tar" ;;
     *.tar.gz|*.tgz) IMAGE_FILE_TYPE="tgz" ;;
     *.tar.bz|*.tbz|*.tbz2|*.tar.bz2) IMAGE_FILE_TYPE="tbz" ;;
@@ -746,7 +748,7 @@ if [ -n "$1" ]; then
     *.bin) IMAGE_FILE_TYPE="bin" ;;
     *.bin.bz2|*.bin.bz) IMAGE_FILE_TYPE="bbz" ;;
   esac
-  
+
   BOOTLOADER="$(grep -m1 -e ^BOOTLOADER "$1" |awk '{print $2}')"
   if [ "$BOOTLOADER" = "" ]; then
     BOOTLOADER=$(echo "$DEFAULTLOADER" | awk '{ print $2 }')
@@ -816,14 +818,14 @@ validate_vars() {
 #  fi
 
   # test if $SWRAID has not 0 or 1 as parameter
-  if [ "$SWRAID" != "0" -a "$SWRAID" != "1" ]; then
+  if [ "$SWRAID" != "0" ] && [ "$SWRAID" != "1" ]; then
     graph_error "ERROR: Value for SWRAID is not correct"
     return 1
   fi
 
   # test if $SWRAIDLEVEL is either 0 or 1
-  if [ "$SWRAID" = "1" ] && [ "$SWRAIDLEVEL" != "0" ] && 
-    [ "$SWRAIDLEVEL" != "1" ] && [ "$SWRAIDLEVEL" != "5" ] && 
+  if [ "$SWRAID" = "1" ] && [ "$SWRAIDLEVEL" != "0" ] &&
+    [ "$SWRAIDLEVEL" != "1" ] && [ "$SWRAIDLEVEL" != "5" ] &&
     [ "$SWRAIDLEVEL" != "6" ] && [ "$SWRAIDLEVEL" != "10" ]; then
       graph_error "ERROR: Value for SWRAIDLEVEL is not correct"
       return 1
@@ -841,16 +843,16 @@ validate_vars() {
         fi
       done
       drive_array=( "${drive_array[@]}" "$drive" )
-      if [ "$format" != "0" -a "$format" != "1" ]; then
+      if [ "$format" != "0" ] && [ "$format" != "1" ]; then
         graph_error "ERROR: Value for FORMATDRIVE$i is not correct"
         return 1
       fi
-      if [ "$format" = 1 -a "$SWRAID" = 1 ] ; then
+      if [ "$format" = 1 ] && [ "$SWRAID" = 1 ] ; then
         graph_error "ERROR: FORMATDRIVE$i _AND_ SWRAID are active - use one or none of these options, not both"
         return 1
       fi
     fi
-    if [ "$SWRAID" = "1" -o "$format" = "1" -o $i -eq 1 ] ; then
+    if [ "$SWRAID" = "1" ] || [ "$format" = "1" ] || [ "$i" -eq 1 ] ; then
       # test if drive is a valid block device and is able to create partitions
       CHECK="$(test -b "$drive" && sfdisk -l "$drive" 2>>/dev/null)"
       if [ -z "$CHECK" ]; then
@@ -875,13 +877,13 @@ validate_vars() {
 
   # test if enough disks for the choosen raid level
   if [ "$SWRAID" = "1" ]; then
-    if [ "$SWRAIDLEVEL" = "5" -a "$COUNT_DRIVES" -lt "3" ]; then
+    if [ "$SWRAIDLEVEL" = "5" ] && [ "$COUNT_DRIVES" -lt "3" ]; then
       graph_error "ERROR: Not enough disks for RAID level 5"
       return 1
-    elif [ "$SWRAIDLEVEL" = "6" -a "$COUNT_DRIVES" -lt "4" ]; then
+    elif [ "$SWRAIDLEVEL" = "6" ] && [ "$COUNT_DRIVES" -lt "4" ]; then
       graph_error "ERROR: Not enough disks for RAID level 6"
       return 1
-    elif [ "$SWRAIDLEVEL" = "10" -a "$COUNT_DRIVES" -lt "2" ]; then
+    elif [ "$SWRAIDLEVEL" = "10" ] && [ "$COUNT_DRIVES" -lt "2" ]; then
       graph_error "ERROR: Not enough disks for RAID level 10"
       return 1
     fi
