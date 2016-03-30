@@ -3094,32 +3094,33 @@ generate_config_lilo() {
   if [ "$1" ]; then
   BFILE="$FOLD/hdd/etc/lilo.conf"
   rm -rf "$FOLD/hdd/boot/grub/menu.lst" >>/dev/null 2>&1
-  echo -e "### $COMPANY installimage" > $BFILE
-  echo -e "# bootloader config" >> $BFILE
-  if [ "$LILOEXTRABOOT" ]; then
-    echo -e "$LILOEXTRABOOT" >> $BFILE
-  fi
-  echo -e "boot=$SYSTEMDEVICE" >> $BFILE
-  echo -e "root=$(cat "$FOLD/hdd/etc/fstab" |grep " / " |cut -d " " -f 1)" >> $BFILE
-  echo -e "vga=0x317" >> $BFILE
-  echo -e "timeout=40" >> $BFILE
-  echo -e "prompt" >> $BFILE
-  echo -e "default=Linux" >> $BFILE
-  echo -e "large-memory" >> $BFILE
-  echo -e "" >> $BFILE
+  {
+    echo "### $COMPANY installimage"
+    echo "# bootloader config"
+    if [ "$LILOEXTRABOOT" ]; then
+      echo "$LILOEXTRABOOT"
+    fi
+    echo "boot=$SYSTEMDEVICE"
+    echo "root=$(grep " / " "$FOLD/hdd/etc/fstab" |cut -d " " -f 1)"
+    echo "vga=0x317"
+    echo "timeout=40"
+    echo "prompt"
+    echo "default=Linux"
+    echo "large-memory"
+    echo ""
+  } > "$BFILE"
   if [ -e "$FOLD/hdd/boot/vmlinuz-$VERSION" ]; then
-    echo -e "image=/boot/vmlinuz-$VERSION" >> $BFILE
+    echo "image=/boot/vmlinuz-$VERSION" >> "$BFILE"
   else
     return 1
   fi
-  echo -e "  label=Linux" >> $BFILE
-#  echo -e "  read-only" >> $BFILE
+  echo "  label=Linux" >> $BFILE
   if [ -e "$FOLD/hdd/boot/initrd.img-$VERSION" ]; then
-    echo -e "  initrd=/boot/initrd.img-$VERSION" >> $BFILE
+    echo "  initrd=/boot/initrd.img-$VERSION" >> "$BFILE"
   elif [ -e "$FOLD/hdd/boot/initrd-$VERSION" ]; then
-    echo -e "  initrd=/boot/initrd-$VERSION" >> $BFILE
+    echo "  initrd=/boot/initrd-$VERSION" >> "$BFILE"
   fi
-  echo -e "" >> $BFILE
+  echo "" >> $BFILE
 
 
     return 0
@@ -3208,7 +3209,7 @@ generate_ntp_config() {
 check_fqdn() {
 
   CHECKFQDN=""
-  CHECKFQDN="$(echo $1 | grep -e "^\([[:alnum:]][[:alnum:]-]*[[:alnum:]]\.\)\{2,\}")"
+  CHECKFQDN="$(echo "$1" | grep -e "^\([[:alnum:]][[:alnum:]-]*[[:alnum:]]\.\)\{2,\}")"
 
   if [ -z "$CHECKFQDN" ]; then
     return 1
@@ -3222,10 +3223,10 @@ check_fqdn() {
 #
 create_hostname() {
 
-  FIRST="$(echo $1 | cut -d '.' -f 1)"
-  SECOND="$(echo $1 | cut -d '.' -f 2)"
-  THIRD="$(echo $1 | cut -d '.' -f 3)"
-  FOURTH="$(echo $1 | cut -d '.' -f 4)"
+  FIRST="$(echo "$1" | cut -d '.' -f 1)"
+  SECOND="$(echo "$1" | cut -d '.' -f 2)"
+  THIRD="$(echo "$1" | cut -d '.' -f 3)"
+  FOURTH="$(echo "$1" | cut -d '.' -f 4)"
 
   if [ -z "$FIRST" -o -z "$SECOND" -o -z "$THIRD" -o -z "$FOURTH" ]; then
     return 1
@@ -3236,7 +3237,7 @@ create_hostname() {
     GENERATEDHOSTNAME="static.$FIRST-$SECOND-$THIRD-$FOURTH.clients.your-server.de"
   fi
 
-  echo $GENERATEDHOSTNAME
+  echo "$GENERATEDHOSTNAME"
   return 0
 
 }
@@ -3283,7 +3284,7 @@ trap "poweroff" 0
 echo \${?} > /$(basename ${temp_retval_fifo})
 HEREDOC
 
-  chmod a+x ${temp_helper_script}
+  chmod a+x "${temp_helper_script}"
 
   ### ### ### ### ### ### ### ### ### ###
 
