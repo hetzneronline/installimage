@@ -3922,47 +3922,59 @@ function check_dos_partitions() {
 # Set udev rules
 #
 set_udev_rules() {
- # at this point we have configured networking for one and only one
- # active interface and written a udev rule for this device.
- # Normally, we could just rename that single interface.
- # But when the system boots, the other interface are found and numbered.
- # The system then tries to rename the interface to match the udev rules.
- # Under certain situations with more than two NICs, this may not end as
- # expected leaving some interfaces half-renamed (e.g. eth3-eth0)
- # So we copy the already generated udev rules from the rescue system in order
- # to have rules for all devices, no matter in which order they are found
- # during boot.
- UDEVPFAD="/etc/udev/rules.d"
+  # at this point we have configured networking for one and only one
+  # active interface and written a udev rule for this device.
+  # Normally, we could just rename that single interface.
+  # But when the system boots, the other interface are found and numbered.
+  # The system then tries to rename the interface to match the udev rules.
+  # Under certain situations with more than two NICs, this may not end as
+  # expected leaving some interfaces half-renamed (e.g. eth3-eth0)
+  # So we copy the already generated udev rules from the rescue system in order
+  # to have rules for all devices, no matter in which order they are found
+  # during boot.
+  local udevpath udevsrcfile udevtgtfile 
+  udevpath="/etc/udev/rules.d"
+  udevsrcfile="$udevpath/70-persistent-net.rules"
+  if [ -f "$FOLD/hdd$udevsrcfile" ]; then
+    udevtgtfile="$udevsrcfile"
+  elif [ -f "$FOLD/hdd$udevpath/80-net-setup-link.rules" ]; then
+    udevtgtfile="$udevpath/80-net-setup-link.rules"
+  else
+    udevtgtfile=""
+  fi
 
- ETHCOUNT="$(ifconfig -a | grep -c eth)"
- if [ "$ETHCOUNT" -gt "1" ]; then
-    cp "$UDEVPFAD/70-persistent-net.rules" "$FOLD/hdd$UDEVPFAD/"
-    #Testeinbau
-   if [ "$IAM" = "centos" ]; then
-     # need to remove these parts of the rule for centos, 
-     # otherwise we get new rules with the old interface name again
-     # plus a new  ifcfg- for the new rule, which duplicates
-     # the config but does not match the MAC of the interface
-     # after renaming. Terrible mess.
-     sed -i 's/ ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL==\"eth\*\"//g' "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
-   fi
-   for NIC in /sys/class/net/*; do
-     INTERFACE=${NIC##*/}
+  local ethcount; ethcount="$(find /sys/class/net/ -name eth* | wc -l)"
+  if [ "$ethcount" -gt 1 ]; then
+    # virtual servers with multiple nics may not have a net.rules files
+    if [ -n "$udevtgtfile" ]; then
+      cp "$udevsrcfile" "$FOLD/hdd$udevtgtfile"
+      #Testeinbau
+      if [ "$IAM" = "centos" ]; then
+        # need to remove these parts of the rule for centos, 
+        # otherwise we get new rules with the old interface name again
+        # plus a new  ifcfg- for the new rule, which duplicates
+        # the config but does not match the MAC of the interface
+        # after renaming. Terrible mess.
+        sed -i 's/ ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL==\"eth\*\"//g' "$FOLD/hdd$udevtgtfile"
+      fi
+    fi
+    for nic in /sys/class/net/*; do
+     local interface; interface=${nic##*/}
      #test if the interface has a ipv4 adress
-     iptest=$(ip addr show dev "$INTERFACE" | grep "$INTERFACE"$ | awk '{print $2}' | cut -d "." -f 1,2)
+     iptest=$(ip addr show dev "$interface" | grep "$interface"$ | awk '{print $2}' | cut -d "." -f 1,2)
      #iptest=$(ifconfig $INTERFACE | grep "inet addr" | cut -d ":" -f2 | cut -d " " -f1 | cut -d "." -f1,2)
      #Separate udev-rules for openSUSE 12.3 in function "suse_fix" below !!!
-     if [ -n "$iptest"  ] && [ "$iptest" != "192.168" ] && [ "$INTERFACE" != "eth0" ] && [ "$INTERFACE" != "lo" ]; then
-       debug "# renaming active $INTERFACE to eth0 via udev in installed system"
-       sed -i  "s/$INTERFACE/dummy/" "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
-       sed -i  "s/eth0/$INTERFACE/" "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
-       sed -i  "s/dummy/eth0/" "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
-       fix_eth_naming "$INTERFACE" 
+     if [ -n "$iptest"  ] && [ "$iptest" != "192.168" ] && [ "$interface" != "eth0" ] && [ "$interface" != "lo" ]; then
+       debug "# renaming active $interface to eth0 via udev in installed system"
+       sed -i  "s/$interface/dummy/" "$FOLD/hdd$udevtgtfile"
+       sed -i  "s/eth0/$interface/" "$FOLD/hdd$udevtgtfile"
+       sed -i  "s/dummy/eth0/" "$FOLD/hdd$udevtgtfile"
+       fix_eth_naming "$interface" 
      fi
-   done
-   [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
-   [ "$suse_version" == "123" ] && suse_netdev_fix
- fi
+    done
+    [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
+    [ "$suse_version" == "123" ] && suse_netdev_fix
+  fi
 }
 
 # Rename eth device (ethX to eth0)
