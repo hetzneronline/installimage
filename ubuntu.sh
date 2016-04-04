@@ -153,8 +153,10 @@ generate_config_mdadm() {
 # generate_new_ramdisk "NIL"
 generate_new_ramdisk() {
   if [ "$1" ]; then
-    local outfile; outfile=$(find "$FOLD/hdd/boot" -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
-    local kvers; kvers=$(echo "$outfile" |cut -d "-" -f2-)
+#    local outfile; outfile=$(find "$FOLD/hdd/boot" -name "initrd.img-*" -not -regex ".*\(gz\|bak\)" -printf "%f\n" | sort -nr | head -n1)
+#    local kvers; kvers=$(echo "$outfile" |cut -d "-" -f2-)
+    local kvers; kvers="$(find "$FOLD/hdd/boot/" -name "vmlinuz-*" | cut -d '-' -f 2- | sort -V | tail -1)"
+
     debug "# Kernel Version found: $kvers"
 
     if [ "$IMG_VERSION" -ge 1204 ]; then
