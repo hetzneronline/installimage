@@ -235,7 +235,7 @@ EOF
   fi
 }
 
-# copy_ssh_keys $OPT_SSHKEYS_URL 
+# copy_ssh_keys $OPT_SSHKEYS_URL
 copy_ssh_keys() {
   if [ -n "$1" ]; then
     local key_url="$1"

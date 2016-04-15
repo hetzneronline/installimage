@@ -63,8 +63,6 @@ LILOEXTRABOOT=""
 ERROREXIT="0"
 FINALIMAGEPATH=""
 
-PLESK_STD_VERSION="PLESK_12_5_30"
-
 SYSMFC=$(dmidecode -s system-manufacturer 2>/dev/null | tail -n1)
 SYSTYPE=$(dmidecode -s system-product-name 2>/dev/null | tail -n1)
 MBTYPE=$(dmidecode -s baseboard-product-name 2>/dev/null | tail -n1)
@@ -504,11 +502,7 @@ create_config() {
     fi
 
     # use /var instead of /home for all partition when installing plesk
-    if [ "$OPT_INSTALL" ]; then
-      if echo "$OPT_INSTALL" | grep -qi 'PLESK'; then
-        DEFAULTPARTS_BIG="${DEFAULTPARTS_BIG//home/var}"
-      fi
-    fi
+    is_plesk_install && DEFAULTPARTS_BIG="${DEFAULTPARTS_BIG//home/var}"
 
     if [ "$IAM" = "coreos" ]; then
       echo "## NOTICE: This image does not support custom partition sizes." >> "$CNF"
@@ -911,15 +905,15 @@ validate_vars() {
   if [ "$SWRAID" = "0" ] ; then
     # just the first hdd is used so we need the size of DRIVE1
     DRIVE_SUM_SIZE=$(blockdev --getsize64 "$DRIVE1")
-    echo "Size of the first hdd is: $DRIVE_SUM_SIZE" | debugoutput 
+    echo "Size of the first hdd is: $DRIVE_SUM_SIZE" | debugoutput
   else
     local smallest_hdd; smallest_hdd=$(smallest_hd)
     DRIVE_SUM_SIZE="$(blockdev --getsize64 "$smallest_hdd")"
     # this variable is used later when determining what disk to use as reference
     # when drives of different sizes are in a system
-    SMALLEST_HDD_SIZE=$DRIVE_SUM_SIZE 
+    SMALLEST_HDD_SIZE=$DRIVE_SUM_SIZE
     SMALLEST_HDD_SIZE=$((SMALLEST_HDD_SIZE / 1024 / 1024))
-    echo "Size of smallest drive is $DRIVE_SUM_SIZE" | debugoutput 
+    echo "Size of smallest drive is $DRIVE_SUM_SIZE" | debugoutput
     if [ "$SWRAIDLEVEL" = "0" ]; then
       DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE * COUNT_DRIVES))
     elif [ "$SWRAIDLEVEL" = "5" ]; then
@@ -993,7 +987,7 @@ validate_vars() {
 
   # test if there are partitions in the configfile
   if [ "$PART_COUNT" -gt "0" ]; then
-  WARNBTRFS=0 
+  WARNBTRFS=0
     # test each partition line
     for ((i=1; i<=PART_COUNT; i++)); do
 
@@ -1122,8 +1116,8 @@ validate_vars() {
     if [ "$IAM" = "arch" ] ||
        [ "$IAM" = "coreos" ] ||
        [ "$IAM" = "centos" ] ||
-       [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] || 
-       [ "$IAM" = "debian" -a "$IMG_VERSION" -ge 70 ] || 
+       [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] ||
+       [ "$IAM" = "debian" -a "$IMG_VERSION" -ge 70 ] ||
        [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 122 ]; then
          graph_error "ERROR: Image doesn't support lilo"
          return 1
@@ -1221,7 +1215,7 @@ validate_vars() {
     done
     if [ "$found_vg" = "false" ] ; then
       graph_error "ERROR: LVM volume group '$lv_vg' not defined"
-      return 1  
+      return 1
     fi
   done
 
@@ -1231,7 +1225,7 @@ validate_vars() {
     vg_size="${LVM_VG_SIZE[$vg_id]}"
     sum_size="0"
 
-    # calculate size correct if more vg with same name 
+    # calculate size correct if more vg with same name
     # (e.g. for 2TB limit in CentOS workaround)
     for i in $(seq 1 $LVM_VG_COUNT) ; do
       # check if vg has same name and is not the same vg
@@ -1292,7 +1286,7 @@ validate_vars() {
              \nNOTICE: You are going to use hard disks with different disk space.
              \nWe set the maximum of your allocable disc space based on the smallest hard disk at $SMALLEST_HDD_SIZE MB
              \nYou can change this by customizing the drive settings.
-             " 
+             "
     fi
   fi
 
@@ -1309,12 +1303,17 @@ validate_vars() {
     return 1
   fi
 
-  if [ "$OPT_INSTALL" ]; then
-    if [ $(echo $OPT_INSTALL | grep -i "PLESK") ]; then
-        if [ "$IAM" != "centos" -a "$IAM" != "debian" ]; then
-          graph_error "ERROR: PLESK is not available for this image"
-          return 1
-        fi
+  if is_cpanel_install; then
+    if [ "$IAM" != "centos" ]; then
+      graph_error "ERROR: CPANEL is not available for this image"
+      return 1
+    fi
+  fi
+
+  if is_plesk_install; then
+    if [ "$IAM" != "centos" -a "$IAM" != "debian" ]; then
+      graph_error "ERROR: PLESK is not available for this image"
+      return 1
     fi
   fi
 
@@ -1464,7 +1463,7 @@ unmount_all() {
 # stop_lvm_raid
 #
 # Stop the Logical Volume Manager and all software RAID arrays.
-# 
+#
 stop_lvm_raid() {
   test -x /etc/init.d/lvm && /etc/init.d/lvm stop &>/dev/null
   test -x /etc/init.d/lvm2 && /etc/init.d/lvm2 stop &>/dev/null
@@ -1505,7 +1504,7 @@ delete_partitions() {
 # function which gets the end of the extended partition
 # get_end_of_extended "DRIVE"
 function get_end_of_extended() {
-  local DEV="$1" 
+  local DEV="$1"
   local DRIVE_SIZE=$(blockdev --getsize64 $DEV)
   local SECTORSIZE=$(blockdev --getss $DEV )
 
@@ -1567,7 +1566,7 @@ function get_end_of_partition {
   else
     END="$(echo "$START+(${PART_SIZE[$NR]}* 1024 * 1024)" | bc)"
     # trough alignment the calculated end could be a little bit over drive size
-    # or too close to the end. Always leave 1MiB space 
+    # or too close to the end. Always leave 1MiB space
     # (may be needed for mdadm or for later conversion to GPT)
     if [ $END -ge $LAST ] || [ $[$LAST - $END] -lt 1048576 ]; then
       END=$[$LAST-1048576]
@@ -1611,7 +1610,7 @@ create_partitions() {
   dd if=/dev/zero of=$1 bs=1M count=10  1>/dev/null 2>&1
   hdparm -z $1 >/dev/null 2>&1
 
-  #create GPT 
+  #create GPT
   if [ $GPT  -eq '1' ]; then
     #create GPT and randomize disk id (GUID)
     sgdisk -o $1 1>/dev/null 2>/dev/null
@@ -1717,7 +1716,7 @@ create_partitions() {
      # create partitions as ext3 which results in type 83
      local FSTYPE="ext3"
      if [ "${PART_FS[$i]}" = "swap" ]; then
-       FSTYPE="linux-swap" 
+       FSTYPE="linux-swap"
      fi
 
      echo "create partition: parted -s $1 mkpart $TYPE $FSTYPE ${START}s ${END}s" | debugoutput
@@ -1737,7 +1736,7 @@ create_partitions() {
      fi
 
 
-     if [ "$PART_COUNT" -ge "4" -a "$i" -ge "4" ]; then    
+     if [ "$PART_COUNT" -ge "4" -a "$i" -ge "4" ]; then
        make_fstab_entry "$1" "$[$i+1]" "${PART_MOUNT[$i]}" "${PART_FS[$i]}"
      else
        make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}"
@@ -1764,7 +1763,7 @@ create_partitions() {
 #	NEW_LAST_PART_END=$((LAST_PART_END-part_end_diff))
 
 #        parted -s $1 mkfs $PART_COUNT linux-swap >/dev/null 2>/tmp/$$.tmp
-#        parted -s $1 unit s resize ${PART_COUNT} ${LAST_PART_START} ${NEW_LAST_PART_END} >/dev/null 2>/tmp/$$.tmp 
+#        parted -s $1 unit s resize ${PART_COUNT} ${LAST_PART_START} ${NEW_LAST_PART_END} >/dev/null 2>/tmp/$$.tmp
 #      fi
 #      cat /tmp/$$.tmp | debugoutput
 #    fi
@@ -1793,7 +1792,7 @@ make_fstab_entry() {
 
   if [ "$4" = "swap" ] ; then
     ENTRY="$1$p$2 none swap sw 0 0"
- elif [ "$3" = "lvm" ] ; then 
+ elif [ "$3" = "lvm" ] ; then
     ENTRY="# $1$2  belongs to LVM volume group '$4'"
   else
     if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
@@ -1943,12 +1942,12 @@ make_lvm() {
     # get device names for PVs depending if we use swraid or not
     inc_dev=1
     if [ $SWRAID -eq 1 ]; then
-      for md in $(ls -1 /dev/md/[0-9]*) ; do 
+      for md in $(ls -1 /dev/md/[0-9]*) ; do
         dev[$inc_dev]="$md"
         let inc_dev=inc_dev+1
       done
     else
-      for inc_dev in $(seq 1 $(ls -1 ${DRIVE1}[0-9]* | wc -l)) ; do 
+      for inc_dev in $(seq 1 $(ls -1 ${DRIVE1}[0-9]* | wc -l)) ; do
         dev[$inc_dev]="$disk1$(next_partnum $[$inc_dev-1])"
       done
     fi
@@ -2305,7 +2304,7 @@ extract_image() {
 
     if [ "$EXITCODE" -eq "0" ]; then
       cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput
-      return 0 
+      return 0
     else
       return 1
     fi
@@ -2367,7 +2366,7 @@ gather_network_information() {
     IP6ADDR=$(echo $INET6ADDR | cut -d"/" -f1)
     IP6PREFLEN=$(echo $INET6ADDR | cut -d'/' -f2)
     # we can get default route from here, but we could also assume fe80::1 for now
-    export IP6GATEWAY; IP6GATEWAY=$(ip -6 route show default |  awk '{print $3}')
+    IP6GATEWAY=$(ip -6 route show default |  awk '{print $3}')
   else
     if [ "$V6ONLY" -eq 1 ]; then
       debug "no valid IPv6 adress, but v6 only because of RFC6598 IPv4 address"
@@ -2375,7 +2374,7 @@ gather_network_information() {
       exit 1
     fi
   fi
-} 
+}
 
 # setup_network_config "ETH" "HWADDR" "IPADDR" "BROADCAST" "SUBNETMASK" "GATEWAY" "NETWORK"
 setup_network_config() {
@@ -2572,12 +2571,19 @@ set_hostname() {
     hostname $sethostname
     execute_chroot_command "hostname $sethostname"
 
-    check_fqdn "$sethostname"
-    [ $? -eq 1 ] && shortname="$sethostname" || shortname="$(hostname -s )"
+    if check_fqdn ${sethostname}; then
+      shortname=$(execute_chroot_command_wo_debug "hostname ${sethostname}; hostname --short")
+    else
+      shortname=${sethostname}
+    fi
 
     if [ -f $hostnamefile -o "$IAM" = "arch" ]; then
-      echo "$shortname" > $hostnamefile
-      debug "# set new hostname '$shortname' in $hostnamefile"
+      {
+        echo -n ${shortname}
+        is_cpanel_install && echo -n .yourdomain.localdomain
+        echo
+      } > ${hostnamefile}
+      debug "# set new hostname '$(cat ${hostnamefile})' in ${hostnamefile}"
     fi
 
     check_fqdn "$mailname"
@@ -2598,7 +2604,13 @@ set_hostname() {
     fi
 
     local fqdn_name="$sethostname"
-    [ "$sethostname" = "$shortname" ] && fqdn_name=''
+    if [[ "${sethostname}" == "${shortname}" ]]; then
+      if is_cpanel_install || is_plesk_install; then
+        fqdn_name+='.yourdomain.localdomain'
+      else
+        fqdn_name=''
+      fi
+    fi
 
     echo "### $COMPANY installimage" > $hostsfile
     echo "# nameserver config" >> $hostsfile
@@ -2633,7 +2645,7 @@ generate_hosts() {
     HOSTSFILE="$FOLD/hdd/etc/hosts"
     [ -f "$FOLD/hdd/etc/hostname" ] && HOSTNAMEFILE="$FOLD/hdd/etc/hostname"
     [ -f "$FOLD/hdd/etc/HOSTNAME" ] && HOSTNAMEFILE="$FOLD/hdd/etc/HOSTNAME"
-    if [ "$HOSTNAMEFILE" = "" ]; then 
+    if [ "$HOSTNAMEFILE" = "" ]; then
       if [ "$NEWHOSTNAME" ]; then
         HOSTNAME="$NEWHOSTNAME";
       else
@@ -2813,7 +2825,7 @@ set_ntp_time() {
     let count=count+1
     sleep 1
   done
-  
+
   # if process is still running
   if [ $count -eq 15 ] ; then
     debug "ntp still running - kill it"
@@ -2901,7 +2913,7 @@ execute_postinstall_script() {
     debug "# Found post-installation script $script; executing it..."
     # don't use the execute_chroot_command function and logging here - we need output on stdout!
 
-    chroot "$FOLD/hdd/" /bin/bash -c "$script" ; EXITCODE=$? 
+    chroot "$FOLD/hdd/" /bin/bash -c "$script" ; EXITCODE=$?
 
     if [ $EXITCODE -ne 0 ]; then
       debug "# Post-installation script didn't exit successfully (exit code = $EXITCODE)"
@@ -3045,7 +3057,7 @@ copy_ssh_keys() {
 
    mkdir -p "$FOLD/hdd/$targetuser/.ssh"
    if [ $targetuser != 'root' ]; then
-     execute_chroot_command "chown $targetuser: /$targetuser/.ssh" 
+     execute_chroot_command "chown $targetuser: /$targetuser/.ssh"
    fi
 
    cat "$FOLD/authorized_keys" >> "$FOLD/hdd/$targetuser/.ssh/authorized_keys"
@@ -3094,36 +3106,35 @@ write_grub() {
 
 generate_config_lilo() {
   if [ "$1" ]; then
-  BFILE="$FOLD/hdd/etc/lilo.conf"
-  rm -rf "$FOLD/hdd/boot/grub/menu.lst" >>/dev/null 2>&1
-  {
-    echo "### $COMPANY installimage"
-    echo "# bootloader config"
-    if [ "$LILOEXTRABOOT" ]; then
-      echo "$LILOEXTRABOOT"
+    local bfile="$FOLD/hdd/etc/lilo.conf"
+    rm -f "$FOLD/hdd/boot/grub/menu.lst" 2>&1 | debugoutput
+    {
+      echo "### $COMPANY installimage"
+      echo "# bootloader config"
+      if [ "$LILOEXTRABOOT" ]; then
+        echo "$LILOEXTRABOOT"
+      fi
+      echo "boot=$SYSTEMDEVICE"
+      echo "root=$(grep " / " "$FOLD/hdd/etc/fstab" |cut -d " " -f 1)"
+      echo "vga=0x317"
+      echo "timeout=40"
+      echo "prompt"
+      echo "default=Linux"
+      echo "large-memory"
+      echo ""
+    } > "$bfile"
+    if [ -e "$FOLD/hdd/boot/vmlinuz-$VERSION" ]; then
+      echo "image=/boot/vmlinuz-$VERSION" >> $bfile
+    else
+      return 1
     fi
-    echo "boot=$SYSTEMDEVICE"
-    echo "root=$(grep " / " "$FOLD/hdd/etc/fstab" |cut -d " " -f 1)"
-    echo "vga=0x317"
-    echo "timeout=40"
-    echo "prompt"
-    echo "default=Linux"
-    echo "large-memory"
-    echo ""
-  } > "$BFILE"
-  if [ -e "$FOLD/hdd/boot/vmlinuz-$VERSION" ]; then
-    echo "image=/boot/vmlinuz-$VERSION" >> "$BFILE"
-  else
-    return 1
-  fi
-  echo "  label=Linux" >> $BFILE
-  if [ -e "$FOLD/hdd/boot/initrd.img-$VERSION" ]; then
-    echo "  initrd=/boot/initrd.img-$VERSION" >> "$BFILE"
-  elif [ -e "$FOLD/hdd/boot/initrd-$VERSION" ]; then
-    echo "  initrd=/boot/initrd-$VERSION" >> "$BFILE"
-  fi
-  echo "" >> $BFILE
-
+    echo "  label=Linux" >> $bfile
+    if [ -e "$FOLD/hdd/boot/initrd.img-$VERSION" ]; then
+      echo "  initrd=/boot/initrd.img-$VERSION" >> $bfile
+    elif [ -e "$FOLD/hdd/boot/initrd-$VERSION" ]; then
+      echo "  initrd=/boot/initrd-$VERSION" >> $bfile
+    fi
+    echo "" >> $bfile
 
     return 0
   fi
@@ -3160,7 +3171,7 @@ generate_ntp_config() {
       if [ "$IAM" = "debian" ] && [ "$debian_version" -eq 8 ]; then
         cfgparam='Servers'
         CFG="$FOLD/hdd/$CFGTIMESYNCD"
-      else 
+      else
         mkdir -p "$cfgdir"
         CFG="$cfgdir/$C_SHORT.conf"
       fi
@@ -3224,210 +3235,28 @@ check_fqdn() {
 # create_hostname <ip> - creates a generic hostname from ip
 #
 create_hostname() {
+  if [ -n "$1" ]; then
+    local first; first="$(echo "$1" | cut -d '.' -f 1)"
+    local second; second="$(echo "$1" | cut -d '.' -f 2)"
+    local third; third="$(echo "$1" | cut -d '.' -f 3)"
+    local fourth; fourth="$(echo "$1" | cut -d '.' -f 4)"
+    local generatedhostname
 
-  FIRST="$(echo "$1" | cut -d '.' -f 1)"
-  SECOND="$(echo "$1" | cut -d '.' -f 2)"
-  THIRD="$(echo "$1" | cut -d '.' -f 3)"
-  FOURTH="$(echo "$1" | cut -d '.' -f 4)"
-
-  if [ -z "$FIRST" -o -z "$SECOND" -o -z "$THIRD" -o -z "$FOURTH" ]; then
-    return 1
-  fi
-  if [ "$FIRST" -eq "78" -o "$FIRST" -eq "188" -o "$FIRST" -eq "178" -o "$FIRST" -eq "46" -o "$FIRST" -eq "176" -o "$FIRST" -eq "5" -o "$FIRST" -eq "185" -o "$FIRST" -eq "136" -o "$FIRST" -eq "144" -o "$FIRST" -eq "148" -o "$FIRST" -eq "138" ]; then
-    GENERATEDHOSTNAME="static.$FOURTH.$THIRD.$SECOND.$FIRST.clients.your-server.de"
-  else
-    GENERATEDHOSTNAME="static.$FIRST-$SECOND-$THIRD-$FOURTH.clients.your-server.de"
-  fi
-
-  echo "$GENERATEDHOSTNAME"
-  return 0
-
-}
-
-# Executes a command within a systemd-nspawn container <command>
-execute_nspawn_command() {
-  local command="${1}"
-
-  local mount_point_blacklist=/dev
-  mount_point_blacklist="${mount_point_blacklist} /proc"
-  mount_point_blacklist="${mount_point_blacklist} /sys"
-
-  local container_root_dir=${FOLD}/hdd
-  local working_dir=${FOLD}
-
-  local temp_io_fifo=${container_root_dir}/temp_io.fifo
-  local temp_retval_fifo=${container_root_dir}/temp_retval.fifo
-  local temp_helper_script=${container_root_dir}/temp_helper.sh
-  local temp_helper_service_file=${container_root_dir}/etc/systemd/system/multi-user.target.wants/temp_helper.service
-  local temp_container_service_file=/lib/systemd/system/temp_container.service
-  local temp_umounted_mount_point_list=${working_dir}/temp_umounted_mount_points.txt
-
-  local command_retval=
-
-  local temp_files=${temp_io_fifo}
-  temp_files="${temp_files} ${temp_retval_fifo}"
-  temp_files="${temp_files} ${temp_helper_script}"
-  temp_files="${temp_files} ${temp_helper_service_file}"
-  temp_files="${temp_files} ${temp_container_service_file}"
-  temp_files="${temp_files} ${temp_umounted_mount_point_list}"
-
-  echo "Executing '${command}' within a systemd nspawn container" | debugoutput
-
-  mkfifo "${temp_io_fifo}"
-  mkfifo "${temp_retval_fifo}"
-
-  ### ### ### ### ### ### ### ### ### ###
-
-  cat <<HEREDOC > ${temp_helper_script}
-#!/usr/bin/env bash
-### $COMPANY installimage
-trap "poweroff" 0
-\$(cat /$(basename ${temp_io_fifo})) &> /$(basename ${temp_io_fifo})
-echo \${?} > /$(basename ${temp_retval_fifo})
-HEREDOC
-
-  chmod a+x "${temp_helper_script}"
-
-  ### ### ### ### ### ### ### ### ### ###
-
-  cat <<HEREDOC > ${temp_helper_service_file}
-### $COMPANY installimage
-[Unit]
-Description=Temporary helper service
-After=network.target
-[Service]
-ExecStart=/$(basename ${temp_helper_script})
-HEREDOC
-
-  ### ### ### ### ### ### ### ### ### ###
-
-  cat <<HEREDOC > ${temp_container_service_file}
-### $COMPANY installimage
-[Unit]
-Description=Temporary container service
-[Service]
-ExecStart=/usr/bin/systemd-nspawn \
-  --boot \
-  --directory=${container_root_dir} \
-  --quiet
-HEREDOC
-
-  ### ### ### ### ### ### ### ### ### ###
-
-  touch "${temp_umounted_mount_point_list}"
-
-  debug "Temporarily umounting blacklisted mount points in order to start the systemd nspawn container"
-
-  while read entry; do
-    for blacklisted_mount_point in ${mount_point_blacklist}; do
-      while read -r subentry; do
-        umount --verbose "$(echo "${subentry}" | awk '{ print $2 }')" 2>&1 | debugoutput || return 1
-        echo "${subentry}" | cat - "${temp_umounted_mount_point_list}" | uniq --unique > "${temp_umounted_mount_point_list}"2
-        mv "${temp_umounted_mount_point_list}"2 "${temp_umounted_mount_point_list}"
-      done < <(echo "${entry}" | grep "${container_root_dir}${blacklisted_mount_point}")
-    done
-  done < <(tac /proc/mounts)
-
-  debug "Starting the systemd nspawn container"
-
-  systemctl daemon-reload 2>&1 | debugoutput || return 1
-  systemctl start "$(basename ${temp_container_service_file})" 2>&1 | debugoutput || return 1
-
-  echo "${command}" > "${temp_io_fifo}"
-  debugoutput < "${temp_io_fifo}"
-  command_retval=$(cat "${temp_retval_fifo}")
-
-  while systemctl is-active "$(basename ${temp_container_service_file})" &> /dev/null; do
-    sleep 2
-  done
-
-  debug "The systemd nspawn container shut down"
-
-  debug "Remounting temporarily umounted mount points"
-  mount --all --fstab "${temp_umounted_mount_point_list}" --verbose 2>&1 | debugoutput || return 1
-  rm --force "${temp_files}"
-
-  return "${command_retval}"
-}
-
-# check for latest subversion of Plesk
-check_plesk_subversion() {
-  local main_version="$1"
-  local output=""
-  local latest_release=""
-
-  # test if pleskinstaller is already downloaded
-  if [ ! -x "$FOLD/hdd/pleskinstaller" ] ; then
-    wget "http://mirror.hetzner.de/tools/parallels/plesk/$IMAGENAME" -O "$FOLD/hdd/pleskinstaller" 2>&1 | debugoutput
-    chmod a+x "$FOLD/hdd/pleskinstaller" >> /dev/null
-  fi
-
-  output="$(execute_chroot_command_wo_debug "/pleskinstaller --select-product-id plesk --show-releases" 2>&1)"
-  latest_release="$(echo -e "$output" | grep "PLESK_${main_version}" | head -n1 | awk '{print $2}')"
-
-  [ -n "$latest_release" ] && echo "$latest_release"
-
-}
-
-#
-# determine image version and install plesk
-#
-install_plesk() {
-  # get Plesk version to install
-  local plesk_version=$1
-
-  # we need the installer first
-  wget "http://mirror.hetzner.de/tools/parallels/plesk/$IMAGENAME" -O "$FOLD/hdd/pleskinstaller" 2>&1 | debugoutput
-  chmod a+x "$FOLD/hdd/pleskinstaller" >> /dev/null
-
-  # if there was no version specified, take our standard version
-  if [ "$plesk_version" == "plesk" ]; then
-    debug "install standard version"
-    plesk_version="$PLESK_STD_VERSION"
-  elif [ -n "$(echo "$plesk_version" | egrep "plesk_[0-9]+_[0-9]+_[0-9]+$")" ]; then
-    plesk_version="$(echo "$plesk_version" | tr '[:lower:]' '[:upper:]')"
-  else
-    # check if we want a main version and should detect the latest subversion
-    local main_version="${plesk_version#plesk_}"
-    local latest_sub=""
-
-    [ -n "$main_version" ] && latest_sub="$(check_plesk_subversion "$main_version")"
-    if [ -z "$latest_sub" ]; then
-      echo "Could not determine latest subversion of Plesk $main_version"
+    if [ -z "$first" -o -z "$second" -o -z "$third" -o -z "$fourth" ]; then
       return 1
     fi
-    plesk_version="$latest_sub"
+    if [ "$first" -eq "78" ] || [ "$first" -eq "188" ] || [ "$first" -eq "178" ] ||
+       [ "$first" -eq "46" ] || [ "$first" -eq "176" ] || [ "$first" -eq "5" ] ||
+       [ "$first" -eq "185" ] || [ "$first" -eq "136" ] || [ "$first" -eq "144" ] ||
+       [ "$first" -eq "148" ] || [ "$first" -eq "138" ]; then
+      generatedhostname="static.$fourth.$third.$second.$first.clients.your-server.de"
+    else
+      generatedhostname="static.$first-$second-$third-$fourth.clients.your-server.de"
+    fi
+
+    echo $generatedhostname
+    return 0
   fi
-
-#  if [ "$IMAGENAME" == "CentOS-57-64-minimal" -o "$IMAGENAME" == "CentOS-58-64-minimal" -o "$IMAGENAME" == "CentOS-60-64-minimal" -o "$IMAGENAME" == "CentOS-62-64-minimal" -o "$IMAGENAME" == "CentOS-63-64-minimal" ]; then
-  if [ "$IAM" == 'centos' ]; then
-    execute_chroot_command "yum -y install mysql mysql-server"
-    # we should install rails here as well, but this is a bit tricky
-    # because there is no package and we would have to install via gem
-    #
-    # centos wants to have a fqdn for pleskinstallation
-    sed -i "s|$IMAGENAME|$IMAGENAME.yourdomain.localdomain $IMAGENAME|" "$FOLD/hdd/etc/hosts"
-  fi
-
-  if [ "$IAM" == "debian" -a "$IMG_VERSION" -ge 70 ]; then
-    # create folder /run/lock since it doesn't exist after the installation of debian7 and needed for plesk installation
-    execute_chroot_command "mkdir -p /run/lock"
-  fi
-
-  # COMPONENTS="base psa-autoinstaller mod-bw mod_python qmail ruby mailman horde psa-firewall spamassassin pmm backup"
-  # COMPONENTS="common psa-autoinstaller mod-bw mod_phyton postfix ruby mailman horde psa-firewall spamassassin pmm bind"
-  COMPONENTS="awstats bind config-troubleshooter dovecot drweb heavy-metal-skin horde l10n mailman mod-bw mod_fcgid mod_python mysqlgroup nginx panel php5.6 phpgroup pmm postfix proftpd psa-firewall roundcube spamassassin Troubleshooter webalizer web-hosting webservers"
-  COMPONENTLIST="$(for component in $COMPONENTS; do echo -n "--install-component $component "; done)"
-
-  if readlink --canonicalize /sbin/init | grep --quiet systemd && readlink --canonicalize "$FOLD/hdd/sbin/init" | grep --quiet systemd; then
-    execute_nspawn_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
-  else
-    execute_chroot_command "/pleskinstaller --select-product-id plesk --select-release-id $plesk_version --download-retry-count 99 $COMPONENTLIST"; EXITCODE=$?
-  fi
-  rm -rf "$FOLD/hdd/pleskinstaller" >/dev/null 2>&1
-
-  return $EXITCODE
-
 }
 
 install_omsa() {
@@ -3445,8 +3274,8 @@ install_omsa() {
     if [ "$IAM" = "debian" ] && [ $IMG_VERSION -ge 70 ]; then
       codename="wheezy"
     fi
-    echo -e "\n# Community OMSA packages provided by linux.dell.com" > "$REPOFILE"
-    echo -e "deb http://linux.dell.com/repo/community/$IAM $codename openmanage\n" >> "$REPOFILE"
+    echo -e "\n# Community OMSA packages provided by linux.dell.com" >$REPOFILE
+    echo -e "deb http://linux.dell.com/repo/community/$IAM $codename openmanage\n" >>$REPOFILE
     execute_chroot_command "gpg --keyserver pool.sks-keyservers.net --recv-key 1285491434D8786F"
     execute_chroot_command "gpg -a --export 1285491434D8786F | apt-key add -"
     execute_chroot_command "mkdir -p /run/lock"
@@ -3457,7 +3286,7 @@ install_omsa() {
     execute_chroot_command "yum -y install perl"
     execute_chroot_command "wget -q -O - http://linux.dell.com/repo/hardware/latest/bootstrap.cgi | bash"
     execute_chroot_command "yum -y install srvadmin-base srvadmin-idrac7"
-  else 
+  else
     debug "no OMSA packages available for this OS"
     return 0
   fi
@@ -3535,7 +3364,7 @@ report_config() {
   report_status="$(curl -m 10 -s -k -X POST -T "$config_file" "https://${report_ip}/api/${HWADDR}/image/new")"
   echo "report install.conf to rz-admin: ${report_status}" | debugoutput
 
-  echo "${report_status}" 
+  echo "${report_status}"
 }
 
 report_debuglog() {
@@ -3560,18 +3389,16 @@ report_debuglog() {
 # Unmount filesystems and remove temporary directories.
 #
 cleanup() {
-  debug "# Cleaning up..."
-
-  while read line ; do
-    mount="$(echo "$line" | grep "$FOLD" | cut -d' ' -f2)"
-    if [ -n "$mount" ] ; then
-      umount -l "$mount" >> /dev/null 2>&1
-    fi
-  done < /proc/mounts
-
-  rm -rf "$FOLD" >> /dev/null 2>&1
-  rm -rf /tmp/install.vars 2>&1
-  rm -rf /tmp/*.tmp 2>&1
+  debug 'cleaning up'
+  mysql_is_running && stop_mysql
+  systemd_nspawn_container_is_running && stop_systemd_nspawn_container
+  rm --force --recursive --verbose ${TEMP_FILES[@]} &> /dev/null # |& debugoutput
+  while read entry; do
+    while read subentry; do
+      umount --lazy --verbose $(echo ${subentry} | awk '{ print $2 }') |& debugoutput
+    done < <(echo ${entry} | grep ${FOLD}/hdd)
+  done < <(tac /proc/mounts)
+  rm --force --recursive --verbose ${FOLD} &> /dev/null # |& debugoutput
 }
 
 exit_function() {
@@ -3597,7 +3424,6 @@ exit_function() {
 
   report_id="$(report_config)"
   report_debuglog "$report_id"
-  cleanup
 }
 
 #function to check if it is a intel or amd cpu
@@ -3646,22 +3472,15 @@ function largest_hd() {
 
 # get the drives which are connected through an USB port
 function getUSBFlashDrives() {
-  for i in $(seq 1 $COUNT_DRIVES); do
-    DEV=$(eval echo "\$DRIVE$i")
-    # remove string '/dev/'
-    local withoutdev; withoutdev=${DEV##*/}
-    local removable;
-    if [ -e "/sys/block/$withoutdev/removable" ]; then
-      removable=$(cat "/sys/block/$withoutdev/removable")
-    else
-      removable=0
-    fi
-    if [ "$removable" -eq 1 ]; then
-      echo "${DEV}"
-    fi
+  for path in /sys/block/*; do
+    [[ -d "${path}" ]] || continue
+    dev_name="$(basename "${path}")"
+    dev_params="$(udevadm info --name "${dev_name}")"
+    echo "${dev_params}" | grep --quiet 'DEVTYPE=disk' || continue
+    echo "${dev_params}" | grep --quiet 'ID_BUS=usb' || continue
+    echo "${dev_params}" | grep --quiet 'ID_USB_DRIVER=usb-storage' || continue
+    echo "${dev_name}"
   done
-
-  return 0
 }
 
 # get HDDs with size not in tolerance range
@@ -3708,7 +3527,7 @@ uuid_bugfix() {
 function hdinfo() {
   local withoutdev;
   local vendor;
-  local name; 
+  local name;
   local logical_nr;
   withoutdev=${1##*/}
   if [ -e "/sys/block/$withoutdev/device/vendor" ]; then
@@ -3767,7 +3586,7 @@ function isVServer() {
     vServer|Bochs|Xen|KVM|VirtualBox|'VMware,Inc.')
       debug "# Systype: $SYSTYPE"
       return 0;;
-    *) 
+    *)
       debug "# Systype: $SYSTYPE"
       case "$SYSMFC" in
       	QEMU)
@@ -3808,7 +3627,7 @@ function part_test_size() {
     if [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 ]; then
       if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
         echo "SuSE older than 12.2. cannot use GPT (but drive size is bigger then 2TB)" | debugoutput
-      else 
+      else
         echo "using GPT (drive size bigger then 2TB or requested)" | debugoutput
         GPT=1
         PART_COUNT=$((PART_COUNT+1))
@@ -3827,7 +3646,7 @@ function check_dos_partitions() {
   echo "check_dos_partitions" | debugoutput
   if [ "$FORCE_GPT" = "2" ] || [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 ] || [ "$BOOTLOADER" == "lilo" ]; then
     if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
-      echo "SuSE version older than 12.2, no grub2 support" | debugoutput 
+      echo "SuSE version older than 12.2, no grub2 support" | debugoutput
     else
       return 0
     fi
@@ -3854,7 +3673,7 @@ function check_dos_partitions() {
   fi
 
   debug "DRIVE size is: $DRIVE_SIZE"
-  
+
   # check if all primary partitions (without "all") are within the 2TB Limit
   for i in $(seq 1 $PART_COUNT); do
     #check only primary partitions
@@ -3932,7 +3751,7 @@ set_udev_rules() {
   # So we copy the already generated udev rules from the rescue system in order
   # to have rules for all devices, no matter in which order they are found
   # during boot.
-  local udevpath udevsrcfile udevtgtfile 
+  local udevpath udevsrcfile udevtgtfile
   udevpath="/etc/udev/rules.d"
   udevsrcfile="$udevpath/70-persistent-net.rules"
   if [ -f "$FOLD/hdd$udevsrcfile" ]; then
@@ -3950,7 +3769,7 @@ set_udev_rules() {
       cp "$udevsrcfile" "$FOLD/hdd$udevtgtfile"
       #Testeinbau
       if [ "$IAM" = "centos" ]; then
-        # need to remove these parts of the rule for centos, 
+        # need to remove these parts of the rule for centos,
         # otherwise we get new rules with the old interface name again
         # plus a new  ifcfg- for the new rule, which duplicates
         # the config but does not match the MAC of the interface
@@ -3969,7 +3788,7 @@ set_udev_rules() {
        sed -i  "s/$interface/dummy/" "$FOLD/hdd$udevtgtfile"
        sed -i  "s/eth0/$interface/" "$FOLD/hdd$udevtgtfile"
        sed -i  "s/dummy/eth0/" "$FOLD/hdd$udevtgtfile"
-       fix_eth_naming "$interface" 
+       fix_eth_naming "$interface"
      fi
     done
     [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
@@ -3980,8 +3799,8 @@ set_udev_rules() {
 # Rename eth device (ethX to eth0)
 #
 fix_eth_naming() {
- if [ "$1" ]; then 
-   debug "# fix eth naming" 
+ if [ "$1" ]; then
+   debug "# fix eth naming"
 
    # for Debian and Debian derivatives
    if [ "$IAM" = "debian" ] || [ "$IAM" = "ubuntu" ]; then
@@ -4001,18 +3820,18 @@ fix_eth_naming() {
      if [ -f "$FOLD/hdd/$FILE" ] && [ -f "$FOLD/hdd/$ROUTE" ]; then
        debug "# fix_eth_naming replaces $1 with eth0"
        execute_chroot_command "sed -i 's/$1/eth0/g' $FILE"
-       execute_chroot_command "mv $FILE $NEWFILE"    
-       execute_chroot_command "mv $ROUTE $NEWROUTE"    
+       execute_chroot_command "mv $FILE $NEWFILE"
+       execute_chroot_command "mv $ROUTE $NEWROUTE"
      fi
    fi
 
-   # SUSE 
+   # SUSE
    if [ "$IAM" = "suse" ]; then
      FILE="/etc/sysconfig/network/ifcfg-$1"
      NEWFILE="/etc/sysconfig/network/ifcfg-eth0"
      if [ -f "$FOLD/hdd/$FILE" ]; then
        debug "# fix_eth_naming mv $FILE to $NEWFILE"
-       execute_chroot_command "mv $FILE $NEWFILE"    
+       execute_chroot_command "mv $FILE $NEWFILE"
      fi
    fi
  fi
@@ -4075,6 +3894,30 @@ is_private_ip() {
  else
   return 1
  fi
+}
+
+# chroot_mktemp() <options>
+# create a temp file within the installed system
+# $@ <options>
+chroot_mktemp() {
+  local options="${@}"
+  local temp_file=$(execute_chroot_command_wo_debug "mktemp ${options}")
+  TEMP_FILES+=(${FOLD}/hdd/${temp_file})
+  echo ${temp_file}
+}
+
+# generate_password() <length>
+# generates a password
+# $1 <length> default: 16
+generate_password() {
+  local length=${1:-16}
+  local password=
+  # ensure that the password contains at least one lower case letter, an upper
+  # case letter and a number
+  until echo ${password} | grep "[[:lower:]]" | grep "[[:upper:]]" | grep --quiet "[[:digit:]]"; do
+    password=$(tr --complement --delete '[:alnum:][:digit:]' < /dev/urandom | head --bytes ${length})
+  done
+  echo ${password}
 }
 
 # vim: ai:ts=2:sw=2:et

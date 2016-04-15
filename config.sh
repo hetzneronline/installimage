@@ -30,6 +30,7 @@ export IMAGEFILETYPE="tgz"
 export COMPANY_PUBKEY="$SCRIPTPATH/gpg/public-key.asc"
 export COMPANY="Hetzner Online GmbH"
 export C_SHORT="hetzner"
+export LOCKFILE='/run/lock/installimage'
 
 export MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
 export STATSSERVER="213.133.99.103"
@@ -73,6 +74,63 @@ export OSMENULIST=(
 export PROXMOX3_BASE_IMAGE="Debian-79-wheezy-64-minimal"
 export PROXMOX4_BASE_IMAGE="Debian-83-jessie-64-minimal"
 
+# all files that are added to this array will be removed by our cleanup
+# function
+export TEMP_FILES=(${LOCKFILE})
+
+# the following mount points must be umounted before a systemd nspawn container
+# can be started
+export SYSTEMD_NSPAWN_BLACKLISTED_MOUNT_POINTS=(
+  /dev
+  /proc
+  /sys
+)
+export SYSTEMD_NSPAWN_ROOT_DIR=${FOLD}/hdd
+export SYSTEMD_NSPAWN_HELPER_SERVICE_FILE=/etc/systemd/system/multi-user.target.wants/installimage-systemd-nspawn-helper.service
+export SYSTEMD_NSPAWN_SERVICE_FILE=/lib/systemd/system/installimage-systemd-nspawn.service
+export SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST=${FOLD}/installimage-umounted-mount-points
+
+TEMP_FILES+=(
+  ${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_HELPER_SERVICE_FILE}
+  ${SYSTEMD_NSPAWN_SERVICE_FILE}
+  ${SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST}
+)
+
+export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
+
+export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
+export PLESK_STD_VERSION=PLESK_12_5_30
+export PLESK_DOWNLOAD_RETRY_COUNT=999
+export PLESK_COMPONENTS=(
+  awstats
+  bind
+  config-troubleshooter
+  dovecot
+  drweb
+  heavy-metal-skin
+  horde
+  l10n
+  mailman
+  mod-bw
+  mod_fcgid
+  mod_python
+  mysqlgroup
+  nginx
+  panel
+  php5.6
+  phpgroup
+  pmm
+  postfix
+  proftpd
+  psa-firewall
+  roundcube
+  spamassassin
+  Troubleshooter
+  webalizer
+  web-hosting
+  webservers
+)
+
 export RED="\033[1;31m"
 export GREEN="\033[1;32m"
 export YELLOW="\033[1;33m"
@@ -85,18 +143,27 @@ export NOCOL="\033[00m"
 
 # write log entries in debugfile - single line as second argument
 debug() {
-  line="$*"
-  echo "[$(date '+%H:%M:%S')] $line" >> $DEBUGFILE;
+  local line="${@}"
+  #(
+  #  flock 200
+    printf '[%(%H:%M:%S)T] %s\n' -1 "${line}" >> ${DEBUGFILE}
+  #) 200> ${LOCKFILE}
 }
-
 
 # write log entries in debugfile - multiple lines at once
 debugoutput() {
-  while read -r line ; do
-    echo "[$(date '+%H:%M:%S')] :   $line" >> $DEBUGFILE;
+  while read -r line; do
+    #(
+    #  flock 200
+      printf '[%(%H:%M:%S)T] :   %s\n' -1 "${line}" >> ${DEBUGFILE}
+    #) 200> ${LOCKFILE}
   done
 }
 
 . "$FUNCTIONSFILE"
+
+for f in $SCRIPTPATH/*.functions.sh; do
+  . $f
+done
 
 # vim: ai:ts=2:sw=2:et

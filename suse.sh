@@ -13,7 +13,7 @@ setup_network_config() {
     # good we have a device and a MAC
 
     if [ -e "$FOLD/hdd/etc/os-release" ]; then
-      SUSEVERSION="$(grep 'VERSION=' "$FOLD/hdd/etc/os-release" | cut -d '"' -f2 | sed -e 's/\.//')"
+      SUSEVERSION="$(grep 'VERSION_ID=' "$FOLD/hdd/etc/os-release" | cut -d '"' -f2 | sed -e 's/\.//')"
     else
       SUSEVERSION="$(grep VERSION "$FOLD/hdd/etc/SuSE-release" | cut -d ' '  -f3 | sed -e 's/\.//')"
     fi
@@ -215,7 +215,7 @@ generate_config_grub() {
   sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
   execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"'"${grub_linux_default}"'\"/"'
 
-  sed -i "grubdefconf" -e "s/^GRUB_TERMINAL=.*/GRUB_TERMINAL=console/"
+  sed -i "$grubdefconf" -e "s/^GRUB_TERMINAL=.*/GRUB_TERMINAL=console/"
 
   execute_chroot_command "grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1"
 

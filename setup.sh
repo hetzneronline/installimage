@@ -30,7 +30,6 @@ if [ "$OPT_AUTOMODE" ] ; then
   create_config "$IMAGENAME" ; EXITCODE=$?
   if [ $EXITCODE != 0 ] ; then
     debug "=> FAILED"
-    cleanup
     exit 1
   fi
 
@@ -107,7 +106,6 @@ else
         case "$MAINMENUCHOSEN" in
           "exit")
             debug "=> user exited from menu"
-            cleanup
             exit 1
           ;;
           "custom image")
@@ -126,7 +124,6 @@ else
     create_config "$IMAGENAME"; EXITCODE=$?
     if [ $EXITCODE != 0 ] ; then
       debug "=> FAILED"
-      cleanup
       exit 1
     fi
 
@@ -205,7 +202,6 @@ fi
 
 
 if [ "$EXITCODE" = "1" ]; then
-  cleanup
   exit 1
 fi
 

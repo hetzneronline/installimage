@@ -310,7 +310,7 @@ randomize_maint_mysql_pass() {
        echo ""
        echo 'echo ""'
        echo "echo 'Note: Your MySQL password is in /password.txt (delete this with \"erase_password_note\")'"
-       echo 'echo ""' 
+       echo 'echo ""'
      } > "$motdfile"
      chmod 755 "$motdfile"
      # currently broken in jessie #743286
@@ -320,8 +320,8 @@ randomize_maint_mysql_pass() {
     {
       echo ''
       echo 'Note: Your MySQL password is in /password.txt (delete this with "erase_password_note")'
-      echo '' 
-    } >>  "$motdfile" 
+      echo ''
+    } >>  "$motdfile"
   fi
   cp "$SCRIPTPATH/erase_password_note" "$FOLD/hdd/usr/local/bin/"
   chmod +x "$FOLD/hdd/usr/local/bin/erase_password_note"
