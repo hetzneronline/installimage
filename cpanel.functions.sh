@@ -17,16 +17,16 @@ cpanel_setup_mainip() {
   local mainip_file=/var/cpanel/mainip
 
   debug "# setting up ${mainip_file}"
-  echo -n ${IPADDR} > ${FOLD}/hdd/${mainip_file}
+  echo -n "${IPADDR}" > "${FOLD}/hdd/${mainip_file}"
   debug "set up ${mainip_file}"
 }
 
 # cpanel_setup_wwwacct_conf()
 cpanel_setup_wwwacct_conf() {
-  local wwwacct_conf=/etc/wwwacct.conf
+  local wwwacct_conf; wwwacct_conf=/etc/wwwacct.conf
 
   debug "# setting up ${wwwacct_conf}"
-  sed -i '/^ADDR\s/d;/^HOST\s/d;/^NS[[:digit:]]*\s/d' ${FOLD}/hdd/${wwwacct_conf}
+  sed -i '/^ADDR\s/d;/^HOST\s/d;/^NS[[:digit:]]*\s/d' "${FOLD}/hdd/${wwwacct_conf}"
   {
     echo
     echo "### ${COMPANY} installimage"
@@ -36,7 +36,7 @@ cpanel_setup_wwwacct_conf() {
     echo "NS2 ${AUTH_DNS2}"
     echo "NS3 ${AUTH_DNS3}"
     echo 'NS4'
-  } >> ${FOLD}/hdd/${wwwacct_conf}
+  } >> "${FOLD}/hdd/${wwwacct_conf}"
   debug "set up ${wwwacct_conf}"
 }
 
@@ -52,25 +52,25 @@ randomize_cpanel_passwords() {
   # * modsec
   # * roundcube
 
-  local root_password=$(generate_password)
-  local cphulkd_password=$(generate_password)
-  local eximstats_password=$(generate_password)
-  local leechprotect_password=$(generate_password)
-  local roundcube_password=$(generate_password)
+  local root_password; root_password=$(generate_password)
+  local cphulkd_password; cphulkd_password=$(generate_password)
+  local eximstats_password; eximstats_password=$(generate_password)
+  local leechprotect_password; leechprotect_password=$(generate_password)
+  local roundcube_password; roundcube_password=$(generate_password)
 
-  reset_mysql_password root ${root_password} || return 1
+  reset_mysql_password root "${root_password}" || return 1
 
-  generate_my_cnf root ${root_password} > ${FOLD}/hdd/root/.my.cnf
+  generate_my_cnf root "${root_password}" > "${FOLD}/hdd/root/.my.cnf"
 
-  set_mysql_password cphulkd ${cphulkd_password} || return 1
-  set_mysql_password eximstats ${eximstats_password} || return 1
-  set_mysql_password leechprotect ${leechprotect_password} || return 1
-  set_mysql_password roundcube ${roundcube_password} || return 1
+  set_mysql_password cphulkd "${cphulkd_password}" || return 1
+  set_mysql_password eximstats "${eximstats_password}" || return 1
+  set_mysql_password leechprotect "${leechprotect_password}" || return 1
+  set_mysql_password roundcube "${roundcube_password}" || return 1
 
-  echo ${cphulkd_password} > ${FOLD}/hdd/var/cpanel/hulkd/password
-  echo ${eximstats_password} > ${FOLD}/hdd/var/cpanel/eximstatspass
-  echo ${leechprotect_password} > ${FOLD}/hdd/var/cpanel/leechprotectpass
-  echo ${roundcube_password} > ${FOLD}/hdd/var/cpanel/roundcubepass
+  echo "${cphulkd_password}" > "${FOLD}/hdd/var/cpanel/hulkd/password"
+  echo "${eximstats_password}" > "${FOLD}/hdd/var/cpanel/eximstatspass"
+  echo "${leechprotect_password}" > "${FOLD}/hdd/var/cpanel/leechprotectpass"
+  echo "${roundcube_password}" > "${FOLD}/hdd/var/cpanel/roundcubepass"
 
   execute_nspawn_command 'HOME=/root /usr/local/cpanel/bin/updateeximstats' > /dev/null || return 1
   execute_nspawn_command 'HOME=/root /usr/local/cpanel/bin/updateleechprotect' > /dev/null || return 1
@@ -93,11 +93,11 @@ setup_cpanel() {
 
 # install_cpanel()
 install_cpanel() {
-  local temp_file=$(chroot_mktemp)
+  local temp_file; temp_file=$(chroot_mktemp)
 
   debug "# downloading cpanel installer ${CPANEL_INSTALLER_SRC}/${IMAGENAME}"
-  curl --location --output ${FOLD}/hdd/${temp_file} --silent --write-out '%{response_code}' ${CPANEL_INSTALLER_SRC}/${IMAGENAME} | grep --quiet 200 || return 1
-  chmod a+x ${FOLD}/hdd/${temp_file}
+  curl --location --output "${FOLD}/hdd/${temp_file}" --silent --write-out '%{response_code}' "${CPANEL_INSTALLER_SRC}/${IMAGENAME}" | grep --quiet 200 || return 1
+  chmod a+x "${FOLD}/hdd/${temp_file}"
   debug 'downloaded cpanel installer'
 
   debug '# installing cpanel'

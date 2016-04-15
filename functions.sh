@@ -1069,7 +1069,7 @@ validate_vars() {
             graph_error "ERROR: CentOS 32bit doesn't support xfs on partition /"
             return 1
           fi
-          for j in $(seq 1 $PART_COUNT); do
+          for ((j=1; j<=PART_COUNT; j++)); do
             if [ "${PART_MOUNT[$j]}" = "/boot" ]; then
               TMPCHECK="1"
             fi
@@ -1095,18 +1095,18 @@ validate_vars() {
   if [ "$LVM_VG_COUNT" -gt "0" ]; then
     names=
 
-    for i in $(seq 1 $LVM_VG_COUNT); do
+    for ((i=1; i<=LVM_VG_COUNT; i++)); do
       names="$names\n${LVM_VG_NAME[$i]}"
     done
 
-    if [ $(echo -e "$names" | egrep -v "^$" | sort | uniq -d | wc -l) -gt 1 -a $BOOTLOADER = "lilo" ] ; then
+    if [ "$(echo -e "$names" | egrep -v "^$" | sort | uniq -d | wc -l)" -gt 1 ] && [ "$BOOTLOADER" = "lilo" ] ; then
       graph_error "ERROR: you cannot use more than one VG with lilo - use grub as bootloader"
       return 1
     fi
 
   fi
 
-  CHECK="$(echo $BOOTLOADER |grep -i -e "^grub$\|^lilo$")"
+  CHECK="$(echo "$BOOTLOADER" |grep -i -e "^grub$\|^lilo$")"
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: No valid BOOTLOADER"
    return 1
@@ -1125,7 +1125,7 @@ validate_vars() {
   fi
 
 
-  CHECK=$(echo $GOVERNOR |grep -i -e "^powersave$\|^performance$\|^ondemand$")
+  CHECK=$(echo "$GOVERNOR" |grep -i -e "^powersave$\|^performance$\|^ondemand$")
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: No valid GOVERNOR"
    return 1
@@ -1133,17 +1133,17 @@ validate_vars() {
 
 
   # LVM checks
-  if [ "$LVM" = "0" -a "$LVM_VG_COUNT" != "0" ] ; then
+  if [ "$LVM" = "0" ] && [ "$LVM_VG_COUNT" != "0" ] ; then
     graph_error "ERROR: There are volume groups defined, but no logical volumes are defined"
     return 1
   fi
 
-  if [ "$LVM" = "0" -a "$LVM_LV_COUNT" != "0" ] ; then
+  if [ "$LVM" = "0" ] && [ "$LVM_LV_COUNT" != "0" ] ; then
     graph_error "ERROR: There are logical volumes defined, but no volume groups are defined"
     return 1
   fi
 
-  for lv_id in $(seq 1 $LVM_LV_COUNT) ; do
+  for ((lv_id=1; lv_id<=LVM_LV_COUNT; lv_id++));do
     lv_size="${LVM_LV_SIZE[$lv_id]}"
     lv_mountp="${LVM_LV_MOUNT[$lv_id]}"
     lv_fs="${LVM_LV_FS[$lv_id]}"
@@ -1151,21 +1151,21 @@ validate_vars() {
 
 
     # test if the mountpoint is valid (start with / or swap)
-    CHECK="$(echo $lv_mountp | grep -e "^/\|^swap$")"
+    CHECK="$(echo "$lv_mountp" | grep -e "^/\|^swap$")"
     if [ -z "$CHECK" ]; then
       graph_error "ERROR: Mountpoint for LV '${LVM_LV_NAME[$lv_id]}' is not correct"
       return 1
     fi
 
     # test if the filesystem is one of our supportet types (ext2/ext3/reiserfs/xfs/swap)
-    CHECK="$(echo $lv_fs |grep -e "^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$")"
+    CHECK="$(echo "$lv_fs" |grep -e "^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$")"
     if [ -z "$CHECK" ]; then
       graph_error "ERROR: Filesystem for LV '${LVM_LV_NAME[$lv_id]}' is not correct"
       return 1
     fi
 
     # test if one of the filesystem is not using ext
-    CHECK=$(echo $lv_fs |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$")
+    CHECK=$(echo "$lv_fs" |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$")
     if [ -z "$CHECK" ]; then
       export TAR="tar"
       echo "setting TAR to GNUtar" | debugoutput
@@ -1182,7 +1182,7 @@ validate_vars() {
 #      return 1
 #    fi
 
-    if [ "$lv_size" != "all" -a "$(echo "$lv_size" | sed "s/[0-9]//g")" != "" -o "$lv_size" = "0" ]; then
+    if [ "$lv_size" != "all" ] && [ "$(echo "$lv_size" | sed "s/[0-9]//g")" != "" -o "$lv_size" = "0" ]; then
       graph_error "ERROR: size of LV '${LVM_LV_NAME[$lv_id]}' is not a valid number"
       return 1
     fi
@@ -1196,21 +1196,21 @@ validate_vars() {
 
     # problem with multiple vgs and all as lv size
     # get last lv in vg
-    for i_lv in $(seq 1 $LVM_LV_COUNT) ; do
+    for ((i_lv=1; i_lv<=LVM_LV_COUNT; i_lv++)) ; do
       if [ "${LVM_LV_VG[$i_lv]}" = "$lv_vg" ] ; then
         vg_last_lv=$i_lv
       fi
     done
-    if [ "$lv_size" = "all" -a $vg_last_lv -ne $lv_id ] ; then
-      graph_error "ERROR: LV size \"all\" has to be on the last LV in VG $lv_vg."
+    if [ "$lv_size" = "all" ] && [ $vg_last_lv -ne $lv_id ] ; then
+      graph_error "ERROR: LV size 'all' has to be on the last LV in VG $lv_vg."
       return 1
     fi
   done
 
-  for lv_id in $(seq 1 $LVM_LV_COUNT) ; do
+  for ((lv_id=1; lv_id<=LVM_LV_COUNT; lv_id++)); do
     found_vg="false"
     lv_vg=${LVM_LV_VG[$lv_id]}
-    for vg_id in $(seq 1 $LVM_VG_COUNT) ; do
+    for ((vg_id=1; vg_id<=LVM_VG_COUNT; vg_id++)) ; do
       [ "$lv_vg" = "${LVM_VG_NAME[$vg_id]}" ] && found_vg="true"
     done
     if [ "$found_vg" = "false" ] ; then
@@ -1227,26 +1227,26 @@ validate_vars() {
 
     # calculate size correct if more vg with same name
     # (e.g. for 2TB limit in CentOS workaround)
-    for i in $(seq 1 $LVM_VG_COUNT) ; do
+    for ((i=1; i<=LVM_VG_COUNT; i++)) ; do
       # check if vg has same name and is not the same vg
-      if [ "${LVM_VG_NAME[$i]}" = "$vg_name" -a $i -ne $vg_id ] ; then
+      if [ "${LVM_VG_NAME[$i]}" = "$vg_name" ] && [ "$i" -ne "$vg_id" ] ; then
         vg_add_size=0
         if [ "${LVM_VG_SIZE[$i]}" = "all" ] ; then
-          vg_add_size=$[$DRIVE_SUM_SIZE - $PARTS_SUM_SIZE]
+          vg_add_size=$((DRIVE_SUM_SIZE - PARTS_SUM_SIZE))
         else
           vg_add_size=${LVM_VG_SIZE[$i]}
         fi
-        vg_size=$[$vg_size + $vg_add_size]
+        vg_size=$((vg_size + vg_add_size))
       fi
     done
 
-    for lv_id in $(seq 1 $LVM_LV_COUNT) ; do
-      if [ "${LVM_LV_VG[$lv_id]}" = "$vg_name" -a "${LVM_LV_SIZE[$lv_id]}" = "all" ] ; then
-        sum_size=$[$sum_size + ${LVM_LV_SIZE[$lv_id]}]
+    for ((lv_id=1; lv_id<=LVM_LV_COUNT; lv_id++)) ; do
+      if [ "${LVM_LV_VG[$lv_id]}" = "$vg_name" ] && [ "${LVM_LV_SIZE[$lv_id]}" = "all" ] ; then
+        sum_size=$((sum_size + ${LVM_LV_SIZE[$lv_id]}))
       fi
     done
 
-    if [ $vg_size -lt $sum_size ] ; then
+    if [ "$vg_size" -lt "$sum_size" ] ; then
       graph_error "ERROR: You are going to use more space than your VG $vg_name has available."
       return 1
     fi
@@ -1258,20 +1258,20 @@ validate_vars() {
   local mounts_as_string=""
 
   # list all mountpoints without the 'lvm' and 'swap' keyword
-  for i in $(seq 1 $PART_COUNT); do
-      if [ ${PART_MOUNT[$i]} != "lvm" -a ${PART_MOUNT[$i]} != "swap" ]; then
+  for ((i=1; i<=PART_COUNT; i++)); do
+      if [ "${PART_MOUNT[$i]}" != "lvm" ] && [ "${PART_MOUNT[$i]}" != "swap" ]; then
           mounts_as_string="$mounts_as_string${PART_MOUNT[$i]}\n"
       fi
   done
   # append all logical volume mountpoints to $mounts_as_string
-  for i in $(seq 1 $LVM_LV_COUNT); do
+  for ((i=1; i<=LVM_LV_COUNT; i++)); do
       mounts_as_string="$mounts_as_string${LVM_LV_MOUNT[$i]}\n"
   done
 
   # check if there are identical mountpoints
-  local identical_mount_points="$(echo -e "$mounts_as_string" | sort | uniq -d)"
+  local identical_mount_points; identical_mount_points="$(echo -e "$mounts_as_string" | sort | uniq -d)"
   if [ "$identical_mount_points" ]; then
-     graph_error "ERROR: There are identical mountpoints in the config ($(echo $identical_mount_points | tr " " ", "))"
+     graph_error "ERROR: There are identical mountpoints in the config ($(echo "$identical_mount_points" | tr " " ", "))"
      return 1
   fi
 
@@ -1291,7 +1291,7 @@ validate_vars() {
   fi
 
   if [ "$DRIVE_SUM_SIZE" -lt "$PARTS_SUM_SIZE" ]; then
-    local diff=$[DRIVE_SUM_SIZE - $PARTS_SUM_SIZE]
+    local diff=$((DRIVE_SUM_SIZE - PARTS_SUM_SIZE))
     graph_error "ERROR: You are going to use more space than your drives have available.
                  \nUsage: $PARTS_SUM_SIZE MiB of $DRIVE_SUM_SIZE MiB
                  \nDiff: $diff MiB"
@@ -1319,7 +1319,7 @@ validate_vars() {
 
   if [ "$BOOTLOADER" == "grub" ]; then
     # check dos partition sizes for centos
-    local result="$(check_dos_partitions '')"
+    local result; result="$(check_dos_partitions '')"
 
     if [ -n "$result" ]; then
       if [ "$result" == "PART_OVERSIZED" ]; then
@@ -1380,7 +1380,7 @@ graph_error() {
   if [ $# -gt 0 ]; then
     dialog --backtitle "$DIATITLE" --title "ERROR" --yes-label "OK" \
         --no-label "Cancel" --yesno \
-        "$@\n\nYou will be dropped back to the editor to fix the problem." 0 0
+        "$*\n\nYou will be dropped back to the editor to fix the problem." 0 0
     EXITCODE=$?
   else
     dialog --backtitle "$DIATITLE" --title "ERROR" --yes-label "OK" \
@@ -1390,7 +1390,7 @@ graph_error() {
 
   # set var if user hit "Cancel"
   if [ "$EXITCODE" -eq "1" ]; then
-    CANCELLED="true"
+    export CANCELLED="true"
   fi
 }
 
@@ -1402,7 +1402,7 @@ graph_error() {
 graph_notice() {
   if [ $# -gt 0 ]; then
     dialog --backtitle "$DIATITLE" --title "NOTICE" --msgbox \
-        "$@\n\n" 0 0
+        "$*\n\n" 0 0
   fi
 }
 
@@ -1419,7 +1419,7 @@ whoami() {
     CoreOS*|coreos*)
       IAM="coreos"
       CLOUDINIT="$FOLD/cloud-config"
-      echo -e "#cloud-config\n" > $CLOUDINIT
+      echo -e "#cloud-config\n" > "$CLOUDINIT"
     ;;
   esac
  fi
@@ -1428,7 +1428,7 @@ whoami() {
  [ -z "$IMG_VERSION" -o "$IMG_VERSION" = "" -o "$IMG_VERSION" = "h.net.tar.gz" ]  && IMG_VERSION="0"
  IMG_ARCH="$(echo "$1" | sed 's/.*-\(32\|64\)-.*/\1/')"
 
- IMG_FULLNAME="$(ls -1 $IMAGESPATH | grep "$1" | grep -v ".sig")"
+ IMG_FULLNAME="$(find "$IMAGESPATH"/* -maxdepth 1 type -f -name "$1*" -a -not -regex '.*\.sig$' -printf '%f\n')"
  IMG_EXT="${IMG_FULLNAME#*.}"
 
  export IAM
@@ -1504,34 +1504,34 @@ delete_partitions() {
 # function which gets the end of the extended partition
 # get_end_of_extended "DRIVE"
 function get_end_of_extended() {
-  local DEV="$1"
-  local DRIVE_SIZE=$(blockdev --getsize64 $DEV)
-  local SECTORSIZE=$(blockdev --getss $DEV )
+  local dev; dev="$1"
+  local drive_size; drive_size=$(blockdev --getsize64 $dev)
+  local sectorsize; sectorsize=$(blockdev --getss $dev)
 
-  local end=0
-  local sum=0
-  local LIMIT=2199023255040
+  local end; end=0
+  local sum; sum=0
+  local limit; limit=2199023255040
   # get sector limit
-  local SECTORLIMIT=$[($LIMIT / $SECTORSIZE) - 1]
-  local STARTSEC=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
+  local sectorlimit; sectorlimit=$[($limit / $sectorsize) - 1]
+  local startsec; startsec=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
 
-  for i in $(seq 1 3); do
-    sum=$(echo "$sum + ${PART_SIZE[$i]}" | bc)
+  for ((i=1; i<=3; i++)); do
+    sum=$((sum + ${PART_SIZE[$i]} ))
   done
-  rest=$(echo "$DRIVE_SIZE - ($sum * 1024 * 1024)" | bc)
+  rest=$((drive_size - (sum * 1024 * 1024) ))
 
-  end=$[$DRIVE_SIZE / $SECTORSIZE]
+  end=$((drive_size / $sectorsize))
 
-  if [ $DRIVE_SIZE -lt $LIMIT ]; then
-    echo "$[$end-1]"
+  if [ $drive_size -lt $limit ]; then
+    echo "$((end-1))"
   else
-    if [ $rest -gt $LIMIT ]; then
+    if [ $rest -gt $limit ]; then
       # if the remaining space is more than 2 TiB, the end of the extended
       # partition is the current sector plus 2^32-1 sectors (2TiB-512 Byte)
-      echo "$(echo "$STARTSEC+$SECTORLIMIT" | bc)"
+      echo "$((startsec+ sectorlimit))"
     else
       # otherwise the end is the number of sectors - 1
-      echo "$[$end-1]"
+      echo "$((end-1))"
     fi
   fi
 }
@@ -3254,7 +3254,7 @@ create_hostname() {
       generatedhostname="static.$first-$second-$third-$fourth.clients.your-server.de"
     fi
 
-    echo $generatedhostname
+    echo "$generatedhostname"
     return 0
   fi
 }
@@ -3392,13 +3392,13 @@ cleanup() {
   debug 'cleaning up'
   mysql_is_running && stop_mysql
   systemd_nspawn_container_is_running && stop_systemd_nspawn_container
-  rm --force --recursive --verbose ${TEMP_FILES[@]} &> /dev/null # |& debugoutput
+  rm --force --recursive --verbose "${TEMP_FILES[@]}" &> /dev/null # |& debugoutput
   while read entry; do
     while read subentry; do
-      umount --lazy --verbose $(echo ${subentry} | awk '{ print $2 }') |& debugoutput
-    done < <(echo ${entry} | grep ${FOLD}/hdd)
+      umount --lazy --verbose "$(echo "${subentry}" | awk '{ print $2 }')" |& debugoutput
+    done < <(echo "${entry}" | grep "${FOLD}/hdd")
   done < <(tac /proc/mounts)
-  rm --force --recursive --verbose ${FOLD} &> /dev/null # |& debugoutput
+  rm --force --recursive --verbose "${FOLD}" &> /dev/null # |& debugoutput
 }
 
 exit_function() {

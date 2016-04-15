@@ -18,11 +18,12 @@ mysql_is_running() {
 }
 
 # ping_mysql() <max_checks>
+# shellcheck disable=SC2120
 ping_mysql() {
   local max_checks=${1:-30}
-  for check in $(seq 1 ${max_checks}); do
+  for ((check=1; check<=max_checks; check++)); do
     execute_chroot_command_wo_debug 'mysqladmin ping' &> /dev/null && break
-    (( ${check} == ${max_checks} )) && return 1
+    (( check == max_checks )) && return 1
     sleep 1
   done
 }
@@ -42,6 +43,7 @@ start_mysql() {
     execute_chroot_command '/etc/init.d/mysql start' || return 1
     # execute_chroot_command '/etc/init.d/mysql status'
   fi
+  # shellcheck disable=SC2119
   ping_mysql || return 1
   debug 'started mysql'
 }
@@ -75,10 +77,11 @@ execute_mysql_command() {
   local password="${3}"
   # merge stdin
   [[ -t 0 ]] || command+="$(cat)"
-  local temp_file=$(chroot_mktemp)
+  local temp_file; temp_file=$(chroot_mktemp)
 
+  # shellcheck disable=SC2119
   ping_mysql || return 1
-  echo "${command}" > ${FOLD}/hdd/${temp_file}
+  echo "${command}" > "${FOLD}/hdd/${temp_file}"
   if ! mysql_is_running; then start_mysql || return 1; fi
   {
     echo -n 'mysql '
@@ -112,50 +115,50 @@ reset_mysql_password() {
     ${FOLD}/hdd/etc/mysql/my.cnf
     ${FOLD}/hdd/usr/etc/my.cnf
   )
-  local temp_file=${FOLD}/hdd/$(chroot_mktemp)
-  local init_file=$(chroot_mktemp)
-  local installimage_config_file=$(chroot_mktemp)
+  local temp_file; temp_file="${FOLD}/hdd/$(chroot_mktemp)"
+  local init_file; init_file="$(chroot_mktemp)"
+  local installimage_config_file; installimage_config_file=$(chroot_mktemp)
 
   debug "# resetting mysql password for ${user}"
 
-  for file in ${config_files[@]}; do
-    if [[ -f ${file} ]]; then
+  for file in "${config_files[@]}"; do
+    if [[ -f "${file}" ]]; then
       config_file=${file}
       break
     fi
   done
-  [[ -f ${config_file} ]] || return 1
+  [[ -f "${config_file}" ]] || return 1
 
-  mv ${config_file} ${temp_file}
-  cp ${temp_file} ${config_file}
+  mv "${config_file}" "${temp_file}"
+  cp "${temp_file}" "${config_file}"
 
   {
     echo
     echo "### ${COMPANY} installimage"
     echo "!include ${installimage_config_file}"
-  } >> ${config_file}
+  } >> "${config_file}"
 
   {
     echo "### ${COMPANY} installimage"
     echo 'USE mysql;'
     echo "UPDATE user SET password=PASSWORD('${new_password}') WHERE user='${user}';"
     echo 'FLUSH PRIVILEGES;'
-  } > ${FOLD}/hdd/${init_file}
+  } > "${FOLD}/hdd/${init_file}"
 
   {
     echo "### ${COMPANY} installimage"
     echo '[mysqld]'
     echo "init-file = ${init_file}"
-  } > ${FOLD}/hdd/${installimage_config_file}
+  } > "${FOLD}/hdd/${installimage_config_file}"
 
-  chmod 644 ${FOLD}/hdd/${init_file} ${FOLD}/hdd/${installimage_config_file}
+  chmod 644 "${FOLD}/hdd/${init_file}" "${FOLD}/hdd/${installimage_config_file}"
 
   if mysql_is_running; then stop_mysql || return 1; fi
   start_mysql || return 1
 
   check_mysql_password "${user}" "${new_password}" || return 1
 
-  mv ${temp_file} ${config_file}
+  mv "${temp_file}" "${config_file}"
 
   debug "reset mysql password for ${user}"
 }
