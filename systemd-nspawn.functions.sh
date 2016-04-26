@@ -10,25 +10,27 @@
 # checks whether both, the rescue system and the installed system, are using
 # systemd
 is_systemd_system() {
-  readlink --canonicalize /sbin/init | grep --quiet systemd && readlink --canonicalize "${FOLD}/hdd/sbin/init" | grep --quiet systemd
+  readlink --canonicalize /sbin/init | grep --quiet systemd &&
+    readlink --canonicalize "${FOLD}/hdd/sbin/init" | grep --quiet systemd
 }
 
 # systemd_nspawn_container_is_running()
 # checks whether a systemd nspawn container is running
 systemd_nspawn_container_is_running() {
-  [[ -f "${SYSTEMD_NSPAWN_SERVICE_FILE}" ]] && systemctl --quiet is-active "$(basename "${SYSTEMD_NSPAWN_SERVICE_FILE}")"
+  [[ -f "${SYSTEMD_NSPAWN_SERVICE_FILE}" ]] &&
+    systemctl --quiet is-active "$(basename "${SYSTEMD_NSPAWN_SERVICE_FILE}")"
 }
 
 # start_systemd_nspawn_container()
 # starts the installed system within a systemd nspawn container
 start_systemd_nspawn_container() {
-  SYSTEMD_NSPAWN_HELPER_SCRIPT=${SYSTEMD_NSPAWN_HELPER_SCRIPT:-$(chroot_mktemp)}
-  SYSTEMD_NSPAWN_FIFO_DIR=${SYSTEMD_NSPAWN_FIFO_DIR:-$(chroot_mktemp --directory)}
+  SYSTEMD_NSPAWN_HELPER_SCRIPT="${SYSTEMD_NSPAWN_HELPER_SCRIPT:-$(chroot_mktemp)}"
+  SYSTEMD_NSPAWN_FIFO_DIR="${SYSTEMD_NSPAWN_FIFO_DIR:-$(chroot_mktemp --directory)}"
   SYSTEMD_NSPAWN_IN_FIFO="${SYSTEMD_NSPAWN_FIFO_DIR}/in.fifo"
   SYSTEMD_NSPAWN_OUT_FIFO="${SYSTEMD_NSPAWN_FIFO_DIR}/out.fifo"
   SYSTEMD_NSPAWN_RETVAL_FIFO="${SYSTEMD_NSPAWN_FIFO_DIR}/retval.fifo"
-  local temp_file; temp_file=$(mktemp)
-  TEMP_FILES+=(${temp_file})
+  local temp_file; temp_file="$(mktemp)"
+  TEMP_FILES+=("${temp_file}")
 
   debug '# starting the installed system within a systemd nspawn container'
   if systemd_nspawn_container_is_running; then
@@ -43,10 +45,10 @@ start_systemd_nspawn_container() {
   # umounted mount points later on
   debug '# temp. umounting blacklisted mount points before starting the systemd nspawn container:'
   touch "${SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST}"
-  while read entry; do
+  while read -r entry; do
     for blacklisted_mount_point in "${SYSTEMD_NSPAWN_BLACKLISTED_MOUNT_POINTS[@]}"; do
-      while read subentry; do
-        umount --verbose "$(echo "${subentry}" | awk '{ print $2 }')" |& debugoutput || return 1
+      while read -r subentry; do
+        umount --verbose "$(echo "${subentry}" | awk '{ print $2 }')" &> /dev/null || return 1
         echo "${subentry}" | cat - "${SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST}" | uniq --unique > "${temp_file}"
         mv "${temp_file}" "${SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST}"
       done < <(echo "${entry}" | grep "${SYSTEMD_NSPAWN_ROOT_DIR}${blacklisted_mount_point}")
@@ -55,7 +57,7 @@ start_systemd_nspawn_container() {
 
   # we use fifos and a helper script as an interface
   # these are our general IO fifos
-  for fifo in ${SYSTEMD_NSPAWN_IN_FIFO} ${SYSTEMD_NSPAWN_OUT_FIFO}; do
+  for fifo in "${SYSTEMD_NSPAWN_IN_FIFO}" "${SYSTEMD_NSPAWN_OUT_FIFO}"; do
     [[ -p "${SYSTEMD_NSPAWN_ROOT_DIR}/${fifo}" ]] || mkfifo "${SYSTEMD_NSPAWN_ROOT_DIR}/${fifo}"
   done
   # $SYSTEMD_NSPAWN_RETVAL_FIFO is our return value fifo
@@ -112,16 +114,30 @@ execute_within_systemd_nspawn_container() {
   local command="${1}"
   # merge stdin
   [[ -t 0 ]] || command+="$(cat)"
-  local debug=${2:-yes}
-  [[ ${debug} == yes ]] && debug=true || debug=false
+  local debug="${2:-debug}"
+  local quiet="${3:-quiet}"
+  [[ "${debug}" == debug ]] && debug=true || debug=false
+  [[ "${quiet}" == quiet ]] && quiet=true || quiet=false
 
   ${debug} && debug "# executing within systemd nspawn container: ${command}"
   if ! systemd_nspawn_container_is_running; then
     start_systemd_nspawn_container || return 1
   fi
   echo "${command}" > "${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_IN_FIFO}"
-  # ToDo: this should be 'command < fifo |..' and a && b || c is not if-then-else
-  cat "${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_OUT_FIFO}" | ( ${debug} && tee >(debugoutput) || cat; wait )
+  (
+    if ${debug}; then
+      if ${quiet}; then
+        cat | debugoutput
+      else
+        tee >(debugoutput)
+      fi
+    else
+      if ! ${quiet}; then
+        cat
+      fi
+    fi
+    wait
+  ) < "${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_OUT_FIFO}"
   wait
   return "$(cat "${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_RETVAL_FIFO}")"
 }
@@ -147,7 +163,7 @@ stop_systemd_nspawn_container() {
   # systemctl status $(basename ${SYSTEMD_NSPAWN_SERVICE_FILE}) |& debugoutput
 
   debug '# remounting temp. umounted mount points:'
-  mount --all --fstab "${SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST}" --verbose |& debugoutput || return 1
+  mount --all --fstab "${SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST}" &> /dev/null || return 1
 }
 
 # vim: ai:ts=2:sw=2:et

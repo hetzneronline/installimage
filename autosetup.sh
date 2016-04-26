@@ -52,9 +52,9 @@ done
 # ask for confirmation before continuing ...
 if [ "$OPT_CONFIGFILE" ] && [ -z "$OPT_AUTOMODE" ] ; then
   echo -n ""
-  echo "${RED}ALL DATA ON THE GIVEN DISKS WILL BE DESTROYED!"
+  echo -e "${RED}ALL DATA ON THE GIVEN DISKS WILL BE DESTROYED!"
   echo ""
-  echo -n "${YELLOW}DO YOU REALLY WANT TO CONTINUE?${NOCOL} [y|N] "
+  echo -en "${YELLOW}DO YOU REALLY WANT TO CONTINUE?${NOCOL} [y|N] "
   read -r -n1 aw
   case "$aw" in
     y|Y|j|J) echo -e "\n\n" ;;

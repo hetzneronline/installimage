@@ -24,7 +24,7 @@ setup_network_config() {
 
     [ -d "$FOLD/hdd/etc/systemd/network" ] && rm -f "$FOLD"/hdd/etc/systemd/network/*
 
-    if [ "$IMG_VERSION" -lt 1510 ]; then
+    if [ "$IMG_VERSION" -ne 1510 ]; then
       CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
 
       {

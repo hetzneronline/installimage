@@ -9,7 +9,7 @@
 # is_cpanel_install()
 # is this a cpanel install?
 is_cpanel_install() {
-  [[ "${OPT_INSTALL,,}" == cpanel ]] || [[ "${IMAGENAME}" == *cpanel ]]
+  [[ "${OPT_INSTALL,,}" == cpanel ]] || [[ "${IMAGENAME,,}" == *cpanel ]]
 }
 
 # cpanel_setup_mainip()
@@ -26,7 +26,10 @@ cpanel_setup_wwwacct_conf() {
   local wwwacct_conf; wwwacct_conf=/etc/wwwacct.conf
 
   debug "# setting up ${wwwacct_conf}"
-  sed -i '/^ADDR\s/d;/^HOST\s/d;/^NS[[:digit:]]*\s/d' "${FOLD}/hdd/${wwwacct_conf}"
+  sed --expression='/^ADDR\s/d' \
+    --expression='/^HOST\s/d' \
+    --expression='/^NS[[:digit:]]*\s/d' \
+    --in-place "${FOLD}/hdd/${wwwacct_conf}"
   {
     echo
     echo "### ${COMPANY} installimage"
@@ -96,18 +99,15 @@ install_cpanel() {
   local temp_file; temp_file=$(chroot_mktemp)
 
   debug "# downloading cpanel installer ${CPANEL_INSTALLER_SRC}/${IMAGENAME}"
-  curl --location --output "${FOLD}/hdd/${temp_file}" --silent --write-out '%{response_code}' "${CPANEL_INSTALLER_SRC}/${IMAGENAME}" | grep --quiet 200 || return 1
+  curl --location --output "${FOLD}/hdd/${temp_file}" --silent --write-out '%{response_code}' "${CPANEL_INSTALLER_SRC}/${IMAGENAME}" \
+    | grep --quiet 200 || return 1
   chmod a+x "${FOLD}/hdd/${temp_file}"
   debug 'downloaded cpanel installer'
 
   debug '# installing cpanel'
   local command="${temp_file} --force"
-  if is_systemd_system; then
-    execute_nspawn_command "${command}" > /dev/null || return 1
-    stop_systemd_nspawn_container
-  else
-    execute_chroot_command "${command}" || return 1
-  fi
+  execute_command "${command}" || return 1
+  stop_systemd_nspawn_container
 
   debug '# setting up cpanel'
   cpanel_setup_wwwacct_conf

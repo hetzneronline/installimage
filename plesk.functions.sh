@@ -27,35 +27,32 @@ install_plesk() {
   [[ "${IAM}" == debian ]] && (( IMG_VERSION >= 70 )) && mkdir --parents "${FOLD}/hdd/run/lock"
 
   debug "# downloading plesk installer ${PLESK_INSTALLER_SRC}/${IMAGENAME}"
-  curl --location --output "${FOLD}/hdd/${temp_file}" --silent \
-       --write-out '%{response_code}' "${PLESK_INSTALLER_SRC}/${IMAGENAME}" \
-       | grep --quiet 200 || return 1
-
+  curl --location --output "${FOLD}/hdd/${temp_file}" --silent --write-out '%{response_code}' "${PLESK_INSTALLER_SRC}/${IMAGENAME}" \
+    | grep --quiet 200 || return 1
   chmod a+x "${FOLD}/hdd/${temp_file}"
   debug 'downloaded plesk installer'
 
-  [[ "${version}" == PLESK ]] && version=${PLESK_STD_VERSION}
+  [[ "${version}" == PLESK ]] && version="${PLESK_STD_VERSION}"
   if ! echo "${version}" | egrep --quiet "^PLESK_[[:digit:]]+_[[:digit:]]+_[[:digit:]]+$"; then
-    version=$(execute_chroot_command_wo_debug "${temp_file} \
-      --select-product-id plesk --show-releases 2> /dev/null" \
-      | tail -n +2 \
-      | grep "^${version}" \
-      | head -n 1 \
-      | awk '{ print $2 }')
+    version="$(
+      execute_chroot_command_wo_debug "${temp_file} --select-product-id plesk --show-releases 2> /dev/null" \
+        | tail -n +2 \
+        | grep "^${version}" \
+        | head -n 1 \
+        | awk '{ print $2 }'
+    )"
   fi
   [[ -z "${version}" ]] && return 1
 
   debug "# installing plesk ${version}"
-  local command="${temp_file} --select-product-id plesk --select-release-id ${version} \
-                 --download-retry-count ${PLESK_DOWNLOAD_RETRY_COUNT} \
-                 ${PLESK_COMPONENTS[*]/#/--install-component }"
+  local command="${temp_file} "
+  command+='--select-product-id plesk '
+  command+="--select-release-id ${version} "
+  command+="--download-retry-count ${PLESK_DOWNLOAD_RETRY_COUNT} "
+  command+="${PLESK_COMPONENTS[*]/#/--install-component }"
 
-  if is_systemd_system; then
-    execute_nspawn_command "${command}" > /dev/null || return 1
-    stop_systemd_nspawn_container
-  else
-    execute_chroot_command "${command}" || return 1
-  fi
+  execute_command "${command}" || return 1
+  stop_systemd_nspawn_container
   debug "installed plesk ${version}"
 }
 

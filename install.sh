@@ -196,7 +196,7 @@ fi
 if [ "$LVM" = "1" ]; then
   inc_step
   status_busy "Creating LVM volumes"
-  make_lvm "$FOLD/fstab" "$DRIVE1" "$DRIVE2"
+  make_lvm "$FOLD/fstab" 
   LVM_EXIT=$?
   if [ $LVM_EXIT -eq 2 ] ; then
     status_failed "LVM thin-pool detected! Can't remove automatically!"

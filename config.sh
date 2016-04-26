@@ -72,7 +72,7 @@ export OSMENULIST=(
 )
 
 export PROXMOX3_BASE_IMAGE="Debian-79-wheezy-64-minimal"
-export PROXMOX4_BASE_IMAGE="Debian-83-jessie-64-minimal"
+export PROXMOX4_BASE_IMAGE="Debian-84-jessie-64-minimal"
 
 # all files that are added to this array will be removed by our cleanup
 # function

@@ -11,9 +11,9 @@
 mysql_is_running() {
   if is_systemd_system; then
     systemd_nspawn_container_is_running || return 1
-    execute_nspawn_command 'systemctl --quiet is-active mysql' no > /dev/null || return 1
+    execute_nspawn_command 'systemctl --quiet is-active mysql' nodebug || return 1
   else
-    execute_chroot_command_wo_debug '/etc/init.d/mysql status' &> /dev/null || return 1
+    execute_chroot_command '/etc/init.d/mysql status' nodebug || return 1
   fi
 }
 
@@ -22,7 +22,7 @@ mysql_is_running() {
 ping_mysql() {
   local max_checks=${1:-30}
   for ((check=1; check<=max_checks; check++)); do
-    execute_chroot_command_wo_debug 'mysqladmin ping' &> /dev/null && break
+    execute_command 'mysqladmin ping' nodebug && break
     (( check == max_checks )) && return 1
     sleep 1
   done
@@ -37,7 +37,7 @@ start_mysql() {
     return 0
   fi
   if is_systemd_system; then
-    execute_nspawn_command 'systemctl start mysql' > /dev/null || return 1
+    execute_nspawn_command 'systemctl start mysql' || return 1
     # execute_nspawn_command 'systemctl status mysql' > /dev/null
   else
     execute_chroot_command '/etc/init.d/mysql start' || return 1
@@ -56,7 +56,7 @@ stop_mysql() {
     return 0
   fi
   if is_systemd_system; then
-    execute_nspawn_command 'systemctl stop mysql' > /dev/null || return 1
+    execute_nspawn_command 'systemctl stop mysql' || return 1
     # execute_nspawn_command 'systemctl status mysql' > /dev/null
   else
     execute_chroot_command '/etc/init.d/mysql stop' || return 1
@@ -88,7 +88,7 @@ execute_mysql_command() {
     [[ -n "${user}" ]] && echo -n "--user='${user}' "
     [[ -n "${password}" ]] && echo -n "--password='${password}'"
     echo
-  } | execute_chroot_command_wo_debug "cat ${temp_file} | $(cat)" &> /dev/null || return 1
+  } | execute_command "cat ${temp_file} | HOME=/root $(cat)" nodebug dump |& debugoutput || return 1
 }
 
 # check_mysql_password() <user> <password>
@@ -100,7 +100,7 @@ check_mysql_password() {
 
   debug "# checking mysql password for ${user}"
   execute_mysql_command "QUIT" "${user}" "${password}" || return 1
-  debug "OK"
+  debug 'OK'
 }
 
 # # reset_mysql_password() <user> <new_password>
@@ -111,9 +111,9 @@ reset_mysql_password() {
   local new_password="${2}"
   local config_file=
   local config_files=(
-    ${FOLD}/hdd/etc/my.cnf
-    ${FOLD}/hdd/etc/mysql/my.cnf
-    ${FOLD}/hdd/usr/etc/my.cnf
+    "${FOLD}/hdd/etc/my.cnf"
+    "${FOLD}/hdd/etc/mysql/my.cnf"
+    "${FOLD}/hdd/usr/etc/my.cnf"
   )
   local temp_file; temp_file="${FOLD}/hdd/$(chroot_mktemp)"
   local init_file; init_file="$(chroot_mktemp)"
@@ -123,7 +123,7 @@ reset_mysql_password() {
 
   for file in "${config_files[@]}"; do
     if [[ -f "${file}" ]]; then
-      config_file=${file}
+      config_file="${file}"
       break
     fi
   done

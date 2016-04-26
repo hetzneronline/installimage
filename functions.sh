@@ -1349,6 +1349,7 @@ validate_vars() {
     graph_error "ERROR: HOSTNAME may not be empty"
     return 1
   fi
+  # TODO: add check for valid hostname (e.g. no underscores)
 
   if [ "$MBTYPE" = "D3401-H1" ]; then
     if [ "$IAM" = "debian" -a "$IMG_VERSION" -lt 82 ]; then
@@ -1409,6 +1410,8 @@ graph_notice() {
 # which operating system will be installed
 # whoami "IMAGENAME"
 whoami() {
+ IMAGENAME="${1%%.*}"
+
  IAM="debian"
  if [ "$1" ]; then
   case "$1" in
@@ -1428,9 +1431,10 @@ whoami() {
  [ -z "$IMG_VERSION" -o "$IMG_VERSION" = "" -o "$IMG_VERSION" = "h.net.tar.gz" ]  && IMG_VERSION="0"
  IMG_ARCH="$(echo "$1" | sed 's/.*-\(32\|64\)-.*/\1/')"
 
- IMG_FULLNAME="$(find "$IMAGESPATH"/* -maxdepth 1 type -f -name "$1*" -a -not -regex '.*\.sig$' -printf '%f\n')"
+ IMG_FULLNAME="$(find "$IMAGESPATH" -maxdepth 1 -type f -name "$1*" -a -not -regex '.*\.sig$' -printf '%f\n')"
  IMG_EXT="${IMG_FULLNAME#*.}"
 
+ export IMAGENAME
  export IAM
  export IMG_VERSION
  export IMG_ARCH
@@ -1504,34 +1508,34 @@ delete_partitions() {
 # function which gets the end of the extended partition
 # get_end_of_extended "DRIVE"
 function get_end_of_extended() {
-  local dev; dev="$1"
-  local drive_size; drive_size=$(blockdev --getsize64 $dev)
-  local sectorsize; sectorsize=$(blockdev --getss $dev)
+  local DEV="$1"
+  local DRIVE_SIZE=$(blockdev --getsize64 $DEV)
+  local SECTORSIZE=$(blockdev --getss $DEV )
 
-  local end; end=0
-  local sum; sum=0
-  local limit; limit=2199023255040
+  local end=0
+  local sum=0
+  local LIMIT=2199023255040
   # get sector limit
-  local sectorlimit; sectorlimit=$[($limit / $sectorsize) - 1]
-  local startsec; startsec=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
+  local SECTORLIMIT=$[($LIMIT / $SECTORSIZE) - 1]
+  local STARTSEC=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
 
-  for ((i=1; i<=3; i++)); do
-    sum=$((sum + ${PART_SIZE[$i]} ))
+  for i in $(seq 1 3); do
+    sum=$(echo "$sum + ${PART_SIZE[$i]}" | bc)
   done
-  rest=$((drive_size - (sum * 1024 * 1024) ))
+  rest=$(echo "$DRIVE_SIZE - ($sum * 1024 * 1024)" | bc)
 
-  end=$((drive_size / $sectorsize))
+  end=$[$DRIVE_SIZE / $SECTORSIZE]
 
-  if [ $drive_size -lt $limit ]; then
-    echo "$((end-1))"
+  if [ $DRIVE_SIZE -lt $LIMIT ]; then
+    echo "$[$end-1]"
   else
-    if [ $rest -gt $limit ]; then
+    if [ $rest -gt $LIMIT ]; then
       # if the remaining space is more than 2 TiB, the end of the extended
       # partition is the current sector plus 2^32-1 sectors (2TiB-512 Byte)
-      echo "$((startsec+ sectorlimit))"
+      echo "$(echo "$STARTSEC+$SECTORLIMIT" | bc)"
     else
       # otherwise the end is the number of sectors - 1
-      echo "$((end-1))"
+      echo "$[$end-1]"
     fi
   fi
 }
@@ -1935,9 +1939,11 @@ make_swraid() {
 
 
 make_lvm() {
-  if [ "$1" -a "$2" ] ; then
-    fstab=$1
-    disk1=$2
+  if [ -n "$1" ] ; then
+    local fstab=$1
+    local disk=$DRIVE1
+    local p; p="$(echo "$disk" | grep nvme)"
+    [ -n "$p" ] && p='p'
 
     # get device names for PVs depending if we use swraid or not
     inc_dev=1
@@ -1947,8 +1953,8 @@ make_lvm() {
         let inc_dev=inc_dev+1
       done
     else
-      for inc_dev in $(seq 1 $(ls -1 ${DRIVE1}[0-9]* | wc -l)) ; do
-        dev[$inc_dev]="$disk1$(next_partnum $[$inc_dev-1])"
+      for inc_dev in $(seq 1 $(ls -1 ${DRIVE1}$p[0-9]* | wc -l)) ; do
+        dev[$inc_dev]="$disk$p$(next_partnum $[$inc_dev-1])"
       done
     fi
 
@@ -2579,9 +2585,15 @@ set_hostname() {
 
     if [ -f $hostnamefile -o "$IAM" = "arch" ]; then
       {
-        echo -n ${shortname}
-        is_cpanel_install && echo -n .yourdomain.localdomain
-        echo
+        if is_cpanel_install; then
+          if check_fqdn ${sethostname}; then
+            echo ${sethostname}
+          else
+            echo ${sethostname}.yourdomain.localdomain
+          fi
+        else
+          echo ${shortname}
+        fi
       } > ${hostnamefile}
       debug "# set new hostname '$(cat ${hostnamefile})' in ${hostnamefile}"
     fi
@@ -2678,23 +2690,6 @@ generate_hosts() {
     fi
   fi
   return 0
-}
-
-#  execute_chroot_command "COMMMAND"
-execute_chroot_command() {
-  if [ "$1" ]; then
-    debug "# chroot_command: $1"
-    chroot "$FOLD/hdd/" /bin/bash -c "$1" 2>&1 | debugoutput ; EXITCODE=$?
-    return $EXITCODE
-  fi
-}
-
-# execute chroot command but without debugoutput
-execute_chroot_command_wo_debug() {
-  if [ "$1" ]; then
-    chroot "$FOLD/hdd/" /bin/bash -c "$1" 2>&1; EXITCODE=$?
-    return $EXITCODE
-  fi
 }
 
 # copy_mtab "NIL"
@@ -3395,7 +3390,7 @@ cleanup() {
   rm --force --recursive --verbose "${TEMP_FILES[@]}" &> /dev/null # |& debugoutput
   while read entry; do
     while read subentry; do
-      umount --lazy --verbose "$(echo "${subentry}" | awk '{ print $2 }')" |& debugoutput
+      umount --lazy --verbose "$(echo "${subentry}" | awk '{print $2}')" &> /dev/null # |& debugoutput
     done < <(echo "${entry}" | grep "${FOLD}/hdd")
   done < <(tac /proc/mounts)
   rm --force --recursive --verbose "${FOLD}" &> /dev/null # |& debugoutput
@@ -3894,30 +3889,6 @@ is_private_ip() {
  else
   return 1
  fi
-}
-
-# chroot_mktemp() <options>
-# create a temp file within the installed system
-# $@ <options>
-chroot_mktemp() {
-  local options="${@}"
-  local temp_file=$(execute_chroot_command_wo_debug "mktemp ${options}")
-  TEMP_FILES+=(${FOLD}/hdd/${temp_file})
-  echo ${temp_file}
-}
-
-# generate_password() <length>
-# generates a password
-# $1 <length> default: 16
-generate_password() {
-  local length=${1:-16}
-  local password=
-  # ensure that the password contains at least one lower case letter, an upper
-  # case letter and a number
-  until echo ${password} | grep "[[:lower:]]" | grep "[[:upper:]]" | grep --quiet "[[:digit:]]"; do
-    password=$(tr --complement --delete '[:alnum:][:digit:]' < /dev/urandom | head --bytes ${length})
-  done
-  echo ${password}
 }
 
 # vim: ai:ts=2:sw=2:et
