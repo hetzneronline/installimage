@@ -112,8 +112,6 @@ start_systemd_nspawn_container() {
 # $2 <debug>   (yes|no) default: yes
 execute_within_systemd_nspawn_container() {
   local command="${1}"
-  # merge stdin
-  [[ -t 0 ]] || command+="$(cat)"
   local debug="${2:-debug}"
   local quiet="${3:-quiet}"
   [[ "${debug}" == debug ]] && debug=true || debug=false
@@ -129,16 +127,14 @@ execute_within_systemd_nspawn_container() {
       if ${quiet}; then
         cat | debugoutput
       else
-        tee >(debugoutput)
+        tee >(debugoutput); wait
       fi
     else
       if ! ${quiet}; then
         cat
       fi
     fi
-    wait
   ) < "${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_OUT_FIFO}"
-  wait
   return "$(cat "${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_RETVAL_FIFO}")"
 }
 

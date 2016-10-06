@@ -10,11 +10,11 @@
 
 # simple params - restart with other params
 case $1 in
-  proxmox)              exec $0 -c proxmox -x proxmox ;;
-  hsa-baculadir)        exec $0 -c hsa-baculadir -x hsa-baculadir ;;
-  hsa-minimal64)        exec $0 -c hsa-minimal64 -x hsa-minimal64 ;;
-  hsa-managed)          exec $0 -c hsa-managed -x hsa-managed ;;
-  hsa-sql)              exec $0 -c hsa-sql -x hsa-sql ;;
+  proxmox3)             exec "$0" -c proxmox3 -x proxmox3 ;;
+  hsa-baculadir)        exec "$0" -c hsa-baculadir -x hsa-baculadir ;;
+  hsa-minimal64)        exec "$0" -c hsa-minimal64 -x hsa-minimal64 ;;
+  hsa-managed)          exec "$0" -c hsa-managed -x hsa-managed ;;
+  hsa-sql)              exec "$0" -c hsa-sql -x hsa-sql ;;
 esac
 
 
@@ -34,17 +34,21 @@ echo 3 >/proc/sys/vm/drop_caches
 
 
 # realconfig
-SCRIPTPATH="$(dirname $0)"
+SCRIPTPATH="$(dirname "$0")"
 REALCONFIG="$SCRIPTPATH/config.sh"
+
+FOLD="$(mktemp -d /installimage.XXXXX)"
 
 # copy our config file and read global variables and functions
 cp -a "$REALCONFIG" /tmp/install.vars
+TEMP_FILES+=(/tmp/install.vars)
 . /tmp/install.vars
-FOLD="$(mktemp -d /installimage.XXXXX)"
 
 # clear debugfile
 echo > "$DEBUGFILE"
 
+# cleanup on EXIT
+trap cleanup EXIT
 
 # get command line options
 if [ $# -lt 1 ] && [ ! -e "$AUTOSETUPCONFIG" ] ; then
@@ -67,7 +71,7 @@ fi
 } >/dev/null 2>&1
 cd "$FOLD" || exit 1
 myip=$(ifconfig eth0 | grep "inet addr" | cut -d: -f2 | cut -d ' ' -f1)
-debug "# starting installimage on  [ $myip ]"
+debug "# starting installimage on [ $myip ]"
 
 
 # log hardware data
@@ -138,10 +142,8 @@ else
   fi
 fi
 
-# clean mounts and close debugfile
-cleanup
-
 if [ "$EXITCODE" = "1" ]; then
   exit 1
 fi
 
+# vim: ai:ts=2:sw=2:et

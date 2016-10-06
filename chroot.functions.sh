@@ -9,13 +9,10 @@
 # execute_chroot_command() <command> <debug> <quiet>
 # executes a chroot command
 # $1 <command> the command to execute
-# for convenience, the command can also be passed via stdin!
 # $2 <debug>   (debug|nodebug) default: yes
 # $3 <quiet>   (quiet|dump) default: yes
 execute_chroot_command() {
   local command="${1}"
-  # merge stdin
-  [[ -t 0 ]] || command+="$(cat)"
   local debug="${2:-debug}"
   local quiet="${3:-quiet}"
   [[ "${debug}" == debug ]] && debug=true || debug=false
@@ -28,17 +25,14 @@ execute_chroot_command() {
       if ${quiet}; then
         cat | debugoutput
       else
-        tee >(debugoutput)
+        tee >(debugoutput); wait
       fi
     else
       if ! ${quiet}; then
         cat
       fi
     fi
-    wait
   )
-  wait
-  return "${?}"
 }
 
 # for compatibility

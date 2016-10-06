@@ -221,10 +221,10 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:" OPTION ; do
        export OPT_SSHKEYS_URL="$OPTARG"
        export OPT_USE_SSHKEYS="1"
      else
-        msg="=> FAILED: cannot install ssh-keys without a source"
-        debug "$msg"
-        echo -e "${RED}$msg${NOCOL}"
-        exit 1
+       msg="=> FAILED: cannot install ssh-keys without a source"
+       debug "$msg"
+       echo -e "${RED}$msg${NOCOL}"
+       exit 1
      fi
      ;;
   esac
@@ -239,10 +239,10 @@ if [ "$OPT_AUTOMODE" -a -z "$OPT_IMAGE" -a -z "$OPT_CONFIGFILE" ] ; then
 fi
 
 if [ "$OPT_USE_SSHKEYS" -a -z "$OPT_SSHKEYS_URL" ]; then
-        msg="=> FAILED: Should install SSH keys, but key URL not set."
-        debug "$msg"
-        echo -e "${RED}$msg${NOCOL}"
-        exit 1
+  msg="=> FAILED: Should install SSH keys, but key URL not set."
+  debug "$msg"
+  echo -e "${RED}$msg${NOCOL}"
+  exit 1
 fi
 
 # DEBUG:

@@ -66,6 +66,11 @@ FINALIMAGEPATH=""
 SYSMFC=$(dmidecode -s system-manufacturer 2>/dev/null | tail -n1)
 SYSTYPE=$(dmidecode -s system-product-name 2>/dev/null | tail -n1)
 MBTYPE=$(dmidecode -s baseboard-product-name 2>/dev/null | tail -n1)
+SYSARCH=$(uname -m)
+
+if [ -d "/sys/firmware/efi" ]; then
+  UEFI=1
+fi
 
 # functions
 # show text in a different color
@@ -601,6 +606,10 @@ if [ -n "$1" ]; then
   RAID_ASSUME_CLEAN="$(grep -m1 -e ^RAID_ASSUME_CLEAN "$1" |awk '{print $2}')"
   export RAID_ASSUME_CLEAN
 
+  # special hidden configure option: configure layout for RAID5, 6 and 10
+  RAID_LAYOUT="$(grep -m1 -e ^RAID_LAYOUT "$1" |awk '{print $2}')"
+  export RAID_LAYOUT
+
   # special hidden configure option: GPT usage
   # if set to 1, use GPT even on disks smaller than 2TiB
   # if set to 2, always use GPT, even if the OS does not support it
@@ -757,6 +766,15 @@ if [ -n "$1" ]; then
   SYSTEMDEVICE="$DRIVE1"
   # this var appear to be unused. keep it for safety
   #SYSTEMREALDEVICE="$DRIVE1"
+
+  # SSH key URL setting
+  # can also set this via -K from commandline
+  local sshkeys_url
+  sshkeys_url=$(grep -m1 -e ^SSHKEYS_URL "${1}" | awk '{print $2}')
+  if [ -n "$sshkeys_url" ]; then
+    export OPT_SSHKEYS_URL="$sshkeys_url"
+    export OPT_USE_SSHKEYS=1
+  fi
 
 fi
 }
@@ -1311,7 +1329,7 @@ validate_vars() {
   fi
 
   if is_plesk_install; then
-    if [ "$IAM" != "centos" -a "$IAM" != "debian" ]; then
+    if [ "$IAM" != "centos" -a "$IAM" != "debian" -a "$IAM" != "ubuntu" ]; then
       graph_error "ERROR: PLESK is not available for this image"
       return 1
     fi
@@ -1351,15 +1369,15 @@ validate_vars() {
   fi
   # TODO: add check for valid hostname (e.g. no underscores)
 
-  if [ "$MBTYPE" = "D3401-H1" ]; then
-    if [ "$IAM" = "debian" -a "$IMG_VERSION" -lt 82 ]; then
+  if [ "$MBTYPE" = "D3401-H1" ] || [ "$MBTYPE" = "D3417-B1" ]; then
+    if [ "$IAM" = "debian" ] && [ "$IMG_VERSION" -lt 82 -o "$IMG_VERSION" -ge 711 ]; then
       if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
         echo "WARNING: Debian versions older than Debian 8.2 have no support for the Intel i219 NIC of this board." | debugoutput
       else
         graph_notice "WARNING: Debian versions older than Debian 8.2 have no support for the Intel i219 NIC of this board."
       fi
     fi
-    if [ "$IAM" = "centos" -a "$IMG_VERSION" -ge 70 -a "$IMG_VERSION" -lt 72 ]; then
+    if [ "$IAM" = "centos" ] && [ "$IMG_VERSION" -ge 70 ] && [ "$IMG_VERSION" -lt 72 ]; then
       if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
         echo "WARNING: CentOS 7.0 and 7.1 have no support for the Intel i219 NIC of this board." | debugoutput
       else
@@ -1866,6 +1884,7 @@ make_swraid() {
         metadata_boot="--metadata=0.90"
       else
         metadata="--metadata=0.90"
+        metadata_boot="${metadata}"
       fi
     fi
 
@@ -1908,6 +1927,7 @@ make_swraid() {
         local array_metadata="$metadata"
         local array_raidlevel="$SWRAIDLEVEL"
         local can_assume_clean=''
+        local array_layout=''
 
         # lilo and GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
         if [ "$(echo "$line" | grep "/boot")" ]; then
@@ -1919,14 +1939,19 @@ make_swraid() {
         fi
 
         if [ "$RAID_ASSUME_CLEAN" = "1" ]; then
-          if [ "$SWRAIDLEVEL" = "1" ] || [ "$SWRAIDLEVEL" = "10" ] || [ "$SWRAIDLEVEL" = "6" ]; then
+          if [ "$array_raidlevel" = "1" ] || [ "$array_raidlevel" = "6" ] || [ "$array_raidlevel" = "10" ]; then
             can_assume_clean='--assume-clean'
           fi
         fi
-        debug "Array RAID Level is: '$array_raidlevel' - $can_assume_clean"
+        if [ -n "$RAID_LAYOUT" ]; then
+          if [ "$array_raidlevel" = "5" ] || [ "$array_raidlevel" = "6" ] || [ "$array_raidlevel" = "10" ]; then
+             array_layout="--layout $RAID_LAYOUT"
+          fi
+        fi
+        debug "Array RAID Level is: '$array_raidlevel' - $can_assume_clean - $array_layout"
         debug "Array metadata is: '$array_metadata'"
 
-        yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $can_assume_clean $components 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
+        yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $array_layout $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
 
         count="$[$count+1]"
        fi
@@ -1934,7 +1959,7 @@ make_swraid() {
     done < $fstab.tmp
 
   fi
-  return 0
+  return 0 
 }
 
 
@@ -2056,17 +2081,17 @@ format_partitions() {
 
     if [ -b $DEV ] ; then
       debug "# formatting  $DEV  with  $FS"
+      wipefs -af $DEV |& debugoutput
       if [ "$FS" = "swap" ]; then
         # format swap partition with dd first because mkswap
         # doesnt overwrite sw-raid information!
-        mkfs -t xfs -f $DEV 2>&1 | debugoutput
-        dd if=/dev/zero of=$DEV bs=256 count=8 2>&1 | debugoutput
+        mkfs -t xfs -f $DEV &> /dev/null
+        dd if=/dev/zero of=$DEV bs=256 count=8 &> /dev/null
         # then write swap information
         mkswap $DEV 2>&1 | debugoutput ; EXITCODE=$?
       elif [ "$FS" = "ext2" -o "$FS" = "ext3" -o "$FS" = "ext4" ]; then
         mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
       elif [ "$FS" = "btrfs" ]; then
-        wipefs -a $DEV | debugoutput
         mkfs -t $FS $DEV 2>&1 | debugoutput ; EXITCODE=$?
       else
         mkfs -t $FS -q -f $DEV 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
@@ -2571,6 +2596,11 @@ set_hostname() {
     local machinefile="$FOLD/hdd/etc/machine-id"
     local networkfile="$FOLD/hdd/etc/sysconfig/network"
     local hostsfile="$FOLD/hdd/etc/hosts"
+    local systemd=0
+
+    if [ -x /bin/systemd-notify ]; then
+      systemd-notify --booted && systemd=1
+    fi
 
     [ -f "$FOLD/hdd/etc/HOSTNAME" ] && hostnamefile="$FOLD/hdd/etc/HOSTNAME"
 
@@ -2606,8 +2636,13 @@ set_hostname() {
     fi
 
     if [ -f $machinefile ]; then
-      # clear machine-id from install (will be regen upon first boot)
-      echo >  $machinefile
+      # clear machine-id from install (should be regenerated upon first boot)
+      echo -n > $machinefile
+      if [ $systemd -eq 1 ]; then
+        # if we have systemd, just generate one (works around odd behaviour
+        # when machine-id is only temporarily generated upon first boot
+        systemd-machine-id-setup --root "$FOLD/hdd" 2>/dev/null
+      fi
     fi
 
     if [ -f $networkfile ]; then
@@ -3196,7 +3231,7 @@ generate_ntp_config() {
         echo ""
         echo "# $C_SHORT ntp servers"
         for i in "${NTPSERVERS[@]}"; do
-          echo "server $i offline iburst"
+          echo "server $i iburst"
         done
       } >> "$CFG" | debugoutput
       if [ "$IAM" = "suse" ]; then
@@ -3394,6 +3429,7 @@ cleanup() {
     done < <(echo "${entry}" | grep "${FOLD}/hdd")
   done < <(tac /proc/mounts)
   rm --force --recursive --verbose "${FOLD}" &> /dev/null # |& debugoutput
+  resume_swraid_resync
 }
 
 exit_function() {
@@ -3778,13 +3814,22 @@ set_udev_rules() {
      iptest=$(ip addr show dev "$interface" | grep "$interface"$ | awk '{print $2}' | cut -d "." -f 1,2)
      #iptest=$(ifconfig $INTERFACE | grep "inet addr" | cut -d ":" -f2 | cut -d " " -f1 | cut -d "." -f1,2)
      #Separate udev-rules for openSUSE 12.3 in function "suse_fix" below !!!
-     if [ -n "$iptest"  ] && [ "$iptest" != "192.168" ] && [ "$interface" != "eth0" ] && [ "$interface" != "lo" ]; then
-       debug "# renaming active $interface to eth0 via udev in installed system"
-       sed -i  "s/$interface/dummy/" "$FOLD/hdd$udevtgtfile"
-       sed -i  "s/eth0/$interface/" "$FOLD/hdd$udevtgtfile"
-       sed -i  "s/dummy/eth0/" "$FOLD/hdd$udevtgtfile"
-       fix_eth_naming "$interface"
-     fi
+
+     # skip eth0, lo and 192.168.x
+     [[ "${interface}" == "eth0" ]] && continue
+     [[ "${interface}" == "idrac" ]] && continue
+     [[ "${interface}" == "lo" ]] && continue
+     [[ -n "${iptest}" ]] || continue
+     [[ "${iptest}" == "192.168" ]] && continue
+     # skip IPMI NICs
+     udev_info="$(udevadm info --path "/sys/class/net/${interface}")"
+     echo "${udev_info}" | grep --quiet 'ID_MODEL=iDRAC_Virtual_NIC_USB_Device' && continue
+
+     debug "# renaming active $interface to eth0 via udev in installed system"
+     sed -i  "s/$interface/dummy/" "$FOLD/hdd$udevtgtfile"
+     sed -i  "s/eth0/$interface/" "$FOLD/hdd$udevtgtfile"
+     sed -i  "s/dummy/eth0/" "$FOLD/hdd$udevtgtfile"
+     fix_eth_naming "$interface"
     done
     [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
     [ "$suse_version" == "123" ] && suse_netdev_fix

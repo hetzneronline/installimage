@@ -90,13 +90,11 @@ randomize_lamp_passwords() {
 
   debug 'set up config files'
 
-  # IPADDR or <your-servers-IP>
-  local host="${IPADDR:-<your-servers-IP>}"
   {
     echo "### ${COMPANY} installimage"
     echo
-    echo "Webmin URL:     https://${host}:10000/"
-    echo "phpMyAdmin URL: http://${host}/phpmyadmin/"
+    echo "Webmin URL:     https://<your-servers-IP>:10000/"
+    echo "phpMyAdmin URL: http://<your-servers-IP>/phpmyadmin/"
     echo
     echo "MySQL root password: ${root_password}"
   } | setup_password_txt

@@ -186,6 +186,7 @@ if [ "$SWRAID" = "1" ]; then
   inc_step
   status_busy "Creating software RAID level $SWRAIDLEVEL"
   make_swraid "$FOLD/fstab"
+  suspend_swraid_resync
   status_donefailed $?
 fi
 
@@ -533,7 +534,7 @@ report_debuglog $report_id
   echo "# More information about the installimage script and"
   echo "# automatic installations can be found in our wiki:"
   echo "#"
-  echo "# http://wiki.hetzner.de/index.php/Betriebssystem_Images_installieren"
+  echo "# http://wiki.hetzner.de/index.php/Installimage"
   echo "#"
   echo
   cat $FOLD/install.conf | grep -v "^#" | grep -v "^$"

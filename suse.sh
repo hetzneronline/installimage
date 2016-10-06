@@ -42,7 +42,6 @@ setup_network_config() {
     {
       echo "### $COMPANY - installimage"
       echo "# device: $1"
-      echo "BOOTPROTO='static'"
       echo "MTU=''"
       echo "STARTMODE='auto'"
       echo "UNIQUE=''"
@@ -50,19 +49,35 @@ setup_network_config() {
     } > "$CONFIGFILE"
 
     if [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-      {
-        echo "REMOTE_IPADDR=''"
-        echo "BROADCAST='$4'"
-        echo "IPADDR='$3'"
-        echo "NETMASK='$5'"
-        echo "NETWORK='$7'"
-      } >> "$CONFIGFILE"
-
-      {
-        echo "$7 $6 $5 $1"
-        echo "$6 - 255.255.255.255 $1"
-        echo "default $6 - -"
-      } > "$ROUTEFILE"
+      if is_private_ip "$6" && isVServer; then
+        {
+          echo "BOOTPROTO=dhcp"
+          echo "DHCLIENT_SET_HOSTNAME='no'"
+        } >> "$CONFIGFILE"
+      else
+        {
+          echo "BOOTPROTO='static'"
+          echo "BROADCAST='$4'"
+          echo "IPADDR='$3'"
+        } >> "$CONFIGFILE"
+        if is_private_ip "$3" || isVServer; then
+          {
+            echo "NETMASK='$5'"
+          } >> "$CONFIGFILE"
+        else
+          {
+            echo "NETMASK=255.255.255.255"
+            echo "REMOTE_IPADDR='$6'"
+          } >> "$CONFIGFILE"
+        fi 
+        {
+          echo "### $COMPANY - installimage"
+          echo "# routing for eth0"
+#          echo "$7 $6 $5 $1"
+#          echo "$6 - 255.255.255.255 $1"
+          echo "default $6 - -"
+        } > "$ROUTEFILE"
+      fi
     fi
 
     if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then

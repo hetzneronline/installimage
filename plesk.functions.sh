@@ -18,12 +18,15 @@ install_plesk() {
   local version="${1^^}"
   local temp_file; temp_file=$(chroot_mktemp)
 
-  # debug '# preparing plesk installation'
-  # if [[ "${IAM}" == centos ]]; then
-  #   debug '# installing mysql'
-  #   execute_chroot_command 'yum -y install mysql mysql-server' || return 1
-  #   debug 'installed mysql'
-  # fi
+  debug '# preparing plesk installation'
+  if [[ "${IAM}" == centos ]]; then
+    # debug '# installing mysql'
+    # execute_chroot_command 'yum -y install mysql mysql-server' || return 1
+    # debug 'installed mysql'
+    debug '# installing openssl'
+    execute_chroot_command 'yum -y install openssl' # || return 1
+    debug 'installed openssl'
+  fi
   [[ "${IAM}" == debian ]] && (( IMG_VERSION >= 70 )) && mkdir --parents "${FOLD}/hdd/run/lock"
 
   debug "# downloading plesk installer ${PLESK_INSTALLER_SRC}/${IMAGENAME}"
@@ -43,9 +46,11 @@ install_plesk() {
     )"
   fi
   [[ -z "${version}" ]] && return 1
+  [[ "${version}" =~ ^PLESK_17_ ]] && PLESK_COMPONENTS=(${PLESK_COMPONENTS[@]/#pmm/pmm-old})
 
   debug "# installing plesk ${version}"
   local command="${temp_file} "
+  command+="--source ${PLESK_MIRROR} "
   command+='--select-product-id plesk '
   command+="--select-release-id ${version} "
   command+="--download-retry-count ${PLESK_DOWNLOAD_RETRY_COUNT} "

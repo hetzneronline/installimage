@@ -39,18 +39,23 @@ setup_network_config() {
 
     if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
       debug "setting up ipv4 networking $3/$5 via $6"
-      {
-        echo "Address=$3/$CIDR"
-        echo "Gateway=$6"
-        echo ""
-      } >> "$CONFIGFILE"
-
-      if ! is_private_ip "$3"; then
+      if is_private_ip "$6" && isVServer; then
         {
-          echo "[Route]"
-          echo "Destination=$7/$CIDR"
-          echo "Gateway=$6"
+          echo "DHCP=ipv4"
         } >> "$CONFIGFILE"
+      else
+        {
+          echo "Address=$3/$CIDR"
+          echo "Gateway=$6"
+          echo ""
+        } >> "$CONFIGFILE"
+        if ! is_private_ip "$3" || ! isVServer; then
+          {
+            echo "[Route]"
+            echo "Destination=$7/$CIDR"
+            echo "Gateway=$6"
+          } >> "$CONFIGFILE"
+        fi
       fi
     fi
 
@@ -168,7 +173,7 @@ validate_image() {
 
 # extract image file to hdd
 extract_image() {
-  LANG=C pacstrap -m -a "$FOLD/hdd" base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget 2>&1 | debugoutput
+  LANG=C pacstrap -m -a "$FOLD/hdd" base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget ca-certificates-utils 2>&1 | debugoutput
   declare -i EXITCODE=$?
   if [ "$EXITCODE" -eq "0" ]; then
     cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput

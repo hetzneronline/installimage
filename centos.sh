@@ -41,7 +41,7 @@ setup_network_config() {
       echo "#"
     } > "$CONFIGFILE"
 
-    if ! is_private_ip "$3"; then
+    if ! is_private_ip "$3" && ! isVServer; then
       {
         echo "# Note for customers who want to create bridged networking for virtualisation:"
         echo "# Gateway is set in separate file"
@@ -52,33 +52,37 @@ setup_network_config() {
       echo "#"
       echo "# device: $1"
       echo "DEVICE=$1"
-      echo "BOOTPROTO=none"
       echo "ONBOOT=yes"
+      echo "HWADDR=$upper_mac"
     } >> "$CONFIGFILE"
 
     if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-      {
-        echo "HWADDR=$upper_mac"
-        echo "IPADDR=$3"
-      } >> "$CONFIGFILE"
-      if is_private_ip "$3"; then
-        {
-          echo "NETMASK=$5"
-          echo "GATEWAY=$6"
-        } >> "$CONFIGFILE"
+      if is_private_ip "$6" && isVServer; then
+        echo "BOOTPROTO=dhcp" >> "$CONFIGFILE"
       else
         {
-          echo "NETMASK=255.255.255.255"
-          echo "SCOPE=\"peer $6\""
+          echo "BOOTPROTO=none" >> "$CONFIGFILE"
+          echo "IPADDR=$3"
         } >> "$CONFIGFILE"
-
-        {
-          echo "### $COMPANY - installimage"
-          echo "# routing for eth0"
-          echo "ADDRESS0=0.0.0.0"
-          echo "NETMASK0=0.0.0.0"
-          echo "GATEWAY0=$6"
-        } > "$ROUTEFILE"
+        if is_private_ip "$3" || isVServer; then
+          {
+            echo "NETMASK=$5"
+            echo "GATEWAY=$6"
+          } >> "$CONFIGFILE"
+        else
+          {
+            echo "NETMASK=255.255.255.255"
+            echo "SCOPE=\"peer $6\""
+          } >> "$CONFIGFILE"
+  
+          {
+            echo "### $COMPANY - installimage"
+            echo "# routing for eth0"
+            echo "ADDRESS0=0.0.0.0"
+            echo "NETMASK0=0.0.0.0"
+            echo "GATEWAY0=$6"
+          } > "$ROUTEFILE"
+        fi
       fi
     fi
 
@@ -183,6 +187,7 @@ generate_new_ramdisk() {
         execute_chroot_command "/sbin/new-kernel-pkg --mkinitrd --dracut --depmod --install $VERSION"
         declare -i EXITCODE=$?
       else
+        rm "${FOLD}/hdd/boot/grub/grub.conf" |& debugoutput
         execute_chroot_command "/sbin/new-kernel-pkg --package kernel --mkinitrd --depmod --install $VERSION"
         declare -i EXITCODE=$?
       fi
@@ -315,9 +320,9 @@ generate_config_grub() {
   # TODO: add grubby stuff (SYSFONT, LANG, KEYTABLE)
   else
     if isVServer; then
-      execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto elevator=noop\"/"'
+      execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto net.ifnames=0 elevator=noop\"/"'
     else
-      execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto\"/"'
+      execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto net.ifnames=0\"/"'
     fi
 
     rm -f "$FOLD/hdd/boot/grub2/grub.cfg"

@@ -58,6 +58,8 @@ export DEFAULTGOVERNOR="ondemand"
 
 export V6ONLY="0"
 
+export UEFI="0"
+
 # dialog settings
 export DIATITLE="$COMPANY"
 export OSMENULIST=(
@@ -71,8 +73,8 @@ export OSMENULIST=(
 "custom image"    "(blanco config for user images)"
 )
 
-export PROXMOX3_BASE_IMAGE="Debian-79-wheezy-64-minimal"
-export PROXMOX4_BASE_IMAGE="Debian-84-jessie-64-minimal"
+export PROXMOX3_BASE_IMAGE="Debian-711-wheezy-64-minimal"
+export PROXMOX4_BASE_IMAGE="Debian-86-jessie-64-minimal"
 
 # all files that are added to this array will be removed by our cleanup
 # function
@@ -99,6 +101,7 @@ TEMP_FILES+=(
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
+export PLESK_MIRROR=http://mirror.hetzner.de/plesk
 export PLESK_STD_VERSION=PLESK_12_5_30
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(

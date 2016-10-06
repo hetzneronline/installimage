@@ -37,7 +37,7 @@ setup_network_config() {
       } > "$CONFIGFILE"
       if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
         echo "# device: $1" >> "$CONFIGFILE"
-        if is_private_ip "$3" && isVServer; then
+        if is_private_ip "$6" && isVServer; then
           {
             echo "auto  $1"
             echo "iface $1 inet dhcp"
@@ -49,7 +49,7 @@ setup_network_config() {
             echo "  address   $3"
             echo "  netmask   $5"
             echo "  gateway   $6"
-            if ! is_private_ip "$3"; then
+            if ! is_private_ip "$3" || ! isVServer; then
               echo "  # default route to access subnet"
               echo "  up route add -net $7 netmask $5 gw $6 $1"
             fi
@@ -102,18 +102,23 @@ setup_network_config() {
 
       if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
         debug "setting up ipv4 networking $3/$5 via $6"
-        {
-          echo "Address=$3/$CIDR"
-          echo "Gateway=$6"
-          echo ""
-        } >> "$CONFIGFILE"
-
-        if ! is_private_ip "$3"; then
+        if is_private_ip "$6" && isVServer; then
           {
-            echo "[Route]"
-            echo "Destination=$7/$CIDR"
-            echo "Gateway=$6"
+            echo "DHCP=ipv4"
           } >> "$CONFIGFILE"
+        else
+          {
+            echo "Address=$3/$CIDR"
+            echo "Gateway=$6"
+            echo ""
+          } >> "$CONFIGFILE"
+          if ! is_private_ip "$3" || ! isVServer; then
+            {
+              echo "[Route]"
+              echo "Destination=$7/$CIDR"
+              echo "Gateway=$6"
+            } >> "$CONFIGFILE"
+          fi
         fi
       fi
 
@@ -124,7 +129,7 @@ setup_network_config() {
   fi
 }
 
-# generate_config_mdadmconf "NIL"
+# generate_config_mdadm "NIL"
 generate_config_mdadm() {
   local mdadmconf="/etc/mdadm/mdadm.conf"
   execute_chroot_command "/usr/share/mdadm/mkconf > $mdadmconf"; declare -i EXITCODE=$?
@@ -240,6 +245,7 @@ generate_config_grub() {
   declare -i EXITCODE=0
 
   local grubdefconf="$FOLD/hdd/etc/default/grub"
+  local grubconfdir="$FOLD/hdd/etc/default/grub.d"
 
   # this shold not be necessary anymore
 #  ubuntu_grub_fix
@@ -260,8 +266,18 @@ generate_config_grub() {
     grub_linux_default="${grub_linux_default} iommu=noaperture"
   fi
 
-  sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
-  sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/"
+  if [ -d "$grubconfdir" ]; then
+    # this needs to end in .cfg, otherwise grub-mkconfig will not read it"
+    grubdefconf="$grubconfdir/hetzner.cfg"
+    {
+      echo "GRUB_HIDDEN_TIMEOUT_QUIET=false"
+      echo "GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\""
+    } >> "$grubdefconf"
+
+  else
+    sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
+    sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/"
+  fi
 
   {
     echo ""
@@ -275,12 +291,20 @@ generate_config_grub() {
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
   # only install grub2 in mbr of all other drives if we use swraid
+  local debconf_drives;
   for ((i=1; i<=COUNT_DRIVES; i++)); do
     if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
       local disk; disk="$(eval echo "\$DRIVE$i")"
       execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
+      if [ "$i" -eq 1 ]; then
+        debconf_drives="$disk"
+      else
+        debconf_drives="$debconf_drives, $disk"
+      fi
     fi
   done
+
+  execute_chroot_command "echo 'set grub-pc/install_devices $debconf_drives' | debconf-communicate"
 
   uuid_bugfix
 

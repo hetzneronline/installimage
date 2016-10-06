@@ -68,15 +68,12 @@ stop_mysql() {
 # execute_mysql_command() <command> <user> <password>
 # executes a mysql command
 # $1 <command>  the command to execute
-# for convenience, the command can also be passed via stdin
 # $2 <user>     optional
 # $3 <password> optional
 execute_mysql_command() {
   local command="${1}"
   local user="${2}"
   local password="${3}"
-  # merge stdin
-  [[ -t 0 ]] || command+="$(cat)"
   local temp_file; temp_file=$(chroot_mktemp)
 
   # shellcheck disable=SC2119
@@ -187,7 +184,7 @@ set_mysql_password() {
     echo 'USE mysql;'
     echo "UPDATE user SET password=PASSWORD('${new_password}') WHERE user='${user}';"
     echo 'FLUSH PRIVILEGES;'
-  } | execute_mysql_command || return 1
+  } | execute_mysql_command "$(cat)" || return 1
   check_mysql_password "${user}" "${new_password}" || return 1
   debug "set mysql password for ${user}"
 }

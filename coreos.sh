@@ -65,7 +65,7 @@ extract_image() {
 
     # extract image with given compression
     if [ -n "$COMPRESSION" ]; then
-      "$COMPRESSION -d --stdout $EXTRACTFROM" > "${DRIVE1}"
+      $COMPRESSION -d --stdout $EXTRACTFROM > "${DRIVE1}"
       EXITCODE=$?
     else
       # or write binary file directly to disk
