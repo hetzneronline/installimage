@@ -12,13 +12,6 @@ setup_network_config() {
   if [ -n "$1" ] && [ -n "$2" ]; then
     # good we have a device and a MAC
 
-    if [ -e "$FOLD/hdd/etc/os-release" ]; then
-      SUSEVERSION="$(grep 'VERSION_ID=' "$FOLD/hdd/etc/os-release" | cut -d '"' -f2 | sed -e 's/\.//')"
-    else
-      SUSEVERSION="$(grep VERSION "$FOLD/hdd/etc/SuSE-release" | cut -d ' '  -f3 | sed -e 's/\.//')"
-    fi
-    debug "# Version: ${SUSEVERSION}"
-
     ROUTEFILE="$FOLD/hdd/etc/sysconfig/network/routes"
     if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
       UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
@@ -125,26 +118,13 @@ generate_new_ramdisk() {
     echo 'blacklist i915'
   } > "$blacklist_conf"
 
-  if [ "$SUSEVERSION" -eq 132 ] || [ "$SUSEVERSION" -eq 421 ]; then
-    # due to a bug within the 99suse dracut module an empty mduuid whitelist may be created
-    # >  # mduuid
-    # >  mduuid=$(getarg mduuid)
-    # > -if [ -n "$mduuid"]; then
-    # > +if [ -n "$mduuid" ]; then
-    # >      echo "rd.md.uuid=$mduuid" >> /etc/cmdline.d/99-suse.conf
-    # >      unset CMDLINE
-    # >  fi
-    # shellcheck disable=SC2016
-    sed -i 's/if \[ -n "$mduuid"\]; then/if [ -n "$mduuid" ]; then/g' "$FOLD/hdd/usr/lib/dracut/modules.d/99suse/parse-suse-initrd.sh"
-  fi
-
-  if [ "$SUSEVERSION" -lt 132 ]; then
+  if [ "$IMG_VERSION" -lt 132 ]; then
     local f="$FOLD/hdd/etc/sysconfig/kernel"
     sed -i 's/INITRD_MODULES=.*/INITRD_MODULES=""/' "$f"
-    if [ "$SUSEVERSION" -ge 113 ]; then
+    if [ "$IMG_VERSION" -ge 113 ]; then
       sed -i 's/^NO_KMS_IN_INITRD=.*/NO_KMS_IN_INIRD="yes"/' "$f"
     fi
-#  elif [ "$SUSEVERSION" -ge 132 ]; then
+#  elif [ "$IMG_VERSION" -ge 132 ]; then
   else
     local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
     {
@@ -163,9 +143,9 @@ generate_new_ramdisk() {
 
   # set mkinitrd_cmd
   local mkinitrd_cmd=''
-  if [ "$SUSEVERSION" -ge 132 ]; then
+  if [ "$IMG_VERSION" -ge 132 ]; then
     mkinitrd_cmd='dracut --force --regenerate-all'
-#  elif [ "$SUSEVERSION" -ge 121 -a "$SUSEVERSION" -lt 132 ]; then
+#  elif [ "$IMG_VERSION" -ge 121 -a "$IMG_VERSION" -lt 132 ]; then
   else
     # run without updating bootloader as this would fail because of missing
     # or at this point still wrong device.map.
@@ -215,7 +195,7 @@ generate_config_grub() {
 
   local grub_linux_default="nomodeset"
   # set net.ifnames=0 to avoid predictable interface names for opensuse 13.2
-  if [ "$SUSEVERSION" -ge 132 ] ; then
+  if [ "$IMG_VERSION" -ge 132 ] ; then
     grub_linux_default="${grub_linux_default} net.ifnames=0 quiet systemd.show_status=1"
   fi
   # set elevator to noop for vserver
@@ -256,7 +236,7 @@ write_grub() {
   for ((i=1; i<=COUNT_DRIVES; i++)); do
     if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
       local disk; disk="$(eval echo "\$DRIVE$i")"
-      execute_chroot_command "grub2-install --no-floppy --recheck $disk 2>&1"
+      execute_chroot_command "grub2-install --no-floppy $disk 2>&1"
       declare -i EXITCODE=$?
     fi
   done

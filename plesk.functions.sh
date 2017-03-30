@@ -16,7 +16,7 @@ is_plesk_install() {
 # $1 <version>
 install_plesk() {
   local version="${1^^}"
-  local temp_file; temp_file=$(chroot_mktemp)
+  local temp_file="/plesk-installer"
 
   debug '# preparing plesk installation'
   if [[ "${IAM}" == centos ]]; then
@@ -46,7 +46,7 @@ install_plesk() {
     )"
   fi
   [[ -z "${version}" ]] && return 1
-  [[ "${version}" =~ ^PLESK_17_ ]] && PLESK_COMPONENTS=(${PLESK_COMPONENTS[@]/#pmm/pmm-old})
+  #[[ "${version}" =~ ^PLESK_17_ ]] && PLESK_COMPONENTS=(${PLESK_COMPONENTS[@]/#pmm/pmm-old})
 
   debug "# installing plesk ${version}"
   local command="${temp_file} "
@@ -56,9 +56,14 @@ install_plesk() {
   command+="--download-retry-count ${PLESK_DOWNLOAD_RETRY_COUNT} "
   command+="${PLESK_COMPONENTS[*]/#/--install-component }"
 
+  if installed_os_uses_systemd && ! systemd_nspawn_booted; then
+    boot_systemd_nspawn || return 1
+  fi
   execute_command "${command}" || return 1
-  stop_systemd_nspawn_container
+  systemd_nspawn_booted && poweroff_systemd_nspawn
   debug "installed plesk ${version}"
+
+  return 0
 }
 
 # vim: ai:ts=2:sw=2:et

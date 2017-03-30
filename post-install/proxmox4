@@ -2,11 +2,9 @@
 
 #
 # Proxmox Virtualization Environment installer script
-#   based on Debian Wheezy
+#   based on Debian Jessie
 #
 
-
-PROXMOX_KERNEL_VERSION="2.6.32"
 
 echo -e "\n----- Update and upgrade system, please wait ... -----\n"
 
@@ -63,6 +61,7 @@ if [ -f /etc/apt/sources.list.d/pve-enterprise.list ]; then
 	echo -e "\n----- Removing Proxmox Enterprise Repo -----\n"
 	rm /etc/apt/sources.list.d/pve-enterprise.list
 fi
+/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' upgrade
 update-grub
 umount /sys/fs/fuse/connections
 service postfix stop

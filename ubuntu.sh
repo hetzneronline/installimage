@@ -210,7 +210,7 @@ setup_cpufreq() {
     else
       {
         echo 'ENABLE="true"'
-        printf 'GOVERNOR="%s"', "$1"
+        echo "GOVENOR=\"$1\""
         echo 'MAX_SPEED="0"'
         echo 'MIN_SPEED="0"'
       } >> "$cpufreqconf"
@@ -264,6 +264,10 @@ generate_config_grub() {
   # H8SGL need workaround for iommu
   if [ "$MBTYPE" = 'H8SGL' ] && [ "$IMG_VERSION" -ge 1404 ] ; then
     grub_linux_default="${grub_linux_default} iommu=noaperture"
+  fi
+
+  if [ "$IMG_VERSION" -ge 1604 ]; then
+    grub_linux_default="${grub_linux_default} net.ifnames=0"
   fi
 
   if [ -d "$grubconfdir" ]; then

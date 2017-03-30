@@ -236,8 +236,8 @@ delete_grub_device_map() {
 run_os_specific_functions() {
   randomize_mdadm_checkarray_cronjob_time
 
-  if is_lamp_install; then
-    setup_lamp || return 1
+  if hetzner_lamp_install; then
+    setup_hetzner_lamp || return 1
   fi
 
   (( "${IMG_VERSION}" >= 80 )) && (( "${IMG_VERSION}" <= 711 )) && debian_udev_finish_service_fix

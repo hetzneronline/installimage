@@ -108,7 +108,7 @@ else
             debug "=> user exited from menu"
             exit 1
           ;;
-          "custom image")
+          "Custom image")
             IMAGENAME="custom"
           ;;
           *)

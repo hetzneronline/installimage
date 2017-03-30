@@ -315,20 +315,19 @@ generate_config_grub() {
       echo "initrd /boot/$INITRD-$1.img" >> "$BFILE"
     fi
     echo "" >> "$BFILE"
-
-    uuid_bugfix
   # TODO: add grubby stuff (SYSFONT, LANG, KEYTABLE)
   else
-    if isVServer; then
-      execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto net.ifnames=0 elevator=noop\"/"'
-    else
-      execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"nomodeset rd.auto=1 crashkernel=auto net.ifnames=0\"/"'
-    fi
+    local grub_cmdline_linux='biosdevname=0 crashkernel=auto'
+    isVServer            && grub_cmdline_linux+=' elevator=noop'
+    ((IMG_VERSION < 73)) && grub_cmdline_linux+=' net.ifnames=0'
+    grub_cmdline_linux+=' nomodeset rd.auto=1'
+    sed -i "s/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"$grub_cmdline_linux\"/" "$FOLD/hdd/etc/default/grub"
 
     rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
     execute_chroot_command "grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1"; declare -i EXITCODE="$?"
 
   fi
+  uuid_bugfix
   return "$EXITCODE"
 }
 
@@ -362,6 +361,8 @@ write_grub() {
 run_os_specific_functions() {
 
   execute_chroot_command "chkconfig iptables off"
+  execute_chroot_command "chkconfig ip6tables off"
+  execute_chroot_command "chkconfig postfix off"
 
   #
   # setup env in cpanel image
@@ -376,6 +377,8 @@ run_os_specific_functions() {
   # selinux autorelabel if enabled
   egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux" &&
     touch "$FOLD/hdd/.autorelabel"
+
+  ((IMG_VERSION >= 70)) && mkdir -p "$FOLD/hdd/var/run/netreport"
 
   return 0
 }

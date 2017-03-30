@@ -98,18 +98,19 @@ generate_menu() {
 # don't go looking for old_openSUSE or suse images. That was a long time ago
 #  if [ "$1" = "openSUSE" ]; then
 #    RAWLIST=$(ls -1 "$IMAGESPATH" | grep -i -e "^$1\|^old_$1\|^suse\|^old_suse")
-  if [ "$1" = "Virtualization" ]; then
+  if [ "$1" = "Other" ]; then
     RAWLIST=""
     RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Wheezy"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
-  elif [ "$1" = "old images" ]; then
+    RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*-beta.*' -a -not -name '*.sig' -printf '%f\n' | sort)"
+  elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
     RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n'|sort)
     FINALIMAGEPATH="$OLDIMAGESPATH"
   else
     # skip CPANEL images and signatures files from list
-    RAWLIST=$(find "$IMAGESPATH"/* -maxdepth 1 -type f -not -name "*cpanel*" -a -regextype sed -regex ".*/\(old_\)\?$1.*" -a -not -regex '.*\.sig$' -printf '%f\n'|sort)
+    RAWLIST=$(find "$IMAGESPATH"/* -maxdepth 1 -type f -not -name "*cpanel*" -a -regextype sed -regex ".*/\(old_\)\?$1.*" -a -not -regex '.*\.sig$' -a -not -iname '*-beta.*' -printf '%f\n'|sort)
   fi
   # check if 32-bit rescue is activated and disable 64-bit images then
   if [ "$(uname -m)" != "x86_64" ]; then
@@ -411,10 +412,10 @@ create_config() {
       echo "## -> 10GB  /"
       echo "## -> 5GB   /tmp"
       echo "## -> all the rest to /home"
-      echo "#PART swap   swap      4096"
-      echo "#PART /boot  ext2       512"
-      echo "#PART /      reiserfs 10240"
-      echo "#PART /tmp   xfs       5120"
+      echo "#PART swap   swap        4G"
+      echo "#PART /boot  ext2      512M"
+      echo "#PART /      ext4       10G"
+      echo "#PART /tmp   xfs         5G"
       echo "#PART /home  ext3       all"
       echo "#"
       echo "##"
@@ -574,7 +575,7 @@ create_config() {
 
 getdrives() {
   local drives;
-  drives="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n')"
+  drives="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n' | sort)"
   local i=1
 
   #cast drives into an array
@@ -1194,12 +1195,6 @@ validate_vars() {
       return 1
     fi
 
-#   this seems to be a very old problem. Not a problem for 6.x and later
-#    if [ "$lv_fs" = "xfs" -a "$lv_mountp" = "/" -a "$IAM" = "centos" ]; then
-#      graph_error "ERROR: centos doesn't support xfs on partition /"
-#      return 1
-#    fi
-
     if [ "$lv_size" != "all" ] && [ "$(echo "$lv_size" | sed "s/[0-9]//g")" != "" -o "$lv_size" = "0" ]; then
       graph_error "ERROR: size of LV '${LVM_LV_NAME[$lv_id]}' is not a valid number"
       return 1
@@ -1526,34 +1521,34 @@ delete_partitions() {
 # function which gets the end of the extended partition
 # get_end_of_extended "DRIVE"
 function get_end_of_extended() {
-  local DEV="$1"
-  local DRIVE_SIZE=$(blockdev --getsize64 $DEV)
-  local SECTORSIZE=$(blockdev --getss $DEV )
+  local dev="$1"
+  local drive_size; drive_size=$(blockdev --getsize64 "$dev")
+  local sectorsize; sectorsize=$(blockdev --getss "$dev")
 
   local end=0
   local sum=0
-  local LIMIT=2199023255040
+  local limit=2199023255040
   # get sector limit
-  local SECTORLIMIT=$[($LIMIT / $SECTORSIZE) - 1]
-  local STARTSEC=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
+  local sectorlimit=$(( (limit / sectorsize) - 1))
+  local startsec; startsec=$(sgdisk --first-aligned-in-largest "$1" | tail -n1)
 
-  for i in $(seq 1 3); do
-    sum=$(echo "$sum + ${PART_SIZE[$i]}" | bc)
+  for ((i=1; i<=3; i++)); do
+    sum=$((sum + ${PART_SIZE[$i]}))
   done
-  rest=$(echo "$DRIVE_SIZE - ($sum * 1024 * 1024)" | bc)
+  rest=$((drive_size - (sum * 1024 * 1024) ))
 
-  end=$[$DRIVE_SIZE / $SECTORSIZE]
+  end=$((drive_size / sectorsize))
 
-  if [ $DRIVE_SIZE -lt $LIMIT ]; then
-    echo "$[$end-1]"
+  if [ "$drive_size" -lt $limit ]; then
+    echo "$((end-1))"
   else
-    if [ $rest -gt $LIMIT ]; then
+    if [ $rest -gt $limit ]; then
       # if the remaining space is more than 2 TiB, the end of the extended
       # partition is the current sector plus 2^32-1 sectors (2TiB-512 Byte)
-      echo "$(echo "$STARTSEC+$SECTORLIMIT" | bc)"
+      echo "$((startsec+sectorlimit))"
     else
       # otherwise the end is the number of sectors - 1
-      echo "$[$end-1]"
+      echo "$((end-1))"
     fi
   fi
 }
@@ -1561,47 +1556,48 @@ function get_end_of_extended() {
 # function which calculates the end of the partition
 # get_end_of_partition "PARTITION"
 function get_end_of_partition {
-  local DEV=$1
-  local START=$2
-  local NR=$3
-  local LIMIT=2199023255040
-  local SECTORSIZE=$(blockdev --getss $DEV)
-  local SECTORLIMIT=$[($LIMIT / $SECTORSIZE) - 1]
-  local END_EXTENDED="$(parted -s $DEV unit b print | grep extended | awk '{print $3}' | sed -e 's/B//')"
-  local DEVSIZE=$(blockdev --getsize64 $DEV)
-  START=$[START * $SECTORSIZE]
+  local dev=$1
+  local start=$2
+  local nr=$3
+  local limit=2199023255040
+  local sectorsize; sectorsize=$(blockdev --getss "$dev")
+  local sectorlimit; sectorlimit=$(( (limit / sectorsize) - 1))
+  local end_extended; end_extended=$(parted -s "$dev" unit b print | grep extended | awk '{print $3}' | sed -e 's/B//')
+  local devsize; devsize=$(blockdev --getsize64 "$dev")
+  start=$((start * sectorsize))
   # use the smallest hdd as reference when using swraid
   # to determine the end of a partition
-  local smallest_hdd=$(smallest_hd)
-  local smallest_hdd_space="$(blockdev --getsize64 $smallest_hdd)"
-  if [ "$SWRAID" -eq "1" ] && [ $DEVSIZE -gt $smallest_hdd_space ]; then
-    DEV=$smallest_hdd
+  local smallest_hdd; smallest_hdd=$(smallest_hd)
+  local smallest_hdd_space; smallest_hdd_space=$(blockdev --getsize64 "$smallest_hdd")
+  if [ "$SWRAID" -eq "1" ] && [ "$devsize" -gt "$smallest_hdd_space" ]; then
+    dev=$smallest_hdd
   fi
 
-  local LAST=$(blockdev --getsize64 $DEV)
+  local last; last=$(blockdev --getsize64 "$dev")
   # make the partition at least 1 MiB if all else fails
-  local END=[$START+1048576]
+  local end=$((start + 1048576))
 
-  if [ "$(echo ${PART_SIZE[$NR]} |tr [:upper:] [:lower:])" = "all" ]; then
+  if [ "$(echo ${PART_SIZE[$nr]} |tr [:upper:] [:lower:])" = "all" ]; then
     # leave 1MiB space at the end (may be needed for mdadm or for later conversion to GPT)
-    END=$[$LAST-1048576]
+    end=$((last - 1048576))
   else
-    END="$(echo "$START+(${PART_SIZE[$NR]}* 1024 * 1024)" | bc)"
+    end="$((start + ( ${PART_SIZE[$nr]} * 1024 * 1024) ))"
     # trough alignment the calculated end could be a little bit over drive size
     # or too close to the end. Always leave 1MiB space
     # (may be needed for mdadm or for later conversion to GPT)
-    if [ $END -ge $LAST ] || [ $[$LAST - $END] -lt 1048576 ]; then
-      END=$[$LAST-1048576]
+    if [ $end -ge $last ] || [ $((last - end)) -lt 1048576 ]; then
+      end=$((last - 1048576))
     fi
   fi
   # check if end of logical partition is over the end extended partition
-  if [ $PCOUNT -gt 4 ] && [ $END -gt $END_EXTENDED ]; then
+  if [ $PCOUNT -gt 4 ] && [ $end -gt $end_extended ]; then
     # leave 1MiB space at the end (may be needed for mdadm or for later conversion to GPT)
-    END=$[$END_EXTENDED-1048576]
+    end=$((end_extended - 1048576))
   fi
 
-  END=$[$END / $SECTORSIZE]
-  echo $END
+  # subtract one sector as the start sector is included in partition
+  end=$(( (end - sectorsize) / sectorsize))
+  echo $end
 }
 
 
@@ -1609,7 +1605,7 @@ function get_end_of_partition {
 # create_partitions "DRIVE"
 create_partitions() {
  if [ "$1" ]; then
-  local SECTORSIZE=$(blockdev --getss $1)
+  local sectorsize; sectorsize=$(blockdev --getss $1)
 
   # write standard entries to fstab
   echo "proc /proc proc defaults 0 0" > "$FOLD/fstab"
@@ -1671,7 +1667,7 @@ create_partitions() {
    if [ $GPT -eq 1 ]; then
 
      # start at 2MiB so we have 1 MiB left for BIOS Boot Partition
-     START=$[2097152/$SECTORSIZE]
+     START=$((2097152 / sectorsize))
      if [ $i -gt 1 ]; then
        START=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
      fi
@@ -1685,7 +1681,7 @@ create_partitions() {
      local gpt_part_type="${SFDISKTYPE}00"
 
      if [ $i -eq $PART_COUNT ]; then
-       local bios_grub_start=$[1048576/$SECTORSIZE]
+       local bios_grub_start=$((1048576 / sectorsize))
        echo "Creating BIOS_GRUB partition" | debugoutput
        sgdisk --new $i:$bios_grub_start:+1M -t $i:EF02 $1 2>&1 | debugoutput
      else
@@ -1700,7 +1696,7 @@ create_partitions() {
 
    else
      # part without GPT
-     START=$[1048576/$SECTORSIZE]
+     START=$((1048576 / sectorsize))
 
      TYPE="primary"
      PCOUNT="$i"
@@ -1726,13 +1722,18 @@ create_partitions() {
        PCOUNT=$[$PCOUNT+1]
 
        TYPE="logical"
-       START=$[$START + (1048576 / $SECTORSIZE) ]
+       START=$((START + (1048576 / sectorsize) ))
 
        END=$(get_end_of_partition $1 $START $i)
      fi
 
-     if [  "$i" -gt "4" ]; then
+     if [ "$i" -gt "4" ]; then
        TYPE="logical"
+       # every logical partition needs one sector for the EBR
+       # since we align partitions to MiB boundaries, the previous one
+       # may just have ended there. Which would leave no space for the EBR.
+       # so we leave 1 MiB between each logical partition
+       START=$((START + (1048576 / sectorsize) ))
      fi
 
      # create partitions as ext3 which results in type 83
@@ -2000,6 +2001,7 @@ make_lvm() {
     for i in $(seq 1 $LVM_VG_COUNT) ; do
       pv=${dev[${LVM_VG_PART[${i}]}]}
       debug "# Creating PV $pv"
+      wipefs -af $pv |& debugoutput
       pvcreate -ff $pv 2>&1 | debugoutput
     done
 
@@ -2114,39 +2116,6 @@ mount_partitions() {
     SYSTEMBOOTDEVICE="$SYSTEMROOTDEVICE"
 
     mount "$ROOTDEVICE" "$basedir" 2>&1 | debugoutput ; EXITCODE=$?
-    [ "$EXITCODE" -ne "0" ] && return 1
-
-    mkdir -p $basedir/proc 2>&1 | debugoutput
-    mount -o bind /proc $basedir/proc 2>&1 | debugoutput ; EXITCODE=$?
-    [ "$EXITCODE" -ne "0" ] && return 1
-
-    mkdir -p $basedir/dev 2>&1 | debugoutput
-    mount -o bind /dev $basedir/dev 2>&1 | debugoutput ; EXITCODE=$?
-    [ "$EXITCODE" -ne "0" ] && return 1
-
-    mkdir -p $basedir/dev/pts 2>&1 | debugoutput
-    mount -o bind /dev/pts $basedir/dev/pts 2>&1 | debugoutput ; EXITCODE=$?
-    [ "$EXITCODE" -ne "0" ] && return 1
-
-    # bind /dev/shm too
-    # wheezy rescue: /dev/shm links to /run/shm
-    if [ -L $basedir/dev/shm ] ; then
-      shmlink="$(readlink $basedir/dev/shm)"
-      mkdir -p ${basedir}${shmlink} 2>&1 | debugoutput
-      if [ -e $shmlink ] ; then
-        mount -o bind $shmlink ${basedir}${shmlink} 2>&1 | debugoutput ; EXITCODE=$?
-      else
-        mount -o bind /dev/shm ${basedir}${shmlink} 2>&1 | debugoutput ; EXITCODE=$?
-      fi
-      [ "$EXITCODE" -ne "0" ] && return 1
-    else
-      mkdir -p $basedir/dev/shm 2>&1 | debugoutput
-      mount -o bind /dev/shm $basedir/dev/shm 2>&1 | debugoutput ; EXITCODE=$?
-      [ "$EXITCODE" -ne "0" ] && return 1
-    fi
-
-    mkdir -p $basedir/sys 2>&1 | debugoutput
-    mount -o bind /sys $basedir/sys 2>&1 | debugoutput ; EXITCODE=$?
     [ "$EXITCODE" -ne "0" ] && return 1
 
     cat $fstab | grep -v " / \|swap" | grep "^/dev/" > $fstab.tmp
@@ -2561,7 +2530,11 @@ generate_resolvconf() {
 #    execute_chroot_command "netconfig update -f"
   fi
 #  else
-    NAMESERVERFILE="$FOLD/hdd/etc/resolv.conf"
+    if [[ -L "$FOLD/hdd/etc/resolv.conf" ]]; then
+      NAMESERVERFILE="$FOLD/hdd/etc/resolvconf/resolv.conf.d/base"
+    else
+      NAMESERVERFILE="$FOLD/hdd/etc/resolv.conf"
+    fi
     echo -e "### $COMPANY installimage" > $NAMESERVERFILE
     echo -e "# nameserver config" >> $NAMESERVERFILE
 
@@ -2594,6 +2567,7 @@ set_hostname() {
     local hostnamefile="$FOLD/hdd/etc/hostname"
     local mailnamefile="$FOLD/hdd/etc/mailname"
     local machinefile="$FOLD/hdd/etc/machine-id"
+    local dbusfile="$FOLD/hdd/var/lib/dbus/machine-id"
     local networkfile="$FOLD/hdd/etc/sysconfig/network"
     local hostsfile="$FOLD/hdd/etc/hosts"
     local systemd=0
@@ -2615,7 +2589,7 @@ set_hostname() {
 
     if [ -f $hostnamefile -o "$IAM" = "arch" ]; then
       {
-        if is_cpanel_install; then
+        if is_cpanel_install || is_plesk_install; then
           if check_fqdn ${sethostname}; then
             echo ${sethostname}
           else
@@ -2635,19 +2609,20 @@ set_hostname() {
       debug "# set new mailname '$mailname' in $mailnamefile"
     fi
 
+
     if [ -f $machinefile ]; then
-      # clear machine-id from install (should be regenerated upon first boot)
+      # clear machine-id from image 
       echo -n > $machinefile
+      [[ -e $dbusfile ]] && rm $dbusfile
       if [ $systemd -eq 1 ]; then
         # if we have systemd, just generate one (works around odd behaviour
         # when machine-id is only temporarily generated upon first boot
         systemd-machine-id-setup --root "$FOLD/hdd" 2>/dev/null
+        cp $machinefile $dbusfile
+      else
+        execute_chroot_command "dbus-uuidgen --ensure"
+        cp $dbusfile $machinefile
       fi
-    fi
-
-    if [ -f $networkfile ]; then
-      debug "# set new hostname '$shortname' in $networkfile"
-      echo -e "HOSTNAME=$shortname" >> $networkfile 2>>$DEBUGFILE
     fi
 
     local fqdn_name="$sethostname"
@@ -2657,6 +2632,11 @@ set_hostname() {
       else
         fqdn_name=''
       fi
+    fi
+
+    if [[ -f "$networkfile" ]]; then
+      debug "# set new hostname '$fqdn_name' in $networkfile"
+      echo "HOSTNAME=${fqdn_name:-$shortname}" >> "$networkfile"
     fi
 
     echo "### $COMPANY installimage" > $hostsfile
@@ -3009,7 +2989,6 @@ net.ipv6.conf.default.accept_ra_rtr_pref=0
 net.ipv6.conf.default.accept_ra_pinfo=0
 net.ipv6.conf.default.accept_source_route=0
 net.ipv6.conf.default.accept_redirects=0
-net.ipv6.conf.default.forwarding=0
 net.ipv6.conf.all.autoconf=0
 net.ipv6.conf.all.accept_dad=0
 net.ipv6.conf.all.accept_ra=0
@@ -3018,7 +2997,6 @@ net.ipv6.conf.all.accept_ra_rtr_pref=0
 net.ipv6.conf.all.accept_ra_pinfo=0
 net.ipv6.conf.all.accept_source_route=0
 net.ipv6.conf.all.accept_redirects=0
-net.ipv6.conf.all.forwarding=0
 EOF
 
   # only swap to avoid a OOM condition on vps
@@ -3275,13 +3253,18 @@ create_hostname() {
     if [ -z "$first" -o -z "$second" -o -z "$third" -o -z "$fourth" ]; then
       return 1
     fi
-    if [ "$first" -eq "78" ] || [ "$first" -eq "188" ] || [ "$first" -eq "178" ] ||
-       [ "$first" -eq "46" ] || [ "$first" -eq "176" ] || [ "$first" -eq "5" ] ||
-       [ "$first" -eq "185" ] || [ "$first" -eq "136" ] || [ "$first" -eq "144" ] ||
-       [ "$first" -eq "148" ] || [ "$first" -eq "138" ]; then
-      generatedhostname="static.$fourth.$third.$second.$first.clients.your-server.de"
-    else
+    #if [ "$first" -eq "78" ] || [ "$first" -eq "188" ] || [ "$first" -eq "178" ] ||
+    #   [ "$first" -eq "46" ] || [ "$first" -eq "176" ] || [ "$first" -eq "5" ] ||
+    #   [ "$first" -eq "185" ] || [ "$first" -eq "136" ] || [ "$first" -eq "144" ] ||
+    #   [ "$first" -eq "148" ] || [ "$first" -eq "138" ]; then
+    #  generatedhostname="static.$fourth.$third.$second.$first.clients.your-server.de"
+    #else
+    #  generatedhostname="static.$first-$second-$third-$fourth.clients.your-server.de"
+    #fi
+    if ((first == 85 || ( first == 88 && second == 198 ) || first == 213)); then
       generatedhostname="static.$first-$second-$third-$fourth.clients.your-server.de"
+    else
+      generatedhostname="static.$fourth.$third.$second.$first.clients.your-server.de"
     fi
 
     echo "$generatedhostname"
@@ -3356,33 +3339,75 @@ translate_unit() {
   return 0
 }
 
+# install_robot_report_script()
+install_robot_report_script() {
+  # create robot report script
+  local robot_report_script='/robot-report.sh'
+  debug '# install robot report script'
+  {
+    echo '#!/usr/bin/env bash'
+    echo "### ${COMPANY} installimage"
+    echo '# report installation to robot'
+    echo "rm '$robot_report_script'"
+    echo 'sleep 30'
+    echo 'for i in {1..36}; do'
+    echo "  wget --no-check-certificate -O /dev/null --timeout=10 '$ROBOTURL' &> /dev/null && break"
+    echo '  sleep 5'
+    echo 'done'
+  } > "$FOLD/hdd/$robot_report_script"
+  chmod +x "$FOLD/hdd/$robot_report_script"
 
-#
-# install_robot_script
-#
-# Installs a script in the new system that is used for automatic
-# installations by the Robot. The script removes itself afterwards.
-#
-install_robot_script() {
-#  VERSION=$(echo $IMAGENAME | cut -d- -f2)
-  cp "$SCRIPTPATH/robot.sh" "$FOLD/hdd/"
-  chmod +x "$FOLD/hdd/robot.sh"
-  sed -i -e "s#^URL=?#URL=\"$ROBOTURL\"#" "$FOLD/hdd/robot.sh"
-    case "$IAM" in
-      debian|ubuntu)
-        sed -e 's/^exit 0$//' -i "$FOLD/hdd/etc/rc.local"
-        echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> "$FOLD/hdd/etc/rc.local"
-        ;;
-      centos)
-        sed -e 's/^exit 0$//' -i "$FOLD/hdd/etc/rc.d/rc.local"
-        echo -e "[ -x /robot.sh ] && /robot.sh\nexit 0" >> "$FOLD/hdd/etc/rc.d/rc.local"
-        chmod +x "$FOLD/hdd/etc/rc.d/rc.local" 1>/dev/null 2>&1
-        ;;
-      suse)
-        # needs suse 12.2 or higher
-        echo "bash /robot.sh" >> "$FOLD/hdd/etc/init.d/boot.local"
-        ;;
-    esac
+  if installed_os_uses_systemd; then
+    # create robot report service
+    local robot_report_service='/etc/systemd/system/multi-user.target.wants/robot-report.service'
+    debug '# install robot report service'
+    {
+      echo "### ${COMPANY} installimage"
+      echo '# report installation to robot'
+      echo '[Unit]'
+      echo 'After=network.target'
+      echo 'Description=Report installation to Robot'
+      echo '[Service]'
+      echo "ExecStart=$robot_report_script"
+    } > "$FOLD/hdd/$robot_report_service"
+
+    # extend robot report script
+    {
+      echo "rm '$robot_report_service'"
+      echo 'systemctl daemon-reload'
+    } >> "$FOLD/hdd/$robot_report_script"
+
+    return 0
+  fi
+
+  local rc_local_scripts='/etc/rc.d/rc.local /etc/rc.local'
+  for script in $rc_local_scripts; do
+    # check if script exists
+    [[ -e "$FOLD/hdd/$script" ]] || continue
+
+    debug "# append robot report script call to $script"
+
+    # backup and patch script
+    sed -i.bak '/^exit 0\s*$/d' "$FOLD/hdd/$script"
+    {
+      echo "### ${COMPANY} installimage"
+      echo '# report installation to robot'
+      echo "[[ -x $robot_report_script ]] && $robot_report_script"
+      echo 'exit 0'
+    } >> "$FOLD/hdd/$script"
+    chmod +x "$FOLD/hdd/$script"
+
+    # extend robot report script
+    {
+      echo "mv '$script.bak' '$script'"
+      echo "chmod +x '$script'"
+      echo 'exit 0'
+    } >> "$FOLD/hdd/$robot_report_script"
+
+    return 0
+  done
+
+  return 1
 }
 
 report_config() {
@@ -3420,9 +3445,8 @@ report_debuglog() {
 #
 cleanup() {
   debug 'cleaning up'
-  mysql_is_running && stop_mysql
-  systemd_nspawn_container_is_running && stop_systemd_nspawn_container
-  rm --force --recursive --verbose "${TEMP_FILES[@]}" &> /dev/null # |& debugoutput
+  mysql_running && stop_mysql
+  systemd_nspawn_booted && poweroff_systemd_nspawn
   while read entry; do
     while read subentry; do
       umount --lazy --verbose "$(echo "${subentry}" | awk '{print $2}')" &> /dev/null # |& debugoutput
@@ -3740,7 +3764,8 @@ function check_dos_partitions() {
   if [ $PART_COUNT -gt 3 ]; then
     for i in $(seq 4 $PART_COUNT); do
       if [ "${PART_SIZE[$i]}" != "all" ]; then
-        temp_size="$(echo "$temp_size + ${PART_SIZE[$i]}" | bc)"
+        # add 1 MiB for every logical partition to account for EBR
+        temp_size="$(echo "1 + $temp_size + ${PART_SIZE[$i]}" | bc)"
       fi
     done
 
@@ -3796,7 +3821,7 @@ set_udev_rules() {
   local ethcount; ethcount="$(find /sys/class/net/ -name eth* | wc -l)"
   if [ "$ethcount" -gt 1 ]; then
     # virtual servers with multiple nics may not have a net.rules files
-    if [ -n "$udevtgtfile" ]; then
+    if [ -n "$udevtgtfile" ] && [ -f "$udevsrcfile" ]; then
       cp "$udevsrcfile" "$FOLD/hdd$udevtgtfile"
       #Testeinbau
       if [ "$IAM" = "centos" ]; then
@@ -3934,6 +3959,11 @@ is_private_ip() {
  else
   return 1
  fi
+}
+
+wait_for_udev() {
+  udevadm trigger |& debugoutput
+  udevadm settle |& debugoutput
 }
 
 # vim: ai:ts=2:sw=2:et

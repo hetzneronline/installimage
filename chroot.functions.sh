@@ -3,39 +3,27 @@
 #
 # chroot functions
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2017, Hetzner Online GmbH
 #
 
-# execute_chroot_command() <command> <debug> <quiet>
-# executes a chroot command
-# $1 <command> the command to execute
-# $2 <debug>   (debug|nodebug) default: yes
-# $3 <quiet>   (quiet|dump) default: yes
-execute_chroot_command() {
-  local command="${1}"
-  local debug="${2:-debug}"
-  local quiet="${3:-quiet}"
-  [[ "${debug}" == debug ]] && debug=true || debug=false
-  [[ "${quiet}" == quiet ]] && quiet=true || quiet=false
-
-  ${debug} && debug "# executing chroot command: ${command}"
-
-  chroot "${FOLD}/hdd" /usr/bin/env bash -c "${command}" |& (
-    if ${debug}; then
-      if ${quiet}; then
-        cat | debugoutput
-      else
-        tee >(debugoutput); wait
-      fi
-    else
-      if ! ${quiet}; then
-        cat
-      fi
-    fi
-  )
+execute_chroot_command_wo_debug() {
+  local dirs=(/{dev,dev/pts,dev/shm,proc,run,sys})
+  for dir in "${dirs[@]}"; do
+    mkdir -p "$FOLD/hdd/$dir"
+    mount --bind "$dir" "$FOLD/hdd/$dir"
+  done
+  chroot "$FOLD/hdd" /usr/bin/env bash -c "$@"
+  local r=$?
+  for ((i=${#dirs[@]}-1; i>=0; i--)); do
+    until umount "$FOLD/hdd/${dirs[i]}"; do :; done
+  done
+  return $r
 }
 
-# for compatibility
-execute_chroot_command_wo_debug() { execute_chroot_command "${1}" nodebug "${2:-dump}"; return "${?}"; }
+execute_chroot_command() {
+  debug "# chroot: $*"
+  execute_chroot_command_wo_debug "$@" |& debugoutput
+  return "${PIPESTATUS[0]}"
+}
 
 # vim: ai:ts=2:sw=2:et

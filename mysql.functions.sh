@@ -3,190 +3,87 @@
 #
 # mysql functions
 #
-# (c) 2016, Hetzner Online GmbH
+# (c) 2016-2017, Hetzner Online GmbH
 #
 
-# mysql_is_running()
-# checks whether mysql is running
-mysql_is_running() {
-  if is_systemd_system; then
-    systemd_nspawn_container_is_running || return 1
-    execute_nspawn_command 'systemctl --quiet is-active mysql' nodebug || return 1
-  else
-    execute_chroot_command '/etc/init.d/mysql status' nodebug || return 1
-  fi
-}
+mysql_running() { execute_command_wo_debug mysqladmin ping &> /dev/null; }
 
-# ping_mysql() <max_checks>
-# shellcheck disable=SC2120
-ping_mysql() {
-  local max_checks=${1:-30}
-  for ((check=1; check<=max_checks; check++)); do
-    execute_command 'mysqladmin ping' nodebug && break
-    (( check == max_checks )) && return 1
-    sleep 1
-  done
-}
-
-# start_mysql()
-# starts mysql
 start_mysql() {
-  debug '# starting mysql'
-  if mysql_is_running; then
-    debug 'mysql is already running'
-    return 0
-  fi
-  if is_systemd_system; then
-    execute_nspawn_command 'systemctl start mysql' || return 1
-    # execute_nspawn_command 'systemctl status mysql' > /dev/null
-  else
-    execute_chroot_command '/etc/init.d/mysql start' || return 1
-    # execute_chroot_command '/etc/init.d/mysql status'
-  fi
-  # shellcheck disable=SC2119
-  ping_mysql || return 1
-  debug 'started mysql'
-}
-
-# stop_mysql()
-stop_mysql() {
-  debug '# stopping mysql'
-  if ! mysql_is_running; then
-    debug 'mysql is not running'
-    return 0
-  fi
-  if is_systemd_system; then
-    execute_nspawn_command 'systemctl stop mysql' || return 1
-    # execute_nspawn_command 'systemctl status mysql' > /dev/null
-  else
-    execute_chroot_command '/etc/init.d/mysql stop' || return 1
-    # execute_chroot_command '/etc/init.d/mysql status'
-  fi
-  debug 'stopped mysql'
-}
-
-# execute_mysql_command() <command> <user> <password>
-# executes a mysql command
-# $1 <command>  the command to execute
-# $2 <user>     optional
-# $3 <password> optional
-execute_mysql_command() {
-  local command="${1}"
-  local user="${2}"
-  local password="${3}"
-  local temp_file; temp_file=$(chroot_mktemp)
-
-  # shellcheck disable=SC2119
-  ping_mysql || return 1
-  echo "${command}" > "${FOLD}/hdd/${temp_file}"
-  if ! mysql_is_running; then start_mysql || return 1; fi
-  {
-    echo -n 'mysql '
-    [[ -n "${user}" ]] && echo -n "--user='${user}' "
-    [[ -n "${password}" ]] && echo -n "--password='${password}'"
-    echo
-  } | execute_command "cat ${temp_file} | HOME=/root $(cat)" nodebug dump |& debugoutput || return 1
-}
-
-# check_mysql_password() <user> <password>
-# $1 <user>
-# $2 <password>
-check_mysql_password() {
-  local user="${1}"
-  local password="${2}"
-
-  debug "# checking mysql password for ${user}"
-  execute_mysql_command "QUIT" "${user}" "${password}" || return 1
-  debug 'OK'
-}
-
-# # reset_mysql_password() <user> <new_password>
-# # $1 <user>
-# # $2 <new_password>
-reset_mysql_password() {
-  local user="${1}"
-  local new_password="${2}"
-  local config_file=
-  local config_files=(
-    "${FOLD}/hdd/etc/my.cnf"
-    "${FOLD}/hdd/etc/mysql/my.cnf"
-    "${FOLD}/hdd/usr/etc/my.cnf"
-  )
-  local temp_file; temp_file="${FOLD}/hdd/$(chroot_mktemp)"
-  local init_file; init_file="$(chroot_mktemp)"
-  local installimage_config_file; installimage_config_file=$(chroot_mktemp)
-
-  debug "# resetting mysql password for ${user}"
-
-  for file in "${config_files[@]}"; do
-    if [[ -f "${file}" ]]; then
-      config_file="${file}"
-      break
+  if installed_os_uses_systemd; then
+    if ! systemd_nspawn_booted; then
+      boot_systemd_nspawn || return 1
     fi
-  done
-  [[ -f "${config_file}" ]] || return 1
+    systemd_nspawn_wo_debug systemctl start mysql &> /dev/null || return 1
+  else
+    execute_chroot_command_wo_debug service mysql start &> /dev/null || return 1
+  fi
+  until mysql_running; do :; done
+}
 
-  mv "${config_file}" "${temp_file}"
-  cp "${temp_file}" "${config_file}"
-
-  {
-    echo
-    echo "### ${COMPANY} installimage"
-    echo "!include ${installimage_config_file}"
-  } >> "${config_file}"
-
-  {
-    echo "### ${COMPANY} installimage"
-    echo 'USE mysql;'
-    echo "UPDATE user SET password=PASSWORD('${new_password}') WHERE user='${user}';"
-    echo 'FLUSH PRIVILEGES;'
-  } > "${FOLD}/hdd/${init_file}"
-
-  {
-    echo "### ${COMPANY} installimage"
-    echo '[mysqld]'
-    echo "init-file = ${init_file}"
-  } > "${FOLD}/hdd/${installimage_config_file}"
-
-  chmod 644 "${FOLD}/hdd/${init_file}" "${FOLD}/hdd/${installimage_config_file}"
-
-  if mysql_is_running; then stop_mysql || return 1; fi
+stop_mysql() {
   start_mysql || return 1
-
-  check_mysql_password "${user}" "${new_password}" || return 1
-
-  mv "${temp_file}" "${config_file}"
-
-  debug "reset mysql password for ${user}"
+  if installed_os_uses_systemd; then
+    systemd_nspawn_wo_debug systemctl stop mysql &> /dev/null || return 1
+  else
+    execute_chroot_command_wo_debug service mysql stop &> /dev/null || return 1
+  fi
+  while mysql_running; do :; done
 }
 
-# generate_my_cnf() <user> <password>
-# $1 <user>
-# $2 <password>
-generate_my_cnf() {
-  local user="${1}"
-  local password="${2}"
-
-  echo '[client]'
-  echo "user=${user}"
-  echo "password=${password}"
+query_mysql() {
+  if ! mysql_running; then
+    start_mysql || return 1
+  fi
+  echo "$@" | execute_command_wo_debug mysql -N
+  return "${PIPESTATUS[1]}"
 }
 
-# set_mysql_password() <user> <new_password>
-# $1 <user>
-# $2 <new_password>
+mysql_version() {
+  # shellcheck disable=SC1001
+  [[ "$(query_mysql 'SELECT VERSION();')" =~ ^([0-9]*\.[0-9]*\.[0-9]*)\- ]] && echo "${BASH_REMATCH[1]}"
+}
+
+mysql_version_ge() {
+  local other="$1"
+  [[ "$(echo -e "$(mysql_version)\n$other" | sort -V | head -n 1)" == "$other" ]]
+}
+
 set_mysql_password() {
-  local user="${1}"
-  local new_password="${2}"
+  local user="$1"
+  local password="$2"
+  if mysql_version_ge 5.7.6; then
+    local password_field='authentication_string'
+  else
+    local password_field='password'
+  fi
+  query_mysql "UPDATE mysql.user SET password_last_changed = NOW() WHERE user = '${user//\'/\\\'}';" &> /dev/null
+  query_mysql "UPDATE mysql.user SET $password_field = PASSWORD('${password//\'/\\\'}') WHERE user = '${user//\'/\\\'}';" |& debugoutput
+  (("${PIPESTATUS[0]}" == 0)) || return 1
+  query_mysql 'FLUSH PRIVILEGES;' |& debugoutput
+  (("${PIPESTATUS[0]}" == 0)) || return 1
+  echo QUIT | execute_command_wo_debug mysql -u "$user" -p"$password" |& debugoutput
+  return "${PIPESTATUS[1]}"
+}
 
-  debug "# setting mysql password for ${user}"
+reset_mysql_root_password() {
+  local new_root_password="$1"
+  if ! mysql_running; then
+    start_mysql || return 1
+  fi
+  stop_mysql || return 1
+  execute_command_wo_debug mkdir -p /var/run/mysqld || return 1
+  execute_command_wo_debug chown mysql:mysql /var/run/mysqld || return 1
+  execute_command_wo_debug 'mysqld_safe --skip-grant-tables &> /dev/null &'
+  until mysql_running; do :; done
+  set_mysql_password root "$new_root_password" || return 1
   {
-    echo 'USE mysql;'
-    echo "UPDATE user SET password=PASSWORD('${new_password}') WHERE user='${user}';"
-    echo 'FLUSH PRIVILEGES;'
-  } | execute_mysql_command "$(cat)" || return 1
-  check_mysql_password "${user}" "${new_password}" || return 1
-  debug "set mysql password for ${user}"
+    echo '[client]'
+    echo 'user=root'
+    echo "password=$new_root_password"
+  } > "$FOLD/hdd/root/.my.cnf"
+  query_mysql QUIT || return 1
+  execute_command_wo_debug mysqladmin shutdown &> /dev/null || return 1
+  while mysql_running; do :; done
 }
 
 # vim: ai:ts=2:sw=2:et

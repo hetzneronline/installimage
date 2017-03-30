@@ -61,9 +61,7 @@ randomize_cpanel_passwords() {
   local leechprotect_password; leechprotect_password=$(generate_password)
   local roundcube_password; roundcube_password=$(generate_password)
 
-  reset_mysql_password root "${root_password}" || return 1
-
-  generate_my_cnf root "${root_password}" > "${FOLD}/hdd/root/.my.cnf"
+  reset_mysql_root_password "$root_password" || return 1
 
   set_mysql_password cphulkd "${cphulkd_password}" || return 1
   set_mysql_password eximstats "${eximstats_password}" || return 1
@@ -75,12 +73,12 @@ randomize_cpanel_passwords() {
   echo "${leechprotect_password}" > "${FOLD}/hdd/var/cpanel/leechprotectpass"
   echo "${roundcube_password}" > "${FOLD}/hdd/var/cpanel/roundcubepass"
 
-  execute_nspawn_command 'HOME=/root /usr/local/cpanel/bin/updateeximstats' > /dev/null || return 1
-  execute_nspawn_command 'HOME=/root /usr/local/cpanel/bin/updateleechprotect' > /dev/null || return 1
-  execute_nspawn_command 'HOME=/root /usr/local/cpanel/bin/modsecpass' > /dev/null || return 1
-  execute_nspawn_command 'HOME=/root /usr/local/cpanel/bin/update-roundcube --force' > /dev/null || return 1
+  systemd_nspawn /usr/local/cpanel/bin/updateeximstats || return 1
+  systemd_nspawn /usr/local/cpanel/bin/updateleechprotect || return 1
+  systemd_nspawn /usr/local/cpanel/bin/modsecpass || return 1
+  systemd_nspawn /usr/local/cpanel/bin/update-roundcube --force || return 1
 
-  stop_systemd_nspawn_container
+  poweroff_systemd_nspawn
 
   debug 'randomized cpanel passwords'
 }
@@ -96,7 +94,7 @@ setup_cpanel() {
 
 # install_cpanel()
 install_cpanel() {
-  local temp_file; temp_file=$(chroot_mktemp)
+  local temp_file="/cpanel-installer"
 
   debug "# downloading cpanel installer ${CPANEL_INSTALLER_SRC}/${IMAGENAME}"
   curl --location --output "${FOLD}/hdd/${temp_file}" --silent --write-out '%{response_code}' "${CPANEL_INSTALLER_SRC}/${IMAGENAME}" \
@@ -106,8 +104,11 @@ install_cpanel() {
 
   debug '# installing cpanel'
   local command="${temp_file} --force"
+  if installed_os_uses_systemd && ! systemd_nspawn_booted; then
+    boot_systemd_nspawn || return 1
+  fi
   execute_command "${command}" || return 1
-  stop_systemd_nspawn_container
+  systemd_nspawn_booted && poweroff_systemd_nspawn
 
   debug '# setting up cpanel'
   cpanel_setup_wwwacct_conf

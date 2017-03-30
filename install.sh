@@ -152,6 +152,8 @@ done
 
 status_done
 
+wait_for_udev
+
 #
 # Test partition size
 #
@@ -178,6 +180,7 @@ done
 
 status_done
 
+wait_for_udev
 
 #
 # Software RAID
@@ -190,6 +193,7 @@ if [ "$SWRAID" = "1" ]; then
   status_donefailed $?
 fi
 
+wait_for_udev
 
 #
 # LVM
@@ -206,6 +210,7 @@ if [ "$LVM" = "1" ]; then
   fi
 fi
 
+wait_for_udev
 
 #
 # Format partitions
@@ -303,14 +308,28 @@ status_donefailed $?
 # Setup network
 #
 inc_step
-status_busy "Setting up network for $ETHDEV"
-setup_network_config "$ETHDEV" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
+if [[ "$IAM" == 'centos' ]] && ((IMG_VERSION == 73)); then
+  status_busy "Setting up network config"
+  setup_network_config_new
+elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1604)); then
+  status_busy "Setting up network config"
+  setup_network_config_new
+else
+  status_busy "Setting up network for $ETHDEV"
+  setup_network_config "$ETHDEV" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
+fi
 status_donefailed $?
 
-#
-# Set udev rules
-#
-set_udev_rules
+if [[ "$IAM" == 'centos' ]] && ((IMG_VERSION == 73)); then
+  :
+elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1604)); then
+  :
+else
+  #
+  # Set udev rules
+  #
+  set_udev_rules
+fi
 
 #
 # chroot commands
@@ -475,6 +494,11 @@ fi
 inc_step
 status_busy "Running some $IAM specific functions"
 run_os_specific_functions || status_failed
+if [[ -e "$FOLD/hdd/password.txt" ]]; then
+  chmod 600 "$FOLD/hdd/password.txt"
+  install_password_txt_hint || status_failed
+  install_remove_password_txt_hint
+fi
 status_done
 
 #
@@ -497,8 +521,7 @@ fi
 # Install robot script for automatic installations
 #
 if [ "$ROBOTURL" ]; then
-  debug "# Installing Robot script..."
-  install_robot_script 2>&1 | debugoutput
+  install_robot_report_script || status_failed
 fi
 
 #

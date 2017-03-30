@@ -31,6 +31,7 @@ export COMPANY_PUBKEY="$SCRIPTPATH/gpg/public-key.asc"
 export COMPANY="Hetzner Online GmbH"
 export C_SHORT="hetzner"
 export LOCKFILE='/run/lock/installimage'
+export SYSTEMD_NSPAWN_TMP_DIR="$FOLD/systemd_nspawn"
 
 export MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
 export STATSSERVER="213.133.99.103"
@@ -63,46 +64,24 @@ export UEFI="0"
 # dialog settings
 export DIATITLE="$COMPANY"
 export OSMENULIST=(
-"Debian"          "(official)"
-"Ubuntu"          "(official)"
-"CentOS"          "(official)"
-"openSUSE"        "(official)"
-"Archlinux"       "(!!NO SUPPORT!!)"
-"Virtualization"  "(!!NO SUPPORT!!)"
-"old images"      "(!!NO SUPPORT!!)"
-"custom image"    "(blanco config for user images)"
+  "Debian"       "(Official)"
+  "Ubuntu"       "(Official)"
+  "CentOS"       "(Official)"
+  "openSUSE"     "(Official)"
+  "Archlinux"    "(!!NO SUPPORT!!)"
+  "Other"        "(!!NO SUPPORT!!)"
+  "Old images"   "(!!NO SUPPORT!!)"
+  "Custom image" "(Blanco config for user images)"
 )
 
 export PROXMOX3_BASE_IMAGE="Debian-711-wheezy-64-minimal"
-export PROXMOX4_BASE_IMAGE="Debian-86-jessie-64-minimal"
-
-# all files that are added to this array will be removed by our cleanup
-# function
-export TEMP_FILES=(${LOCKFILE})
-
-# the following mount points must be umounted before a systemd nspawn container
-# can be started
-export SYSTEMD_NSPAWN_BLACKLISTED_MOUNT_POINTS=(
-  /dev
-  /proc
-  /sys
-)
-export SYSTEMD_NSPAWN_ROOT_DIR=${FOLD}/hdd
-export SYSTEMD_NSPAWN_HELPER_SERVICE_FILE=/etc/systemd/system/multi-user.target.wants/installimage-systemd-nspawn-helper.service
-export SYSTEMD_NSPAWN_SERVICE_FILE=/lib/systemd/system/installimage-systemd-nspawn.service
-export SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST=${FOLD}/installimage-umounted-mount-points
-
-TEMP_FILES+=(
-  ${SYSTEMD_NSPAWN_ROOT_DIR}/${SYSTEMD_NSPAWN_HELPER_SERVICE_FILE}
-  ${SYSTEMD_NSPAWN_SERVICE_FILE}
-  ${SYSTEMD_NSPAWN_UMOUNTED_MOUNT_POINT_LIST}
-)
+export PROXMOX4_BASE_IMAGE="Debian-87-jessie-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.de/plesk
-export PLESK_STD_VERSION=PLESK_12_5_30
+export PLESK_STD_VERSION=PLESK_17_0_17
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats
