@@ -15,7 +15,7 @@ HOSTNAME Proxmox-VE.localdomain
 
 PART  /boot  ext3  512M
 PART  lvm    vg0    all
-LV  vg0  root  /     ext3  15G
+LV  vg0  root  /     ext4  15G
 LV  vg0  swap  swap  swap   6G
 
-IMAGE /root/images/Debian-711-wheezy-64-minimal.tar.gz
+IMAGE /root/images/Debian-86-jessie-64-minimal.tar.gz

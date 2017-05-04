@@ -9,7 +9,7 @@
 
 
 # check command line params / options
-while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:" OPTION ; do
+while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:" OPTION ; do
   case $OPTION in
 
     # help
@@ -60,6 +60,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:" OPTION ; do
       echo "  -s <de|en>            Language to use for different things (e.g.PLESK)"
       echo "  -z PLESK_<Version>    Install optional software like PLESK with version <Version>"
       echo "  -K <path/url>         Install SSH-Keys from file/URL"
+      echo '  -t <yes|no>           Take over rescue system SSH public keys'
       echo
       exit 0
     ;;
@@ -227,6 +228,13 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:" OPTION ; do
        exit 1
      fi
      ;;
+    t)
+      if [[ -z "$OPTARG" ]] || [[ "${OPTARG,,}" == 'yes' ]]; then
+        export OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS='yes'
+      else
+        export OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS='no'
+      fi
+    ;;
   esac
 done
 
@@ -260,5 +268,6 @@ fi
 [ "$OPT_FORCE_SIGN" ]   && debug "# OPT_FORCE_SIGN:   $OPT_FORCE_SIGN"
 [ "$OPT_USE_SSHKEYS" ]  && debug "# OPT_USE_SSHKEYS:  $OPT_USE_SSHKEYS"
 [ "$OPT_SSHKEYS_URL" ]  && debug "# OPT_SSHKEYS_URL:  $OPT_SSHKEYS_URL"
+[ "$OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS" ] && debug "# OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS: $OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS"
 
 # vim: ai:ts=2:sw=2:et

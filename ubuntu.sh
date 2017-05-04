@@ -326,6 +326,9 @@ generate_config_grub() {
 #
 run_os_specific_functions() {
   randomize_mdadm_checkarray_cronjob_time
+  if nextcloud_install; then
+    setup_nextcloud || return 1
+  fi
   return 0
 }
 

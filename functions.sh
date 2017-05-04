@@ -777,6 +777,13 @@ if [ -n "$1" ]; then
     export OPT_USE_SSHKEYS=1
   fi
 
+  local take_over_rescue_system_ssh_public_keys="$(grep -m 1 '^TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS' "$1" | awk '{ print tolower($2) }')"
+  [[ "$take_over_rescue_system_ssh_public_keys" =~ ^yes$|^no$ ]] && export OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS="$take_over_rescue_system_ssh_public_keys"
+
+  if [[ "$OPT_USE_SSHKEYS" != '1' ]] && [[ "${OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS:-yes}" == 'yes' ]] && [[ -s /root/.ssh/robot_user_keys ]]; then
+    export OPT_SSHKEYS_URL='/root/.ssh/robot_user_keys'
+    export OPT_USE_SSHKEYS=1
+  fi
 fi
 }
 
@@ -1295,11 +1302,19 @@ validate_vars() {
 
   if [ "$SWRAID" -eq 1 ]; then
     if [ "$(getHDDsNotInToleranceRange)" ]; then
-      graph_notice "
-             \nNOTICE: You are going to use hard disks with different disk space.
-             \nWe set the maximum of your allocable disc space based on the smallest hard disk at $SMALLEST_HDD_SIZE MB
-             \nYou can change this by customizing the drive settings.
-             "
+      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
+        {
+          echo 'WARNING: You are going to use hard disks with different disk space.'
+          echo "We set the maximum of your allocable disc space based on the smallest hard disk at $SMALLEST_HDD_SIZE MB."
+          echo 'You can change this by customizing the drive settings.'
+        } | debugoutput
+      else
+        graph_notice "
+               \nNOTICE: You are going to use hard disks with different disk space.
+               \nWe set the maximum of your allocable disc space based on the smallest hard disk at $SMALLEST_HDD_SIZE MB
+               \nYou can change this by customizing the drive settings.
+               "
+      fi
     fi
   fi
 
@@ -2921,9 +2936,7 @@ execute_postinstall_script() {
     fi
 
     debug "# Found post-installation script $script; executing it..."
-    # don't use the execute_chroot_command function and logging here - we need output on stdout!
-
-    chroot "$FOLD/hdd/" /bin/bash -c "$script" ; EXITCODE=$?
+    execute_chroot_command_wo_debug "$script" ; EXITCODE=$?
 
     if [ $EXITCODE -ne 0 ]; then
       debug "# Post-installation script didn't exit successfully (exit code = $EXITCODE)"
@@ -3349,7 +3362,7 @@ install_robot_report_script() {
     echo "### ${COMPANY} installimage"
     echo '# report installation to robot'
     echo "rm '$robot_report_script'"
-    echo 'sleep 30'
+    echo 'sleep 60'
     echo 'for i in {1..36}; do'
     echo "  wget --no-check-certificate -O /dev/null --timeout=10 '$ROBOTURL' &> /dev/null && break"
     echo '  sleep 5'

@@ -29,6 +29,20 @@ install_plesk() {
   fi
   [[ "${IAM}" == debian ]] && (( IMG_VERSION >= 70 )) && mkdir --parents "${FOLD}/hdd/run/lock"
 
+  # enable ip_nonlocal_bind for natted plesk installations
+  while read network_interface; do
+    local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
+    ((${#ipv4_addrs[@]} == 0)) && continue
+    if ! ipv4_addr_is_private "${ipv4_addrs[0]}" || ! isVServer; then
+      continue
+    fi
+    {
+      echo 'net.ipv4.ip_nonlocal_bind = 1'
+      echo 'net.ipv6.ip_nonlocal_bind = 1'
+    } >> "$FOLD/hdd/etc/sysctl.d/99-hetzner.conf"
+    break
+  done < <(physical_network_interfaces)
+
   debug "# downloading plesk installer ${PLESK_INSTALLER_SRC}/${IMAGENAME}"
   curl --location --output "${FOLD}/hdd/${temp_file}" --silent --write-out '%{response_code}' "${PLESK_INSTALLER_SRC}/${IMAGENAME}" \
     | grep --quiet 200 || return 1

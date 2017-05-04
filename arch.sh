@@ -155,8 +155,8 @@ generate_config_grub() {
 #
 run_os_specific_functions() {
 
-  execute_chroot_command "pacman-key --init"
-  execute_chroot_command "pacman-key --populate archlinux"
+  execute_command "pacman-key --init"
+  execute_command "pacman-key --populate archlinux"
   execute_chroot_command "systemctl enable sshd"
   execute_chroot_command "systemctl enable haveged"
   execute_chroot_command "systemctl enable cronie"
@@ -174,7 +174,7 @@ validate_image() {
 # extract image file to hdd
 extract_image() {
   LANG=C pacman-key --refresh-keys 2>&1 | debugoutput
-  LANG=C pacstrap -m -a "$FOLD/hdd" base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget ca-certificates-utils 2>&1 | debugoutput
+  LANG=C pacstrap -m "$FOLD/hdd" base btrfs-progs cpupower cronie findutils gptfdisk grub haveged openssh vim wget ca-certificates-utils 2>&1 | debugoutput
   declare -i EXITCODE=$?
   if [ "$EXITCODE" -eq "0" ]; then
     cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput

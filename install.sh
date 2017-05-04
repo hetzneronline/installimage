@@ -311,6 +311,12 @@ inc_step
 if [[ "$IAM" == 'centos' ]] && ((IMG_VERSION == 73)); then
   status_busy "Setting up network config"
   setup_network_config_new
+elif [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION <= 711)); then
+  status_busy "Setting up network config"
+  setup_network_config_new
+elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION == 1404)); then
+  status_busy "Setting up network config"
+  setup_network_config_new
 elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1604)); then
   status_busy "Setting up network config"
   setup_network_config_new

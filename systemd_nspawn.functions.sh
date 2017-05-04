@@ -68,7 +68,7 @@ systemd_nspawn() {
 }
 
 poweroff_systemd_nspawn() {
-  systemd_nspawn_wo_debug systemctl --force poweroff &> /dev/null
+  systemd_nspawn_wo_debug 'systemctl --force poweroff &> /dev/null &'
   while systemd_nspawn_booted; do sleep 1; done
   rm -fr "$FOLD/hdd/"{var/lib/systemd_nspawn,usr/local/bin/systemd_nspawn-runner,etc/systemd/system/multi-user.target.wants/systemd_nspawn-runner.service}
 }

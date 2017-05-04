@@ -362,7 +362,7 @@ run_os_specific_functions() {
 
   execute_chroot_command "chkconfig iptables off"
   execute_chroot_command "chkconfig ip6tables off"
-  execute_chroot_command "chkconfig postfix off"
+  is_plesk_install || execute_chroot_command "chkconfig postfix off"
 
   #
   # setup env in cpanel image
