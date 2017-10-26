@@ -58,7 +58,7 @@ systemd_nspawn_wo_debug() {
     cat > "$SYSTEMD_NSPAWN_TMP_DIR/in.fifo"
   fi
   cat "$SYSTEMD_NSPAWN_TMP_DIR/out.fifo"
-  return "$(cat "$SYSTEMD_NSPAWN_TMP_DIR/return.fifo")"
+  return "$(timeout -s 9 120 cat "$SYSTEMD_NSPAWN_TMP_DIR/return.fifo")"
 }
 
 systemd_nspawn() {

@@ -94,6 +94,7 @@ generate_new_ramdisk() {
       echo "### mei driver blacklisted due to serious bugs"
       echo "blacklist mei"
       echo "blacklist mei-me"
+      echo "sm750fb"
     } > "$blacklist_conf"
 
     execute_chroot_command 'sed -i /etc/mkinitcpio.conf -e "s/^HOOKS=.*/HOOKS=\"base udev autodetect modconf block mdadm lvm2 filesystems keyboard fsck\"/"'
@@ -125,7 +126,7 @@ setup_cpufreq() {
 generate_config_grub() {
   declare -i EXITCODE=0
   execute_chroot_command "rm -rf /boot/grub; mkdir -p /boot/grub/ >> /dev/null 2>&1"
-  execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset\"/"'
+  execute_chroot_command 'sed -i /etc/default/grub -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"nomodeset consoleblank=0\"/"'
   execute_chroot_command 'sed -i /etc/default/grub -e "s/^#GRUB_TERMINAL_OUTPUT=.*/GRUB_TERMINAL_OUTPUT=console/"'
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"

@@ -125,6 +125,7 @@ generate_new_ramdisk() {
         echo "### mei driver blacklisted due to serious bugs"
         echo "blacklist mei"
         echo "blacklist mei-me"
+        echo "sm750fb"
       } > "$blacklist_conf"
     fi
 
@@ -184,7 +185,7 @@ generate_config_grub() {
   local grubdefconf="$FOLD/hdd/etc/default/grub"
 
   # set linux_default in grub
-  local grub_linux_default="nomodeset"
+  local grub_linux_default="nomodeset consoleblank=0"
   if isVServer; then
      grub_linux_default="${grub_linux_default} elevator=noop"
   fi
@@ -241,6 +242,10 @@ run_os_specific_functions() {
   fi
 
   (( "${IMG_VERSION}" >= 80 )) && (( "${IMG_VERSION}" <= 711 )) && debian_udev_finish_service_fix
+
+  [[ -e "$FOLD/hdd/var/spool/exim4/input" ]] && find "$FOLD/hdd/var/spool/exim4/input" -type f -delete
+
+  (( "${IMG_VERSION}" >= 80 )) && [[ -e "$FOLD/hdd/etc/initramfs-tools/conf.d/resume" ]] && echo > "$FOLD/hdd/etc/initramfs-tools/conf.d/resume"
 
   return 0
 }

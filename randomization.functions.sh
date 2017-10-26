@@ -32,6 +32,9 @@ randomize_mysql_root_password() {
   debug '# randomize mysql root password'
   local new_mysql_root_password="$(generate_password)"
   reset_mysql_root_password "$new_mysql_root_password" || return 1
+  if grep -q '^ *user *= *root *$' "$FOLD/hdd/etc/mysql/debian.cnf"; then
+    sed -i "s/^ *password *=.*$/password = $new_mysql_root_password/g" "$FOLD/hdd/etc/mysql/debian.cnf" || return 1
+  fi
   echo "MySQL root password: $new_mysql_root_password" >> "$FOLD/hdd/password.txt"
 }
 
@@ -39,7 +42,7 @@ randomize_debian_sys_maint_mysql_password() {
   debug '# randomize debian-sys-maint mysql password'
   local new_debian_sys_maint_mysql_password="$(generate_password)"
   set_mysql_password debian-sys-maint "$new_debian_sys_maint_mysql_password" || return 1
-  sed -i "s/^ *password  *= .*$/password = $new_debian_sys_maint_mysql_password/g" "$FOLD/hdd/etc/mysql/debian.cnf" || return 1
+  sed -i "s/^ *password  *=.*$/password = $new_debian_sys_maint_mysql_password/g" "$FOLD/hdd/etc/mysql/debian.cnf" || return 1
   if ! mysql_running; then start_mysql || return 1; fi
   echo QUIT | execute_command_wo_debug mysql --defaults-file=/etc/mysql/debian.cnf -u debian-sys-maint |& debugoutput
   return "${PIPESTATUS[1]}"

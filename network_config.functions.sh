@@ -137,6 +137,7 @@ network_interface_ipv6_addrs() {
 # check whether to use predictable network interface names
 use_predictable_network_interface_names() {
   [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 73)) && return
+  [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 90)) && ((IMG_VERSION <= 700)) && return
   return 1
 }
 
@@ -150,12 +151,22 @@ network_interface_driver() {
 # $1 <network_interface>
 predict_network_interface_name() {
   local network_interface="$1"
-  local network_interface_driver="$(network_interface_driver "$network_interface")"
-  if ! use_predictable_network_interface_names || [[ "$network_interface_driver" == 'virtio_net' ]]; then
+  if ! use_predictable_network_interface_names; then
     echo "$network_interface"
     return
   fi
-  local d="$(echo; udevadm test-builtin net_id "/sys/class/net/$network_interface" 2>/dev/null)"
+  # https://github.com/systemd/systemd/pull/1119
+  local network_interface_driver="$(network_interface_driver "$network_interface")"
+  if [[ "$network_interface_driver" == 'virtio_net' ]]; then
+    if (($(installed_os_systemd_version) < 226)); then
+      echo "$network_interface"
+      return
+    else
+      local d="$(systemd_nspawn_wo_debug "udevadm test-builtin net_id \"/sys/class/net/$network_interface\" 2>/dev/null" 2>/dev/null | tr -cd '[:print:]\n')"
+    fi
+  else
+    local d="$(echo; udevadm test-builtin net_id "/sys/class/net/$network_interface" 2>/dev/null)"
+  fi
   [[ "$d" =~ $'\n'ID_NET_NAME_ONBOARD=([^$'\n']+) ]] && echo "${BASH_REMATCH[1]}" && return
   [[ "$d" =~ $'\n'ID_NET_NAME_SLOT=([^$'\n']+) ]] && echo "${BASH_REMATCH[1]}" && return
   # we need to convert ID_NET_NAME_PATH to ID_NET_NAME_SLOT for e1000 and 8139cp network interfaces
@@ -481,6 +492,10 @@ setup_etc_network_interfaces() {
   {
     echo "### $COMPANY installimage"
     echo
+    if [[ -e "$FOLD/hdd/etc/network/interfaces.d" ]]; then
+      echo 'source /etc/network/interfaces.d/*'
+      echo
+    fi
     echo 'auto lo'
     echo 'iface lo inet loopback'
     echo 'iface lo inet6 loopback'

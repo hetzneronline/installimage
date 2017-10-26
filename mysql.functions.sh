@@ -52,7 +52,11 @@ set_mysql_password() {
   local user="$1"
   local password="$2"
   if mysql_version_ge 5.7.6; then
-    local password_field='authentication_string'
+    if ! [[ "$(query_mysql "SELECT plugin FROM mysql.user WHERE user = '${user//\'/\\\'}';")" =~ ^mysql_native_password$|^unix_socket$ ]]; then
+      local password_field='password'
+    else
+      local password_field='authentication_string'
+    fi
   else
     local password_field='password'
   fi
@@ -84,6 +88,12 @@ reset_mysql_root_password() {
   query_mysql QUIT || return 1
   execute_command_wo_debug mysqladmin shutdown &> /dev/null || return 1
   while mysql_running; do :; done
+}
+
+mysql_user_exists() {
+  local mysql_user="$1"
+  [[ "$(query_mysql "SELECT COUNT(*) FROM mysql.user WHERE user = '${mysql_user//\'/\\\'}';")" == '0' ]] && return 1
+  return
 }
 
 # vim: ai:ts=2:sw=2:et

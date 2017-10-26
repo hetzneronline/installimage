@@ -178,6 +178,7 @@ generate_new_ramdisk() {
         echo "### mei driver blacklisted due to serious bugs"
         echo "blacklist mei"
         echo "blacklist mei-me"
+        echo "sm750fb"
       } > "$blacklist_conf"
     fi
 
@@ -252,7 +253,7 @@ generate_config_grub() {
 #  execute_chroot_command "cd /boot; [ -e boot ] && rm -rf boot; ln -s . boot >> /dev/null 2>&1"
 
   # set linux_default in grub
-  local grub_linux_default="nomodeset"
+  local grub_linux_default="nomodeset consoleblank=0"
   if isVServer; then
      grub_linux_default="${grub_linux_default} elevator=noop"
   else

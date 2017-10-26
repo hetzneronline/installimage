@@ -74,8 +74,8 @@ export OSMENULIST=(
   "Custom image" "(Blanco config for user images)"
 )
 
-export PROXMOX3_BASE_IMAGE="Debian-711-wheezy-64-minimal"
-export PROXMOX4_BASE_IMAGE="Debian-87-jessie-64-minimal"
+export PROXMOX4_BASE_IMAGE="Debian-89-jessie-64-minimal"
+export PROXMOX5_BASE_IMAGE="Debian-92-stretch-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 

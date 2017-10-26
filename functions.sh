@@ -101,8 +101,8 @@ generate_menu() {
   if [ "$1" = "Other" ]; then
     RAWLIST=""
     RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
-    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Wheezy"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
+    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Stretch"
     RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*-beta.*' -a -not -name '*.sig' -printf '%f\n' | sort)"
   elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
@@ -143,8 +143,8 @@ generate_menu() {
   case $IMAGENAME in
     Proxmox-Virtualization-Environment*)
       case "$IMAGENAME" in
-        Proxmox-Virtualization-Environment-on-Debian-Wheezy) export PROXMOX_VERSION="3" ;;
         Proxmox-Virtualization-Environment-on-Debian-Jessie) export PROXMOX_VERSION="4" ;;
+        Proxmox-Virtualization-Environment-on-Debian-Stretch) export PROXMOX_VERSION="5" ;;
       esac
       cp "$SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION" /post-install
       chmod 0755 /post-install
@@ -575,7 +575,7 @@ create_config() {
 
 getdrives() {
   local drives;
-  drives="$(find /sys/block/ \( -name  'nvme[0-9]n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n' | sort)"
+  drives="$(find /sys/block/ \( -name  'nvme[0-9]*n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n' | sort)"
   local i=1
 
   #cast drives into an array
@@ -1109,7 +1109,11 @@ validate_vars() {
 
     done
     if [ "$WARNBTRFS" = "1" ]; then
-      graph_notice "WARNING: the btrfs filesystem is still under development. Data loss may occur!"
+      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
+        echo "WARNING: the btrfs filesystem is still under development. Data loss may occur!" | debugoutput
+      else
+        graph_notice "WARNING: the btrfs filesystem is still under development. Data loss may occur!"
+      fi
     fi
   else
    graph_error "ERROR: The config has no partitions"
@@ -2668,11 +2672,7 @@ set_hostname() {
     echo "ff02::2 ip6-allrouters" >> $hostsfile
     echo "ff02::3 ip6-allhosts" >> $hostsfile
     if [ "$3" ]; then
-      if [ "$PROXMOX" = 'true' ] && [ "$PROXMOX_VERSION" = '3' ]; then
-        debug "not adding ipv6 fqdn to hosts for Proxmox3"
-      else
-        echo "$3 $fqdn_name $shortname" >> $hostsfile
-      fi
+      echo "$3 $fqdn_name $shortname" >> $hostsfile
     fi
 
     return 0
@@ -2712,11 +2712,7 @@ generate_hosts() {
     echo "ff02::2 ip6-allrouters" >> $HOSTSFILE
     echo "ff02::3 ip6-allhosts" >> $HOSTSFILE
     if [ "$2" ]; then
-      if [ "$PROXMOX" = 'true' ] && [ "$PROXMOX_VERSION" = '3' ]; then
-        debug "not adding ipv6 fqdn to hosts for Proxmox3"
-      else
-        echo "$2 $FULLHOSTNAME $HOSTNAME" >> $HOSTSFILE
-      fi
+      echo "$2 $FULLHOSTNAME $HOSTNAME" >> $HOSTSFILE
     fi
   fi
   return 0
@@ -3381,7 +3377,9 @@ install_robot_report_script() {
       echo 'After=network.target'
       echo 'Description=Report installation to Robot'
       echo '[Service]'
+      echo 'Type=forking'
       echo "ExecStart=$robot_report_script"
+      echo 'TimeoutSec=0'
     } > "$FOLD/hdd/$robot_report_service"
 
     # extend robot report script

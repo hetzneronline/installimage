@@ -116,6 +116,7 @@ generate_new_ramdisk() {
     echo '### i915 driver blacklisted due to various bugs'
     echo '### especially in combination with nomodeset'
     echo 'blacklist i915'
+    echo "sm750fb"
   } > "$blacklist_conf"
 
   if [ "$IMG_VERSION" -lt 132 ]; then
@@ -193,7 +194,7 @@ generate_config_grub() {
   done
   cat "$DMAPFILE" >> "$DEBUGFILE"
 
-  local grub_linux_default="nomodeset"
+  local grub_linux_default="nomodeset consoleblank=0"
   # set net.ifnames=0 to avoid predictable interface names for opensuse 13.2
   if [ "$IMG_VERSION" -ge 132 ] ; then
     grub_linux_default="${grub_linux_default} net.ifnames=0 quiet systemd.show_status=1"

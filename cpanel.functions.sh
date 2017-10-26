@@ -102,6 +102,18 @@ install_cpanel() {
   chmod a+x "${FOLD}/hdd/${temp_file}"
   debug 'downloaded cpanel installer'
 
+  execute_chroot_command 'yum check-update' # || return 1
+  execute_chroot_command 'yum -y install yum-utils' || return 1
+
+  if [[ -e "$FOLD/hdd/usr/bin/needs-restarting" ]]; then
+    mv "$FOLD/hdd/usr/bin/needs-restarting" "$FOLD/hdd/usr/bin/needs-restarting.bak"
+    {
+      echo '#!/usr/bin/env bash'
+      echo '/usr/bin/needs-restarting.bak | grep -v systemd_nspawn-runner'
+    } > "$FOLD/hdd/usr/bin/needs-restarting"
+    chmod 755 "$FOLD/hdd/usr/bin/needs-restarting"
+  fi
+
   debug '# installing cpanel'
   local command="${temp_file} --force"
   if installed_os_uses_systemd && ! systemd_nspawn_booted; then
@@ -109,6 +121,10 @@ install_cpanel() {
   fi
   execute_command "${command}" || return 1
   systemd_nspawn_booted && poweroff_systemd_nspawn
+
+  if [[ -e "$FOLD/hdd/usr/bin/needs-restarting.bak" ]]; then
+    mv "$FOLD/hdd/usr/bin/needs-restarting.bak" "$FOLD/hdd/usr/bin/needs-restarting"
+  fi
 
   debug '# setting up cpanel'
   cpanel_setup_wwwacct_conf

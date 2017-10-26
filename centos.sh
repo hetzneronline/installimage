@@ -161,6 +161,7 @@ generate_new_ramdisk() {
         echo "### i915 driver blacklisted due to various bugs"
         echo "### especially in combination with nomodeset"
         echo "blacklist i915"
+        echo "sm750fb"
       } > "$blacklist_conf"
     fi
 
@@ -300,9 +301,9 @@ generate_config_grub() {
     lspci -n | grep -q '8086:10d3' && aspm='pcie_aspm=off' || aspm=''
 
     if [ "$IMG_VERSION" -ge 60 ]; then
-      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE rd_NO_LUKS rd_NO_DM nomodeset $elevator $aspm" >> "$BFILE"
+      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE rd_NO_LUKS rd_NO_DM nomodeset $elevator $aspm consoleblank=0" >> "$BFILE"
     else
-      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE nomodeset" >> "$BFILE"
+      echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE nomodeset consoleblank=0" >> "$BFILE"
     fi
     INITRD=''
     if [ -f "$FOLD/hdd/boot/initrd-$1.img" ]; then
@@ -320,7 +321,7 @@ generate_config_grub() {
     local grub_cmdline_linux='biosdevname=0 crashkernel=auto'
     isVServer            && grub_cmdline_linux+=' elevator=noop'
     ((IMG_VERSION < 73)) && grub_cmdline_linux+=' net.ifnames=0'
-    grub_cmdline_linux+=' nomodeset rd.auto=1'
+    grub_cmdline_linux+=' nomodeset rd.auto=1 consoleblank=0'
     sed -i "s/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"$grub_cmdline_linux\"/" "$FOLD/hdd/etc/default/grub"
 
     rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
@@ -378,7 +379,7 @@ run_os_specific_functions() {
   egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux" &&
     touch "$FOLD/hdd/.autorelabel"
 
-  ((IMG_VERSION >= 70)) && mkdir -p "$FOLD/hdd/var/run/netreport"
+  ((IMG_VERSION >= 69)) && mkdir -p "$FOLD/hdd/var/run/netreport"
 
   return 0
 }

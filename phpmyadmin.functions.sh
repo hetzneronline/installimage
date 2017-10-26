@@ -17,7 +17,14 @@ randomize_phpmyadmin_mysql_password() {
     boot_systemd_nspawn || return 1
   fi
   execute_command dpkg-reconfigure -f noninteractive phpmyadmin || return 1
-  [[ "$(echo 'get phpmyadmin/mysql/app-pass' | execute_command_wo_debug debconf-communicate -f noninteractive)" == "0 $new_phpmyadmin_mysql_password" ]] || return 1
+  local phpmyadmin_mysql_password_from_debconf="$(echo 'get phpmyadmin/mysql/app-pass' | execute_command_wo_debug debconf-communicate -f noninteractive)"
+  if [[ "$phpmyadmin_mysql_password_from_debconf" == "0 $new_phpmyadmin_mysql_password" ]]; then
+    :
+  elif [[ "$phpmyadmin_mysql_password_from_debconf" == '0 ' ]]; then
+    :
+  else
+    return 1
+  fi
   grep -q "^ *\$dbpass *=.*$new_phpmyadmin_mysql_password.*$" "$FOLD/hdd/etc/phpmyadmin/config-db.php"
 }
 
