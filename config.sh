@@ -3,7 +3,7 @@
 #
 # set all necessary vars and functions
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2017, Hetzner Online GmbH
 #
 
 
@@ -68,20 +68,20 @@ export OSMENULIST=(
   "Ubuntu"       "(Official)"
   "CentOS"       "(Official)"
   "openSUSE"     "(Official)"
-  "Archlinux"    "(!!NO SUPPORT!!)"
+  "Arch Linux"   "(!!NO SUPPORT!!)"
   "Other"        "(!!NO SUPPORT!!)"
   "Old images"   "(!!NO SUPPORT!!)"
   "Custom image" "(Blanco config for user images)"
 )
 
-export PROXMOX4_BASE_IMAGE="Debian-89-jessie-64-minimal"
-export PROXMOX5_BASE_IMAGE="Debian-92-stretch-64-minimal"
+export PROXMOX4_BASE_IMAGE="Debian-810-jessie-64-minimal"
+export PROXMOX5_BASE_IMAGE="Debian-93-stretch-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.de/plesk
-export PLESK_STD_VERSION=PLESK_17_0_17
+export PLESK_STD_VERSION=PLESK_17_5_3
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats

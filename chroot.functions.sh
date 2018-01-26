@@ -12,7 +12,7 @@ execute_chroot_command_wo_debug() {
     mkdir -p "$FOLD/hdd/$dir"
     mount --bind "$dir" "$FOLD/hdd/$dir"
   done
-  chroot "$FOLD/hdd" /usr/bin/env bash -c "$@"
+  unshare -f -p chroot "$FOLD/hdd" /usr/bin/env bash -c "$@"
   local r=$?
   for ((i=${#dirs[@]}-1; i>=0; i--)); do
     until umount "$FOLD/hdd/${dirs[i]}"; do :; done

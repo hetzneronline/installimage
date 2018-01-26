@@ -3,7 +3,7 @@
 #
 # functions
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2018, Hetzner Online GmbH
 #
 
 
@@ -108,6 +108,8 @@ generate_menu() {
     # skip CPANEL images and signatures files from list
     RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n'|sort)
     FINALIMAGEPATH="$OLDIMAGESPATH"
+  elif [[ "$1" == 'Arch Linux' ]]; then
+    RAWLIST="$IMAGESPATH/archlinux-latest-64-minimal.tar.gz"
   else
     # skip CPANEL images and signatures files from list
     RAWLIST=$(find "$IMAGESPATH"/* -maxdepth 1 -type f -not -name "*cpanel*" -a -regextype sed -regex ".*/\(old_\)\?$1.*" -a -not -regex '.*\.sig$' -a -not -iname '*-beta.*' -printf '%f\n'|sort)
@@ -301,7 +303,7 @@ create_config() {
 
     # bootloader
     # we no longer support lilo, so don't show this option if it isn't in the image
-#    if [ "$IAM" = "arch" ] ||
+#    if [ "$IAM" = "archlinux" ] ||
 #      [ "$IAM" = "coreos" ] ||
 #      [ "$IAM" = "centos" ] ||
 #      [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] ||
@@ -883,8 +885,12 @@ validate_vars() {
       # test if drive is not busy
       CHECK="$(hdparm -z "$drive" 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
       if [ "$CHECK" ]; then
-        graph_error "ERROR: DRIVE$i is busy - cannot access device $drive"
-        return 1
+        sleep 120
+        CHECK="$(hdparm -z "$drive" 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
+        if [ "$CHECK" ]; then
+          graph_error "ERROR: DRIVE$i is busy - cannot access device $drive"
+          return 1
+        fi
       fi
     fi
   done
@@ -1143,7 +1149,7 @@ validate_vars() {
   fi
 
   if [ "$BOOTLOADER" = "lilo" ]; then
-    if [ "$IAM" = "arch" ] ||
+    if [ "$IAM" = "archlinux" ] ||
        [ "$IAM" = "coreos" ] ||
        [ "$IAM" = "centos" ] ||
        [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] ||
@@ -1384,7 +1390,7 @@ validate_vars() {
   # TODO: add check for valid hostname (e.g. no underscores)
 
   if [ "$MBTYPE" = "D3401-H1" ] || [ "$MBTYPE" = "D3417-B1" ]; then
-    if [ "$IAM" = "debian" ] && [ "$IMG_VERSION" -lt 82 -o "$IMG_VERSION" -ge 711 ]; then
+    if [ "$IAM" = "debian" ] && [ "$IMG_VERSION" -lt 82 -o "$IMG_VERSION" = '710' -o "$IMG_VERSION" = '711' ]; then
       if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
         echo "WARNING: Debian versions older than Debian 8.2 have no support for the Intel i219 NIC of this board." | debugoutput
       else
@@ -1445,12 +1451,13 @@ whoami() {
  IMAGENAME="${1%%.*}"
 
  IAM="debian"
+
  if [ "$1" ]; then
   case "$1" in
     *SuSE*|*suse*|*Suse*|*SUSE*)IAM="suse";;
     *CentOS*|*centos*|*Centos*)IAM="centos";;
     *Ubuntu*|*ubuntu*)IAM="ubuntu";;
-    Arch*)IAM="arch";;
+    Arch*|arch*)IAM="archlinux";;
     CoreOS*|coreos*)
       IAM="coreos"
       CLOUDINIT="$FOLD/cloud-config"
@@ -1460,7 +1467,7 @@ whoami() {
  fi
 
  IMG_VERSION="$(echo "$1" | cut -d "-" -f 2)"
- [ -z "$IMG_VERSION" -o "$IMG_VERSION" = "" -o "$IMG_VERSION" = "h.net.tar.gz" ]  && IMG_VERSION="0"
+ [ -z "$IMG_VERSION" -o "$IMG_VERSION" = "" -o "$IMG_VERSION" = "h.net.tar.gz" -o "$IMG_VERSION" = 'latest' ]  && IMG_VERSION="0"
  IMG_ARCH="$(echo "$1" | sed 's/.*-\(32\|64\)-.*/\1/')"
 
  IMG_FULLNAME="$(find "$IMAGESPATH" -maxdepth 1 -type f -name "$1*" -a -not -regex '.*\.sig$' -printf '%f\n')"
@@ -2606,7 +2613,7 @@ set_hostname() {
       shortname=${sethostname}
     fi
 
-    if [ -f $hostnamefile -o "$IAM" = "arch" ]; then
+    if [ -f $hostnamefile -o "$IAM" = "archlinux" ]; then
       {
         if is_cpanel_install || is_plesk_install; then
           if check_fqdn ${sethostname}; then
@@ -3358,17 +3365,25 @@ install_robot_report_script() {
     echo "### ${COMPANY} installimage"
     echo '# report installation to robot'
     echo "rm '$robot_report_script'"
-    echo 'sleep 60'
-    echo 'for i in {1..36}; do'
-    echo "  wget --no-check-certificate -O /dev/null --timeout=10 '$ROBOTURL' &> /dev/null && break"
-    echo '  sleep 5'
-    echo 'done'
+    echo '('
+    echo '  sleep 60'
+    echo '  for i in {1..36}; do'
+    echo "    wget --no-check-certificate -O /dev/null --timeout=10 '$ROBOTURL' &> /dev/null && break"
+    echo '    sleep 5'
+    echo '  done'
+    echo ') &'
   } > "$FOLD/hdd/$robot_report_script"
   chmod +x "$FOLD/hdd/$robot_report_script"
 
   if installed_os_uses_systemd; then
     # create robot report service
-    local robot_report_service='/etc/systemd/system/multi-user.target.wants/robot-report.service'
+    if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)); then
+      local robot_report_service='/etc/systemd/system/robot-report.service'
+    elif [[ "$IAM" == 'archlinux' ]]; then
+      local robot_report_service='/etc/systemd/system/robot-report.service'
+    else
+      local robot_report_service='/etc/systemd/system/multi-user.target.wants/robot-report.service'
+    fi
     debug '# install robot report service'
     {
       echo "### ${COMPANY} installimage"
@@ -3377,15 +3392,27 @@ install_robot_report_script() {
       echo 'After=network.target'
       echo 'Description=Report installation to Robot'
       echo '[Service]'
-      echo 'Type=forking'
       echo "ExecStart=$robot_report_script"
-      echo 'TimeoutSec=0'
+      echo 'KillMode=none'
+      echo 'Type=forking'
     } > "$FOLD/hdd/$robot_report_service"
+    if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)); then
+      ln -s ../robot-report.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/robot-report.service"
+    elif [[ "$IAM" == 'archlinux' ]]; then
+      ln -s ../robot-report.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/robot-report.service"
+    fi
 
     # extend robot report script
     {
-      echo "rm '$robot_report_service'"
-      echo 'systemctl daemon-reload'
+      echo '('
+      if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)); then
+        echo '  unlink /etc/systemd/system/multi-user.target.wants/robot-report.service'
+      elif [[ "$IAM" == 'archlinux' ]]; then
+        echo '  unlink /etc/systemd/system/multi-user.target.wants/robot-report.service'
+      fi
+      echo "  rm '$robot_report_service'"
+      echo '  systemctl daemon-reload'
+      echo ') &'
     } >> "$FOLD/hdd/$robot_report_script"
 
     return 0

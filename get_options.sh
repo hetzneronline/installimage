@@ -3,7 +3,7 @@
 # read config
 #. /tmp/install.vars
 #
-# (c) 2009-2016, Hetzner Online GmbH
+# (c) 2009-2018, Hetzner Online GmbH
 #
 
 
@@ -146,6 +146,14 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:" OPTION ; do
       IMAGENAME=${IMAGENAME/.txz/}
       IMAGENAME=${IMAGENAME/.bin.bz2/}
       IMAGENAME=${IMAGENAME/.bin/}
+      if [[ "$IMAGENAME" == 'Archlinux-2017-64-minimal' ]] && ! [[ -s "$OPT_IMAGE" ]]; then
+        IMAGENAME='archlinux-latest-64-minimal'
+        OPT_IMAGE="$IMAGESPATH$IMAGENAME.tar.gz"
+      fi
+      if [[ "$IMAGENAME" == 'Archlinux-latest-64-minimal' ]] && ! [[ -s "$OPT_IMAGE" ]]; then
+        IMAGENAME='archlinux-latest-64-minimal'
+        OPT_IMAGE="$IMAGESPATH$IMAGENAME.tar.gz"
+      fi
     ;;
 
     # partitions

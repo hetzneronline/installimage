@@ -125,14 +125,14 @@ generate_new_ramdisk() {
         echo "### mei driver blacklisted due to serious bugs"
         echo "blacklist mei"
         echo "blacklist mei-me"
-        echo "sm750fb"
+        echo "blacklist sm750fb"
       } > "$blacklist_conf"
     fi
 
     # apparently sometimes the mdadm assembly bugfix introduced with the recent mdadm release does not work
     # however, the problem is limited to H8SGL boards
     # see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=784070
-    if [ "$IMG_VERSION" -ge 80 ] && [ "$IMG_VERSION" -lt 711 ] && [ "$MBTYPE" = 'H8SGL' ]; then
+    if [ "$IMG_VERSION" -ge 80 ] && [ "$IMG_VERSION" != 710 ] && [ "$IMG_VERSION" != 711 ] && [ "$MBTYPE" = 'H8SGL' ]; then
       local script="$FOLD/hdd/usr/share/initramfs-tools/scripts/local-block/mdadmpatch"
       cp "$SCRIPTPATH/h8sgl-deb8-md.sh" "$script"
       chmod a+x "$script"
@@ -241,7 +241,7 @@ run_os_specific_functions() {
     setup_hetzner_lamp || return 1
   fi
 
-  (( "${IMG_VERSION}" >= 80 )) && (( "${IMG_VERSION}" <= 711 )) && debian_udev_finish_service_fix
+  (( "${IMG_VERSION}" >= 80 )) && (( "${IMG_VERSION}" != 710 )) && (( "${IMG_VERSION}" != 711 )) && debian_udev_finish_service_fix
 
   [[ -e "$FOLD/hdd/var/spool/exim4/input" ]] && find "$FOLD/hdd/var/spool/exim4/input" -type f -delete
 

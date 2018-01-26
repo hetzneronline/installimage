@@ -20,16 +20,16 @@ aptitude -y safe-upgrade
 
 #echo -e "\n----------------- Deinstalling any linux firmware packages ------------------\n"
 
-#firmware="$(dpkg -l | grep -i 'firmware')"
+firmware="$(dpkg -l | grep -i 'firmware-')"
 
-#if [ -n "$firmware" ]; then
-#  aptitude -q -y purge firmware-realtek firmware-linux firmware-linux-free firmware-linux-nonfree
-#else
-#  echo "kein firmware Paket vorhanden"
-#fi
+if [ -n "$firmware" ]; then
+  aptitude -q -y purge firmware-bnx2x firmware-realtek firmware-linux firmware-linux-free firmware-linux-nonfree
+else
+  echo "kein firmware Paket vorhanden"
+fi
 
 echo -e "\n----------------- Deinstalling the Debian standard kernel packages ------------------\n"
-aptitude -q -y purge linux-image-amd64 linux-image-4.9.0-3-amd64
+aptitude -q -y purge linux-image-amd64 linux-image-4.9.0-4-amd64
 
 echo -e "\n----- Add Proxmox repo to APT sources -----\n"
 

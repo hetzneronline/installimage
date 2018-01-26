@@ -161,7 +161,7 @@ generate_new_ramdisk() {
         echo "### i915 driver blacklisted due to various bugs"
         echo "### especially in combination with nomodeset"
         echo "blacklist i915"
-        echo "sm750fb"
+        echo "blacklist sm750fb"
       } > "$blacklist_conf"
     fi
 
@@ -380,6 +380,11 @@ run_os_specific_functions() {
     touch "$FOLD/hdd/.autorelabel"
 
   ((IMG_VERSION >= 69)) && mkdir -p "$FOLD/hdd/var/run/netreport"
+
+  if ((IMG_VERSION >= 74)); then
+    execute_chroot_command 'yum check-update' # || return 1
+    execute_chroot_command 'yum -y install polkit' || return 1
+  fi
 
   return 0
 }

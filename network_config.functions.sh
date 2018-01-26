@@ -3,7 +3,7 @@
 #
 # network config functions
 #
-# (c) 2016, Hetzner Online GmbH
+# (c) 2017, Hetzner Online GmbH
 #
 
 # setup /etc/sysconfig/network
@@ -138,6 +138,8 @@ network_interface_ipv6_addrs() {
 use_predictable_network_interface_names() {
   [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 73)) && return
   [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 90)) && ((IMG_VERSION <= 700)) && return
+  [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)) && return
+  [[ "$IAM" == 'archlinux' ]] && return
   return 1
 }
 
@@ -546,6 +548,144 @@ setup_persistent_net_rules() {
   gen_persistent_net_rules > "$FOLD/hdd/$persistent_net_rules_file"
 }
 
+# check whether to use netplan
+use_netplan() {
+  while read network_interface; do
+    while read ipv4_addr; do
+      # pointtopoint
+      if ! ipv4_addr_is_private "$ipv4_addr" && ! isVServer; then return 1; fi
+    done < <(network_interface_ipv4_addrs "$network_interface")
+  done < <(physical_network_interfaces)
+}
+
+# gen /etc/netplan/01-netcfg.yaml entry
+# $1 <network_interface>
+gen_etc_netplan_01_netcfg_yaml_entry() {
+  local network_interface="$1"
+  local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
+  local ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
+  ((${#ipv4_addrs[@]} == 0)) && ((${#ipv6_addrs[@]} == 0)) && return
+  local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
+  echo "    $predicted_network_interface_name:"
+  local addresses=()
+  if ((${#ipv4_addrs[@]} > 0)); then
+    # dhcp
+    if ipv4_addr_is_private "${ipv4_addrs[0]}" && isVServer; then
+      echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
+      local dhcp4=true
+      local gateway4=false
+    # static config
+    else
+      echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
+      local dhcp4=false
+      addresses+=("${ipv4_addrs[0]}")
+      local gateway4="$(network_interface_ipv4_gateway "$network_interface")"
+      if [[ -n "$gateway4" ]]; then
+        echo "configuring ipv4 gateway $gateway4 for $predicted_network_interface_name" >&2
+      else
+        gateway4=false
+      fi
+    fi
+  fi
+  if ((${#ipv6_addrs[@]} > 0)); then
+    echo "configuring ipv6 addr ${ipv6_addrs[0]} for $predicted_network_interface_name" >&2
+    addresses+=("${ipv6_addrs[0]}")
+  fi
+  case "${#addresses[@]}" in
+    0);;
+    # 1)
+    #   echo "      addresses: [ ${addresses[0]} ]"
+    # ;;
+    *)
+      echo '      addresses:'
+      for address in "${addresses[@]}"; do
+        echo "        - $address"
+      done
+    ;;
+  esac
+  [[ "$dhcp4" == true ]] && echo '      dhcp4: true'
+  [[ "$gateway4" != false ]] && echo "      gateway4: $gateway4"
+  local gateway6="$(network_interface_ipv6_gateway "$network_interface")"
+  if [[ -n "$gateway6" ]]; then
+    echo "configuring ipv6 gateway $gateway6 for $predicted_network_interface_name" >&2
+    echo "      gateway6: $gateway6"
+  fi
+}
+
+# setup /etc/netplan/01-netcfg.yaml
+setup_etc_netplan_01_netcfg_yaml() {
+  debug '# setting up /etc/netplan/01-netcfg.yaml'
+  {
+    echo "### $COMPANY installimage"
+    echo 'network:'
+    echo '  version: 2'
+    echo '  renderer: networkd'
+    echo '  ethernets:'
+    while read network_interface; do
+      gen_etc_netplan_01_netcfg_yaml_entry "$network_interface"
+    done < <(physical_network_interfaces)
+  } > "$FOLD/hdd/etc/netplan/01-netcfg.yaml" 2> >(debugoutput)
+}
+
+# gen network file
+# $1 <network_interface>
+gen_network_file() {
+  local network_interface="$1"
+  echo "### $COMPANY installimage"
+  echo '[Match]'
+  local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
+  echo "Name=$predicted_network_interface_name"
+  echo
+  echo '[Network]'
+  local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
+  if ((${#ipv4_addrs[@]} > 0)); then
+    # dhcp
+    if ipv4_addr_is_private "${ipv4_addrs[0]}" && isVServer; then
+      echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
+      echo 'DHCP=ipv4'
+    # static config
+    else
+      # ! pointtopoint
+      if ipv4_addr_is_private "${ipv4_addrs[0]}" || isVServer; then
+        echo "Address=${ipv4_addrs[0]}"
+      fi
+    fi
+  fi
+  local ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
+  if ((${#ipv6_addrs[@]} > 0)); then
+    echo "Address=${ipv6_addrs[0]}"
+  fi
+  local gateway="$(network_interface_ipv4_gateway "$network_interface")"
+  if ((${#ipv4_addrs[@]} > 0)) && [[ -n "$gateway" ]]; then
+    echo "Gateway=$gateway"
+  fi
+  gateway="$(network_interface_ipv6_gateway "$network_interface")"
+  if ((${#ipv6_addrs[@]} > 0)) && [[ -n "$gateway" ]]; then
+    echo "Gateway=$gateway"
+  fi
+  if ((${#ipv4_addrs[@]} > 0)) && ! ipv4_addr_is_private "${ipv4_addrs[0]}" && ! isVServer; then
+    echo
+    echo '[Address]'
+    echo "Address=$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
+    local peer="$(network_interface_ipv4_gateway "$network_interface")/32"
+    echo "Peer=$peer"
+  fi
+}
+
+# setup /etc/systemd/network files
+setup_etc_systemd_network_files() {
+  debug '# setup /etc/systemd/network files'
+  while read network_interface; do
+    local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
+    local ip_addrs=("${ipv4_addrs[@]}" $(network_interface_ipv6_addrs "$network_interface"))
+    ((${#ip_addrs[@]} == 0)) && continue
+    local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
+    local network_file="/etc/systemd/network/10-$predicted_network_interface_name.network"
+    debug "# setting up $network_file"
+    gen_network_file "$network_interface" > "$FOLD/hdd/$network_file" 2> >(debugoutput)
+  done < <(physical_network_interfaces)
+}
+
 # setup network config
 setup_network_config_new() {
   debug '# setup network config'
@@ -556,7 +696,28 @@ setup_network_config_new() {
       setup_etc_sysconfig_network_scripts_centos
     ;;
     suse) setup_etc_sysconfig_network_scripts_suse;;
-    debian|ubuntu) setup_etc_network_interfaces;;
+    debian) setup_etc_network_interfaces;;
+    ubuntu)
+     if ((IMG_VERSION >= 1710)); then
+       if use_netplan; then
+         setup_etc_netplan_01_netcfg_yaml
+         execute_chroot_command 'netplan generate' || return 1
+       else
+         setup_etc_systemd_network_files
+         execute_chroot_command 'systemctl enable systemd-networkd' || return 1
+         {
+           echo "### $COMPANY installimage"
+           echo '# network is managed by systemd-networkd'
+         } > "$FOLD/hdd/etc/netplan/01-netcfg.yaml"
+       fi
+     else
+       setup_etc_network_interfaces
+     fi
+    ;;
+    archlinux)
+      setup_etc_systemd_network_files
+      execute_chroot_command 'systemctl enable systemd-networkd' || return 1
+    ;;
     *) return 1;;
   esac
 

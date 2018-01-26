@@ -23,13 +23,15 @@ boot_systemd_nspawn() {
     # shellcheck disable=SC2016
     echo '  cat /var/lib/systemd_nspawn/in.fifo | HOME=/root /usr/bin/env bash -c "$command" &> /var/lib/systemd_nspawn/out.fifo'
     echo '  echo $? > /var/lib/systemd_nspawn/return.fifo'
-    echo 'done'
+    echo 'done &'
   } > "$SYSTEMD_NSPAWN_TMP_DIR/runner"
   chmod +x "$SYSTEMD_NSPAWN_TMP_DIR/runner"
   {
     echo '[Unit]'
     echo '[Service]'
     echo 'ExecStart=/usr/local/bin/systemd_nspawn-runner'
+    echo 'KillMode=none'
+    echo 'Type=forking'
   } > "$SYSTEMD_NSPAWN_TMP_DIR/systemd_nspawn-runner.service"
   systemd-nspawn -b \
     --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
@@ -47,9 +49,18 @@ boot_systemd_nspawn() {
 
 systemd_nspawn_wo_debug() {
   if ! systemd_nspawn_booted; then
+    if [[ -e "$FOLD/hdd/etc/resolv.conf" ]]; then
+      cp "$FOLD/hdd/etc/resolv.conf" "$FOLD/hdd/etc/resolv.conf.bak" || return 1
+    fi
     systemd-nspawn --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
-      -D "$FOLD/hdd" -q /usr/bin/env bash -c "$@"
-    return $?
+      -D "$FOLD/hdd" -q /usr/bin/env bash -c "$*"
+    r=$?
+    if [[ -e "$FOLD/hdd/etc/resolv.conf.bak" ]]; then
+      if ! [[ -e  "$FOLD/hdd/etc/resolv.conf" ]]; then
+        mv "$FOLD/hdd/etc/resolv.conf.bak" "$FOLD/hdd/etc/resolv.conf" || return 1
+      fi
+    fi
+    return $r
   fi
   echo "$@" > "$SYSTEMD_NSPAWN_TMP_DIR/command.fifo"
   if [[ -t 0 ]]; then

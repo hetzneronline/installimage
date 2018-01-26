@@ -100,6 +100,7 @@ setup_nextcloud() {
   randomize_nextcloud_instanceid || return 1
   randomize_nextcloud_passwordsalt || return 1
   randomize_nextcloud_secret
+  execute_command_wo_debug chown -R www-data:www-data /var/www/nextcloud
 }
 
 # vim: ai:ts=2:sw=2:et

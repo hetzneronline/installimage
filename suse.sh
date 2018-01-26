@@ -116,7 +116,7 @@ generate_new_ramdisk() {
     echo '### i915 driver blacklisted due to various bugs'
     echo '### especially in combination with nomodeset'
     echo 'blacklist i915'
-    echo "sm750fb"
+    echo "blacklist sm750fb"
   } > "$blacklist_conf"
 
   if [ "$IMG_VERSION" -lt 132 ]; then

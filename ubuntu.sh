@@ -178,7 +178,7 @@ generate_new_ramdisk() {
         echo "### mei driver blacklisted due to serious bugs"
         echo "blacklist mei"
         echo "blacklist mei-me"
-        echo "sm750fb"
+        echo "blacklist sm750fb"
       } > "$blacklist_conf"
     fi
 
@@ -267,8 +267,12 @@ generate_config_grub() {
     grub_linux_default="${grub_linux_default} iommu=noaperture"
   fi
 
-  if [ "$IMG_VERSION" -ge 1604 ]; then
+  if [ "$IMG_VERSION" -ge 1604 ] && [ "$IMG_VERSION" -lt 1710 ]; then
     grub_linux_default="${grub_linux_default} net.ifnames=0"
+  fi
+
+  if has_epyc_cpu; then
+    grub_linux_default+=' idle=nomwait'
   fi
 
   if [ -d "$grubconfdir" ]; then

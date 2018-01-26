@@ -3,7 +3,7 @@
 #
 # install - installation commands
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2017, Hetzner Online GmbH
 #
 
 
@@ -308,30 +308,31 @@ status_donefailed $?
 # Setup network
 #
 inc_step
-if [[ "$IAM" == 'centos' ]]; then
+if [[ "$IAM" == 'centos' ]] || [[ "$IAM" == 'debian' ]] || [[ "$IAM" == 'archlinux' ]]; then
   status_busy "Setting up network config"
   setup_network_config_new
-elif [[ "$IAM" == 'debian' ]]; then
-  status_busy "Setting up network config"
-  setup_network_config_new
+  status_donefailed $?
 elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION == 1404)); then
   status_busy "Setting up network config"
   setup_network_config_new
+  status_donefailed $?
 elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1604)); then
   status_busy "Setting up network config"
   setup_network_config_new
+  status_donefailed $?
 elif [[ "$IAM" == 'suse' ]] && ((IMG_VERSION >= 422)); then
   status_busy "Setting up network config"
   setup_network_config_new
+  status_donefailed $?
 else
   status_busy "Setting up network for $ETHDEV"
   setup_network_config "$ETHDEV" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
+  status_donefailed $?
 fi
-status_donefailed $?
 
 if [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 70)); then
   :
-elif [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION <= 710)); then
+elif [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 710)) && ((IMG_VERSION != 711)); then
   :
 elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1604)); then
   :
