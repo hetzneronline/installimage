@@ -194,7 +194,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:" OPTION ; do
     # e.g.: sda,sdb | sda
     d)
       OPT_DRIVES=$OPTARG
-      sel_drives="${OPT_DRIVES/,/ }"
+      sel_drives="${OPT_DRIVES//,/ }"
       i=1
       for optdrive in $sel_drives ; do
         eval OPT_DRIVE$i="$optdrive"
