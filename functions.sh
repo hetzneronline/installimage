@@ -1986,7 +1986,7 @@ make_swraid() {
     done < $fstab.tmp
 
   fi
-  return 0 
+  return 0
 }
 
 
@@ -2121,6 +2121,8 @@ format_partitions() {
         mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
       elif [ "$FS" = "btrfs" ]; then
         mkfs -t $FS $DEV 2>&1 | debugoutput ; EXITCODE=$?
+      elif [ "$FS" = "xfs" ]; then
+        mkfs -t $FS $MKFS_XFS_OPTS -q -f $DEV 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
       else
         mkfs -t $FS -q -f $DEV 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
       fi
@@ -2637,7 +2639,7 @@ set_hostname() {
 
 
     if [ -f $machinefile ]; then
-      # clear machine-id from image 
+      # clear machine-id from image
       echo -n > $machinefile
       [[ -e $dbusfile ]] && rm $dbusfile
       if [ $systemd -eq 1 ]; then
