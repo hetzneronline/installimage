@@ -211,7 +211,7 @@ setup_cpufreq() {
     else
       {
         echo 'ENABLE="true"'
-        echo "GOVENOR=\"$1\""
+        echo "GOVERNOR=\"$1\""
         echo 'MAX_SPEED="0"'
         echo 'MIN_SPEED="0"'
       } >> "$cpufreqconf"
