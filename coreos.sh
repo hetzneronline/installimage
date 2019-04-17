@@ -3,7 +3,7 @@
 #
 # CoreOS specific functions
 #
-# (c) 2014-2016, Hetzner Online GmbH
+# (c) 2014-2018, Hetzner Online GmbH
 #
 # This file isn't ready for production!
 #

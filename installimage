@@ -4,7 +4,7 @@
 # installimage main start script
 #
 # originally written by Florian Wicke and David Mayr
-# (c) 2007-2015, Hetzner Online AG
+# (c) 2007-2017, Hetzner Online AG
 #
 
 
@@ -70,7 +70,8 @@ fi
   mkdir -p "$FOLD/hdd"
 } >/dev/null 2>&1
 cd "$FOLD" || exit 1
-myip=$(ifconfig eth0 | grep "inet addr" | cut -d: -f2 | cut -d ' ' -f1)
+#myip=$(ifconfig eth0 | grep "inet addr" | cut -d: -f2 | cut -d ' ' -f1)
+myip=$(ip a s eth0 | grep 'inet ' | awk '{ print $2 }' | cut -d / -f 1)
 debug "# starting installimage on [ $myip ]"
 
 

@@ -3,7 +3,7 @@
 #
 # randomization functions
 #
-# (c) 2016-2017, Hetzner Online GmbH
+# (c) 2016-2018, Hetzner Online GmbH
 #
 
 regenerate_snakeoil_ssl_certificate() {

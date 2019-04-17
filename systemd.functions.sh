@@ -3,14 +3,14 @@
 #
 # systemd functions
 #
-# (c) 2016, Hetzner Online GmbH
+# (c) 2017-2018, Hetzner Online GmbH
 #
 
 # get installed os systemd version
 installed_os_systemd_version() {
   # does not work for centos: Failed to get D-Bus connection: Operation not permitted
   # [[ "$(execute_chroot_command_wo_debug 'systemctl show --property=Version')" =~ ^Version=([0-9]+)$ ]] && echo "${BASH_REMATCH[1]}"
-  [[ "$(execute_chroot_command_wo_debug 'systemctl --version')" =~ systemd\ ([0-9]+)$'\n' ]] && echo "${BASH_REMATCH[1]}"
+  [[ "$(execute_chroot_command_wo_debug 'systemctl --version')" =~ systemd\ ([0-9]+) ]] && echo "${BASH_REMATCH[1]}"
 }
 
 # check whether installed os uses systemd

@@ -3,7 +3,7 @@
 #
 # skip menu - use "autosetup" file
 #
-# (c) 2008-2016, Hetzner Online GmbH
+# (c) 2008-2018, Hetzner Online GmbH
 #
 
 # read global variables and functions

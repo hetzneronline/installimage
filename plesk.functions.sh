@@ -3,7 +3,7 @@
 #
 # plesk functions
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2018, Hetzner Online GmbH
 #
 
 # is_plesk_install()
@@ -43,6 +43,13 @@ install_plesk() {
     break
   done < <(physical_network_interfaces)
 
+  if [[ "$IAM" == ubuntu ]] && ((IMG_VERSION == 1804)); then
+    debug '# disabling apt-daily timers'
+    for timer in apt-daily apt-daily-upgrade; do
+      systemd_nspawn "systemctl disable $timer.timer" || return 1
+    done
+  fi
+
   debug "# downloading plesk installer ${PLESK_INSTALLER_SRC}/${IMAGENAME}"
   curl --location --output "${FOLD}/hdd/${temp_file}" --silent --write-out '%{response_code}' "${PLESK_INSTALLER_SRC}/${IMAGENAME}" \
     | grep --quiet 200 || return 1
@@ -76,6 +83,13 @@ install_plesk() {
   execute_command "${command}" || return 1
   systemd_nspawn_booted && poweroff_systemd_nspawn
   debug "installed plesk ${version}"
+
+  if [[ "$IAM" == ubuntu ]] && ((IMG_VERSION == 1804)); then
+    debug '# reenabling apt-daily timers'
+    for timer in apt-daily apt-daily-upgrade; do
+      systemd_nspawn "systemctl enable $timer.timer" || return 1
+    done
+  fi
 
   return 0
 }

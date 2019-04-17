@@ -3,7 +3,7 @@
 #
 # archlinux functions
 #
-# (c) 2013-2017, Hetzner Online GmbH
+# (c) 2013-2018, Hetzner Online GmbH
 #
 
 validate_image() { return 2; }
@@ -18,8 +18,16 @@ extract_image() {
   debug "# run tar xzf $archlinux_bootstrap_archive -C $hdd_dir"
   tar xzf "$archlinux_bootstrap_archive" -C "$hdd_dir" |& debugoutput || return 1
   local chroot_dir="$hdd_dir/root.x86_64"
+  debug "# mount --bind $chroot_dir $chroot_dir"
+  mount --bind "$chroot_dir" "$chroot_dir" |& debugoutput || return 1
   local arch_chroot_script="$chroot_dir/usr/bin/arch-chroot"
-  for opt in --init '--populate archlinux' --refresh-keys; do
+  "$arch_chroot_script" "$chroot_dir" pacman-key --init |& debugoutput || return 1
+  # without v6 connectivity --refresh-keys fails
+  echo 'disable-ipv6' > "$chroot_dir/etc/pacman.d/gnupg/dirmngr.conf"
+  # $ dig hkps.pool.sks-keyservers.net | grep status
+  # ;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 17975
+  local keyserver='pool.sks-keyservers.net'
+  for opt in '--populate archlinux' "--refresh-keys --keyserver=$keyserver"; do
     debug "# run $arch_chroot_script $chroot_dir pacman-key $opt"
     "$arch_chroot_script" "$chroot_dir" pacman-key $opt |& debugoutput || return 1
   done
@@ -35,13 +43,16 @@ extract_image() {
   local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget'
   debug "# run $arch_chroot_script $chroot_dir pacstrap -d -G -M $newroot_dir $archlinux_packages"
   "$arch_chroot_script" "$chroot_dir" pacstrap -d -G -M "$newroot_dir" $archlinux_packages |& debugoutput || return 1
+  debug "# umount $chroot_dir"
+  umount "$chroot_dir" |& debugoutput || return 1
   debug "# run rsync -a --remove-source-files $chroot_dir/$newroot_dir/ $hdd_dir/"
   rsync -a --remove-source-files "$chroot_dir/$newroot_dir/" "$hdd_dir/" |& debugoutput || return 1
   local fstab="$hdd_dir/etc/fstab"
   debug "# update $fstab"
   {
     echo
-    "$chroot_dir/usr/bin/genfstab" -U "$hdd_dir"
+    # "$chroot_dir/usr/bin/genfstab" -U "$hdd_dir"
+    cat "$FOLD/fstab"
   } >> "$fstab" || return 1
   debug "# run rm -fr $chroot_dir"
   rm -fr "$chroot_dir" |& debugoutput || return 1
@@ -93,9 +104,13 @@ extract_image() {
   local vconsole_conf="$hdd_dir/etc/vconsole.conf"
   debug "# create $vconsole_conf"
   echo 'KEYMAP=de-latin1-nodeadkeys' > "$vconsole_conf" || return 1
-  for opt in --init '--populate archlinux' --refresh-keys; do
+  execute_chroot_command 'pacman-key --init'
+  # without v6 connectivity --refresh-keys fails
+  echo 'disable-ipv6' > "$hdd_dir/etc/pacman.d/gnupg/dirmngr.conf"
+  for opt in '--populate archlinux' "--refresh-keys --keyserver=$keyserver"; do
     execute_chroot_command "pacman-key $opt" || return 1
   done
+  rm "$hdd_dir/etc/pacman.d/gnupg/dirmngr.conf" || return 1
   for opt in cronie haveged systemd-timesyncd; do
     execute_chroot_command "systemctl enable $opt" || return 1
   done
@@ -140,7 +155,19 @@ setup_cpufreq() { return; }
 generate_config_grub() {
   local grub_file="$FOLD/hdd/etc/default/grub"
   debug "# update $grub_file"
-  sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="consoleblank=0 nomodeset"/g' "$grub_file" |& debugoutput || return 1
+  local grub_linux_default="consoleblank=0 nomodeset"
+
+  if has_threadripper_cpu; then
+    grub_linux_default+=' pci=nommconf'
+  fi
+
+  if is_dell_r6415; then
+    grub_linux_default=${grub_linux_default/nomodeset }
+  fi
+
+  sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/g" "$grub_file" |& debugoutput || return 1
+  # Run grub-install to create /boot/grub
+  execute_chroot_command "grub-install $DRIVE1" || return 1
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg" || return 1
   execute_chroot_command "grub-install $DRIVE1" || return 1
   [[ "$SWRAID" != 1 ]] && return

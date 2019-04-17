@@ -3,7 +3,7 @@
 #
 # systemd_nspawn functions
 #
-# (c) 2015-2017, Hetzner Online GmbH
+# (c) 2015-2018, Hetzner Online GmbH
 #
 
 # systemd_nspawn_booted() { [[ -e "$FOLD/.#hdd.lck" ]]; }
@@ -33,14 +33,16 @@ boot_systemd_nspawn() {
     echo 'KillMode=none'
     echo 'Type=forking'
   } > "$SYSTEMD_NSPAWN_TMP_DIR/systemd_nspawn-runner.service"
+  ln -s ../systemd_nspawn-runner.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants"
   systemd-nspawn -b \
     --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
+    --bind-ro=/etc/resolv.conf:/run/systemd/resolve/stub-resolv.conf \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/command.fifo:/var/lib/systemd_nspawn/command.fifo" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/in.fifo:/var/lib/systemd_nspawn/in.fifo" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/out.fifo:/var/lib/systemd_nspawn/out.fifo" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/return.fifo:/var/lib/systemd_nspawn/return.fifo" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/runner:/usr/local/bin/systemd_nspawn-runner" \
-    --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/systemd_nspawn-runner.service:/etc/systemd/system/multi-user.target.wants/systemd_nspawn-runner.service" \
+    --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/systemd_nspawn-runner.service:/etc/systemd/system/systemd_nspawn-runner.service" \
     -D "$FOLD/hdd" &> /dev/null &
   until systemd_nspawn_booted && systemd_nspawn_wo_debug : &> /dev/null; do
     sleep 1;
@@ -49,14 +51,17 @@ boot_systemd_nspawn() {
 
 systemd_nspawn_wo_debug() {
   if ! systemd_nspawn_booted; then
+    local restore_resolv_conf=0
     if [[ -e "$FOLD/hdd/etc/resolv.conf" ]]; then
       cp "$FOLD/hdd/etc/resolv.conf" "$FOLD/hdd/etc/resolv.conf.bak" || return 1
+      restore_resolv_conf=1
     fi
     systemd-nspawn --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
+      --bind-ro=/etc/resolv.conf:/run/systemd/resolve/stub-resolv.conf \
       -D "$FOLD/hdd" -q /usr/bin/env bash -c "$*"
     r=$?
     if [[ -e "$FOLD/hdd/etc/resolv.conf.bak" ]]; then
-      if ! [[ -e  "$FOLD/hdd/etc/resolv.conf" ]]; then
+      if ((restore_resolv_conf == 1)); then
         mv "$FOLD/hdd/etc/resolv.conf.bak" "$FOLD/hdd/etc/resolv.conf" || return 1
       fi
     fi
@@ -81,7 +86,8 @@ systemd_nspawn() {
 poweroff_systemd_nspawn() {
   systemd_nspawn_wo_debug 'systemctl --force poweroff &> /dev/null &'
   while systemd_nspawn_booted; do sleep 1; done
-  rm -fr "$FOLD/hdd/"{var/lib/systemd_nspawn,usr/local/bin/systemd_nspawn-runner,etc/systemd/system/multi-user.target.wants/systemd_nspawn-runner.service}
+  rm -fr "$FOLD/hdd/"{var/lib/systemd_nspawn,usr/local/bin/systemd_nspawn-runner,etc/systemd/system/systemd_nspawn-runner.service}
+  unlink "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/systemd_nspawn-runner.service"
 }
 
 # vim: ai:ts=2:sw=2:et

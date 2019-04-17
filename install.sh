@@ -3,7 +3,7 @@
 #
 # install - installation commands
 #
-# (c) 2007-2017, Hetzner Online GmbH
+# (c) 2007-2018, Hetzner Online GmbH
 #
 
 
@@ -330,7 +330,7 @@ else
   status_donefailed $?
 fi
 
-if [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 70)); then
+if [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 70)) && ((IMG_VERSION != 610)); then
   :
 elif [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 710)) && ((IMG_VERSION != 711)); then
   :
@@ -401,7 +401,11 @@ setup_cpufreq "$GOVERNOR" || {
 #
 inc_step
 status_busy "Setting up miscellaneous files"
-generate_resolvconf || status_failed
+if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1804)); then
+  ln -f -s ../run/systemd/resolve/stub-resolv.conf "$FOLD/hdd/etc/resolv.conf"
+else
+  generate_resolvconf || status_failed
+fi
 # already done in set_hostname
 #generate_hosts "$IPADDR" "$IP6ADDR" || status_failed
 generate_sysctlconf || status_failed

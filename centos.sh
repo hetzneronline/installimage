@@ -3,7 +3,7 @@
 #
 # CentOS specific functions
 #
-# (c) 2008-2016, Hetzner Online GmbH
+# (c) 2008-2018, Hetzner Online GmbH
 #
 
 
@@ -165,7 +165,7 @@ generate_new_ramdisk() {
       } > "$blacklist_conf"
     fi
 
-    if [ "$IMG_VERSION" -ge 70 ] ; then
+    if [ "$IMG_VERSION" -ge 70 ] && ((IMG_VERSION != 610)); then
       local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
       {
         echo "### $COMPANY - installimage"
@@ -180,7 +180,7 @@ generate_new_ramdisk() {
       } > "$dracutfile"
     fi
 
-    if [ "$IMG_VERSION" -ge 70 ] ; then
+    if [ "$IMG_VERSION" -ge 70 ] && ((IMG_VERSION != 610)); then
       execute_chroot_command "/sbin/dracut -f --kver $VERSION"
       declare -i EXITCODE=$?
     else
@@ -204,7 +204,7 @@ setup_cpufreq() {
       debug "no powersaving on virtual machines"
       return 0
     fi
-    if [ "$IMG_VERSION" -ge 70 ] ; then
+    if [ "$IMG_VERSION" -ge 70 ] && ((IMG_VERSION != 610)); then
       #https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/System_Administrators_Guide/sec-Persistent_Module_Loading.html
       #local CPUFREQCONF="$FOLD/hdd/etc/modules-load.d/cpufreq.conf"
       debug "no cpufreq configuration necessary"
@@ -245,7 +245,7 @@ generate_config_grub() {
   [ -n "$1" ] || return
   # we should not have to do anything, as grubby (new-kernel-pkg) should have
   # already generated a grub.conf
-  if [ "$IMG_VERSION" -lt 70 ] ; then
+  if [ "$IMG_VERSION" -lt 70 ] || ((IMG_VERSION == 610)); then
     DMAPFILE="$FOLD/hdd/boot/grub/device.map"
   else
     # even though grub2-mkconfig will generate a device.map on the fly, the
@@ -267,7 +267,7 @@ generate_config_grub() {
     elevator='elevator=noop'
   fi
 
-  if [ "$IMG_VERSION" -lt 70 ] ; then
+  if [ "$IMG_VERSION" -lt 70 ] || ((IMG_VERSION == 610)); then
     # we do add a symlink to boot because we always point to /boot/vmlinuz-*
     # in the grub.conf below even if /boot is a separate partition
     execute_chroot_command "cd /boot; rm -rf boot; ln -s . boot >> /dev/null 2>&1"
@@ -300,6 +300,10 @@ generate_config_grub() {
     # and causes problems with Intel 82574L NICs (onboard-NIC Asus P8B WS - EX6/EX8, addon NICs)
     lspci -n | grep -q '8086:10d3' && aspm='pcie_aspm=off' || aspm=''
 
+    if has_threadripper_cpu; then
+      aspm='pci=nommconf'
+    fi
+
     if [ "$IMG_VERSION" -ge 60 ]; then
       echo "kernel /boot/vmlinuz-$1 ro root=$SYSTEMROOTDEVICE rd_NO_LUKS rd_NO_DM nomodeset $elevator $aspm consoleblank=0" >> "$BFILE"
     else
@@ -320,8 +324,19 @@ generate_config_grub() {
   else
     local grub_cmdline_linux='biosdevname=0 crashkernel=auto'
     isVServer            && grub_cmdline_linux+=' elevator=noop'
-    ((IMG_VERSION < 73)) && grub_cmdline_linux+=' net.ifnames=0'
+    if ((IMG_VERSION < 73)) || ((IMG_VERSION == 610)); then
+      grub_cmdline_linux+=' net.ifnames=0'
+    fi
     grub_cmdline_linux+=' nomodeset rd.auto=1 consoleblank=0'
+
+    if has_threadripper_cpu; then
+      grub_cmdline_linux+=' pci=nommconf'
+    fi
+
+    if is_dell_r6415; then
+      grub_cmdline_linux=${grub_cmdline_linux/nomodeset }
+    fi
+
     sed -i "s/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"$grub_cmdline_linux\"/" "$FOLD/hdd/etc/default/grub"
 
     rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
@@ -333,7 +348,7 @@ generate_config_grub() {
 }
 
 write_grub() {
-  if [ "$IMG_VERSION" -ge 70 ] ; then
+  if [ "$IMG_VERSION" -ge 70 ] && ((IMG_VERSION != 610)); then
     # only install grub2 in mbr of all other drives if we use swraid
     for ((i=1; i<=COUNT_DRIVES; i++)); do
       if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
@@ -381,7 +396,7 @@ run_os_specific_functions() {
 
   ((IMG_VERSION >= 69)) && mkdir -p "$FOLD/hdd/var/run/netreport"
 
-  if ((IMG_VERSION >= 74)); then
+  if ((IMG_VERSION >= 74)) && ((IMG_VERSION != 610)); then
     execute_chroot_command 'yum check-update' # || return 1
     execute_chroot_command 'yum -y install polkit' || return 1
   fi

@@ -629,6 +629,10 @@ if [ -n "$1" ]; then
   FORCE_PASSWORD="$(grep -m1 -e ^FORCE_PASSWORD "$1" |awk '{print $2}')"
   export FORCE_PASSWORD
 
+  # another configure option: allow usb drives
+  # if set to 1: allow usb drives
+  [[ -z "$ALLOW_USB_DRIVES" ]] && export ALLOW_USB_DRIVES="$(grep -m1 -e ^ALLOW_USB_DRIVES "$1" |awk '{print $2}')"
+
   # get all disks from configfile
   local used_disks=1
   for ((i=1; i<=COUNT_DRIVES; i++)); do
@@ -1305,9 +1309,12 @@ validate_vars() {
      return 1
   fi
 
-  # check size of partitions
-  if [ -n "$(getUSBFlashDrives)" ]; then
-    graph_notice "\nYou are going to install on an USB flash drive ($(getUSBFlashDrives)). Do you really want this?"
+  if [[ "$ALLOW_USB_DRIVES" != '1' ]]; then
+    for ((i=1; i<=COUNT_DRIVES; i++)); do
+      local drive; drive="$(eval echo "\$DRIVE$i")"
+      is_usb_disk "$drive" || continue
+      graph_notice "\nYou are going to install on an USB flash drive ($drive). Do you really want this?"
+    done
   fi
 
   if [ "$SWRAID" -eq 1 ]; then
@@ -1905,13 +1912,15 @@ make_swraid() {
     local metadata_boot=$metadata
 
     #centos 6.x metadata
-    if [ "$IAM" = "centos" -a "$IMG_VERSION" -lt 70 ]; then
-      if [ "$IMG_VERSION" -ge 60 ]; then
-        metadata="--metadata=1.0"
-        metadata_boot="--metadata=0.90"
-      else
-        metadata="--metadata=0.90"
-        metadata_boot="${metadata}"
+    if [ "$IAM" = "centos" ]; then
+      if [ "$IMG_VERSION" -lt 70 ] || ((IMG_VERSION == 610)); then
+        if [ "$IMG_VERSION" -ge 60 ]; then
+          metadata="--metadata=1.0"
+          metadata_boot="--metadata=0.90"
+        else
+          metadata="--metadata=0.90"
+          metadata_boot="${metadata}"
+        fi
       fi
     fi
 
@@ -2118,7 +2127,16 @@ format_partitions() {
         # then write swap information
         mkswap $DEV 2>&1 | debugoutput ; EXITCODE=$?
       elif [ "$FS" = "ext2" -o "$FS" = "ext3" -o "$FS" = "ext4" ]; then
-        mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
+        if [[ "$FS" == 'ext4' ]] && [[ "$IAM" == 'centos' ]]; then
+          if ((IMG_VERSION < 70)) || ((IMG_VERSION == 610)); then
+            mkfs -O ^64bit,^metadata_csum -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
+            ((EXITCODE == 0)) || mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
+          else
+            mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
+          fi
+        else
+          mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
+        fi
       elif [ "$FS" = "btrfs" ]; then
         mkfs -t $FS $DEV 2>&1 | debugoutput ; EXITCODE=$?
       else
@@ -2252,25 +2270,27 @@ get_image_url() {
 
 # import the gpg public key for imagevalidation
 import_imagekey() {
-  local PUBKEY=""
+  local PUBKEYS=()
   # check if pubkey is given by the customer
   if [ -n "$IMAGE_PUBKEY" -a -e "$IMAGE_PUBKEY" ] ; then
-    PUBKEY=$IMAGE_PUBKEY
-  elif [ -e "$COMPANY_PUBKEY" ] ; then
-    # if no special pubkey given, use the standard company key
-    echo "Using standard $COMPANY pubkey: $COMPANY_PUBKEY" | debugoutput
-    PUBKEY=$COMPANY_PUBKEY
+    PUBKEYS+=("$IMAGE_PUBKEY")
+  else
+    # if no special pubkey given, use the standard company keys
+    for PUBKEY in "${COMPANY_PUBKEYS[@]}"; do
+      [[ -e "$PUBKEY" ]] || continue
+      echo "Using standard $COMPANY pubkey: $PUBKEY" | debugoutput
+      PUBKEYS+=("$PUBKEY")
+    done
   fi
-  if [ -n "$PUBKEY" ] ; then
-    # import public key
-    gpg --batch --import $PUBKEY 2>&1 | debugoutput ; EXITCODE=$?
+  if ((${#PUBKEYS[@]} > 0)) ; then
+    for PUBKEY in "${PUBKEYS[@]}"; do
+      # import public key
+      gpg --batch --import "$PUBKEY" 2>&1 | debugoutput ; EXITCODE=$?
 
-    if [ "$EXITCODE" -eq "0" ]; then
-      IMAGE_PUBKEY_IMPORTED="yes"
-      return 0
-    else
-      return 1
-    fi
+      [ "$EXITCODE" -eq "0" ] || return 1
+    done
+    IMAGE_PUBKEY_IMPORTED="yes"
+    return 0
   fi
   echo "No public key found" | debugoutput
   return 2
@@ -2939,7 +2959,11 @@ execute_postinstall_script() {
     fi
 
     debug "# Found post-installation script $script; executing it..."
-    execute_chroot_command_wo_debug "$script" ; EXITCODE=$?
+    if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1804)); then
+      systemd_nspawn_wo_debug "$script" ; EXITCODE=$?
+    else
+      execute_chroot_command_wo_debug "$script" ; EXITCODE=$?
+    fi
 
     if [ $EXITCODE -ne 0 ]; then
       debug "# Post-installation script didn't exit successfully (exit code = $EXITCODE)"
@@ -3563,19 +3587,6 @@ function largest_hd() {
   return 0
 }
 
-# get the drives which are connected through an USB port
-function getUSBFlashDrives() {
-  for path in /sys/block/*; do
-    [[ -d "${path}" ]] || continue
-    dev_name="$(basename "${path}")"
-    dev_params="$(udevadm info --name "${dev_name}")"
-    echo "${dev_params}" | grep --quiet 'DEVTYPE=disk' || continue
-    echo "${dev_params}" | grep --quiet 'ID_BUS=usb' || continue
-    echo "${dev_params}" | grep --quiet 'ID_USB_DRIVER=usb-storage' || continue
-    echo "${dev_name}"
-  done
-}
-
 # get HDDs with size not in tolerance range
 function getHDDsNotInToleranceRange() {
   # RANGE in percent relative to smallest hdd
@@ -3601,6 +3612,7 @@ uuid_bugfix() {
     debug "# change all device names to uuid (e.g. for ide/pata transition)"
     TEMPFILE="$(mktemp)"
     sed -n 's|^/dev/\([hsv]d[a-z][1-9][0-9]\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" > "$TEMPFILE"
+    sed -n 's|^/dev/\(nvme[0-9]*n[p0-9]*\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
     while read LINE; do
       UUID="$(blkid -o value -s UUID "/dev/$LINE")"
       # not quite perfect. We need to match /dev/sda1 but not /dev/sda10.
@@ -3717,7 +3729,7 @@ function part_test_size() {
 
   if [ "$DRIVE_SIZE" -ge $LIMIT ] || [ "$FORCE_GPT" = "1" ]; then
     # use only GPT if not CentOS or OpenSuSE newer than 12.2
-    if [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 ]; then
+    if [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 -a "$IMG_VERSION" != 610 ]; then
       if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
         echo "SuSE older than 12.2. cannot use GPT (but drive size is bigger then 2TB)" | debugoutput
       else
@@ -3737,7 +3749,7 @@ function part_test_size() {
 function check_dos_partitions() {
 
   echo "check_dos_partitions" | debugoutput
-  if [ "$FORCE_GPT" = "2" ] || [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 ] || [ "$BOOTLOADER" == "lilo" ]; then
+  if [ "$FORCE_GPT" = "2" ] || [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 -a "$IMG_VERSION" != 610 ] || [ "$BOOTLOADER" == "lilo" ]; then
     if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
       echo "SuSE version older than 12.2, no grub2 support" | debugoutput
     else
@@ -4002,6 +4014,14 @@ is_private_ip() {
 wait_for_udev() {
   udevadm trigger |& debugoutput
   udevadm settle |& debugoutput
+}
+
+is_usb_disk() {
+  local dev="$1"
+  local udevadm_info="$(udevadm info --name "${dev##*/}" 2>&1)"
+  echo "$udevadm_info" | grep --quiet 'DEVTYPE=disk' || return 1
+  echo "$udevadm_info" | grep --quiet 'ID_BUS=usb' || return 1
+  echo "$udevadm_info" | grep --quiet 'ID_USB_DRIVER=usb-storage'
 }
 
 # vim: ai:ts=2:sw=2:et

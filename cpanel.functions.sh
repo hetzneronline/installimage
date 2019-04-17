@@ -3,7 +3,7 @@
 #
 # cpanel functions
 #
-# (c) 2008-2016, Hetzner Online GmbH
+# (c) 2008-2018, Hetzner Online GmbH
 #
 
 # is_cpanel_install()

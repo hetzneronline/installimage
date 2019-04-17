@@ -3,7 +3,7 @@
 #
 # Debian specific functions
 #
-# (c) 2008-2016, Hetzner Online GmbH
+# (c) 2008-2018, Hetzner Online GmbH
 #
 
 
@@ -190,6 +190,14 @@ generate_config_grub() {
      grub_linux_default="${grub_linux_default} elevator=noop"
   fi
 
+  if has_threadripper_cpu; then
+    grub_linux_default+=' pci=nommconf'
+  fi
+
+  if is_dell_r6415; then
+    grub_linux_default=${grub_linux_default/nomodeset }
+  fi
+
   sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
   sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/"
 
@@ -198,20 +206,16 @@ generate_config_grub() {
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
   # only install grub2 in mbr of all other drives if we use swraid
-  local debconf_drives;
   for ((i=1; i<=COUNT_DRIVES; i++)); do
     if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
       local disk; disk="$(eval echo "\$DRIVE"$i)"
       execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
-      if [ "$i" -eq 1 ]; then
-        debconf_drives="$disk"
-      else
-        debconf_drives="$debconf_drives, $disk"
-      fi
     fi
   done
 
-  execute_chroot_command "echo 'set grub-pc/install_devices $debconf_drives' | debconf-communicate"
+  if ((IMG_VERSION >= 70)); then
+    debconf_set_grub_install_devices #|| return 1
+  fi
 
   uuid_bugfix
 

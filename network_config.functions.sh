@@ -3,7 +3,7 @@
 #
 # network config functions
 #
-# (c) 2017, Hetzner Online GmbH
+# (c) 2017-2018, Hetzner Online GmbH
 #
 
 # setup /etc/sysconfig/network
@@ -136,7 +136,7 @@ network_interface_ipv6_addrs() {
 
 # check whether to use predictable network interface names
 use_predictable_network_interface_names() {
-  [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 73)) && return
+  [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 73)) && ((IMG_VERSION != 610)) && return
   [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 90)) && ((IMG_VERSION <= 700)) && return
   [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)) && return
   [[ "$IAM" == 'archlinux' ]] && return
@@ -222,7 +222,8 @@ gen_ifcfg_script_centos() {
   echo 'ONBOOT=yes'
   echo -n 'BOOTPROTO='
   # dhcp
-  if ipv4_addr_is_private "${ipv4_addrs[0]}" && isVServer; then
+  local gateway="$(network_interface_ipv4_gateway "$network_interface")"
+  if ipv4_addr_is_private "$gateway" && isVServer; then
     echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
     echo 'dhcp'
   # static config
@@ -231,23 +232,22 @@ gen_ifcfg_script_centos() {
   fi
 
   # static config
-  if ! ipv4_addr_is_private "${ipv4_addrs[0]}" || ! isVServer; then
+  if ! ipv4_addr_is_private "$gateway" || ! isVServer; then
     local address="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
     # ! pointtopoint
-    if ipv4_addr_is_private "${ipv4_addrs[0]}" || isVServer; then
+    if ipv4_addr_is_private "$gateway" || isVServer; then
       local netmask="$(ipv4_addr_netmask "${ipv4_addrs[0]}")"
     # pointtopoint
     else
       local netmask='255.255.255.255'
     fi
-    local gateway="$(network_interface_ipv4_gateway "$network_interface")"
 
     echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
     echo "IPADDR=$address"
     echo "NETMASK=$netmask"
     if [[ -n "$gateway" ]]; then
       # pointtopoint
-      if ! ipv4_addr_is_private "${ipv4_addrs[0]}" && ! isVServer; then
+      if ! ipv4_addr_is_private "$gateway" && ! isVServer; then
         local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
 
         echo "configuring host route $network via $gateway" >&2
@@ -312,7 +312,7 @@ setup_etc_sysconfig_network_scripts_centos() {
 
     local gateway="$(network_interface_ipv4_gateway "$network_interface")"
     # ! pointtopoint
-    if [[ -z "$gateway" ]] || ipv4_addr_is_private "${ipv4_addrs[0]}" || isVServer; then
+    if [[ -z "$gateway" ]] || ipv4_addr_is_private "$gateway" || isVServer; then
       continue
     fi
 
@@ -333,7 +333,8 @@ gen_ifcfg_script_suse() {
   echo
   echo 'STARTMODE="auto"'
   # dhcp
-  if ipv4_addr_is_private "${ipv4_addrs[0]}" && isVServer; then
+  local gateway="$(network_interface_ipv4_gateway "$network_interface")"
+  if ipv4_addr_is_private "$gateway" && isVServer; then
     echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
     echo 'BOOTPROTO="dhcp4"'
     echo 'DHCLIENT_SET_HOSTNAME="no"'
@@ -341,7 +342,7 @@ gen_ifcfg_script_suse() {
   else
     local ipaddr="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
     # ! pointtopoint
-    if ipv4_addr_is_private "${ipv4_addrs[0]}" || isVServer; then
+    if ipv4_addr_is_private "$gateway" || isVServer; then
       local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
     # pointtopoint
     else
@@ -350,9 +351,8 @@ gen_ifcfg_script_suse() {
     echo "configuring ipv4 addr $ipaddr/$netmask for $predicted_network_interface_name" >&2
     echo "IPADDR=\"$ipaddr/$netmask\""
 
-    local gateway="$(network_interface_ipv4_gateway "$network_interface")"
     # pointtopoint
-    if [[ -n "$gateway" ]] && ! ipv4_addr_is_private "${ipv4_addrs[0]}" && ! isVServer; then
+    if [[ -n "$gateway" ]] && ! ipv4_addr_is_private "$gateway" && ! isVServer; then
       local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
 
       echo "configuring host route $network via $gateway" >&2
@@ -381,7 +381,8 @@ gen_ifroute_script() {
   echo "### $COMPANY installimage"
   echo
   # static config
-  if [[ -n "$gateway" ]] && ! ipv4_addr_is_private "${ipv4_addrs[0]}" || ! isVServer; then
+  local gateway="$(network_interface_ipv4_gateway "$network_interface")"
+  if [[ -n "$gateway" ]] && ! ipv4_addr_is_private "$gateway" || ! isVServer; then
     echo "configuring ipv4 gateway $gateway for $predicted_network_interface_name" >&2
     echo "default $gateway - $predicted_network_interface_name"
   fi
@@ -439,14 +440,14 @@ gen_etc_network_interfaces_entry() {
   if ((${#ipv4_addrs[@]} > 0)); then
     echo -n "iface $predicted_network_interface_name inet "
     # dhcp
-    if ipv4_addr_is_private "${ipv4_addrs[0]}" && isVServer; then
+    local gateway="$(network_interface_ipv4_gateway "$network_interface")"
+    if ipv4_addr_is_private "$gateway" && isVServer; then
       echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
       echo 'dhcp'
     # static config
     else
       local address="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
       local netmask="$(ipv4_addr_netmask "${ipv4_addrs[0]}")"
-      local gateway="$(network_interface_ipv4_gateway "$network_interface")"
 
       echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
       echo 'static'
@@ -457,7 +458,7 @@ gen_etc_network_interfaces_entry() {
         echo "  gateway $gateway"
       fi
       # pointtopoint
-      if ! ipv4_addr_is_private "${ipv4_addrs[0]}" && ! isVServer; then
+      if ! ipv4_addr_is_private "$gateway" && ! isVServer; then
         local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
         echo "configuring host route $network via $gateway" >&2
         echo "  # route $network via $gateway"
@@ -548,16 +549,6 @@ setup_persistent_net_rules() {
   gen_persistent_net_rules > "$FOLD/hdd/$persistent_net_rules_file"
 }
 
-# check whether to use netplan
-use_netplan() {
-  while read network_interface; do
-    while read ipv4_addr; do
-      # pointtopoint
-      if ! ipv4_addr_is_private "$ipv4_addr" && ! isVServer; then return 1; fi
-    done < <(network_interface_ipv4_addrs "$network_interface")
-  done < <(physical_network_interfaces)
-}
-
 # gen /etc/netplan/01-netcfg.yaml entry
 # $1 <network_interface>
 gen_etc_netplan_01_netcfg_yaml_entry() {
@@ -570,16 +561,28 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
   local addresses=()
   if ((${#ipv4_addrs[@]} > 0)); then
     # dhcp
-    if ipv4_addr_is_private "${ipv4_addrs[0]}" && isVServer; then
+    local gateway4="$(network_interface_ipv4_gateway "$network_interface")"
+    if ipv4_addr_is_private "$gateway4" && isVServer; then
       echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
       local dhcp4=true
       local gateway4=false
     # static config
     else
-      echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
+      local ipaddr="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
+      # ! pointtopoint
+      if ipv4_addr_is_private "$gateway4" || isVServer; then
+        local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
+      # pointtopoint
+      else
+        if [[ -n "$gateway4" ]]; then
+          local netmask='32'
+        else
+          local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
+        fi
+      fi
+      echo "configuring ipv4 addr $ipaddr/$netmask for $predicted_network_interface_name" >&2
       local dhcp4=false
-      addresses+=("${ipv4_addrs[0]}")
-      local gateway4="$(network_interface_ipv4_gateway "$network_interface")"
+      addresses+=("$ipaddr/$netmask")
       if [[ -n "$gateway4" ]]; then
         echo "configuring ipv4 gateway $gateway4 for $predicted_network_interface_name" >&2
       else
@@ -604,11 +607,39 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
     ;;
   esac
   [[ "$dhcp4" == true ]] && echo '      dhcp4: true'
-  [[ "$gateway4" != false ]] && echo "      gateway4: $gateway4"
+  # ! pointtopoint
+  if [[ "$gateway4" != false ]]; then
+    if ipv4_addr_is_private "$gateway4" || isVServer; then
+      echo "      gateway4: $gateway4"
+    else
+      echo '      routes:'
+      echo '        - on-link: true'
+      echo '          to: 0.0.0.0/0'
+      echo "          via: $gateway4"
+    fi
+  fi
   local gateway6="$(network_interface_ipv6_gateway "$network_interface")"
   if [[ -n "$gateway6" ]]; then
     echo "configuring ipv6 gateway $gateway6 for $predicted_network_interface_name" >&2
     echo "      gateway6: $gateway6"
+  fi
+  if [[ "$gateway4" != false ]]; then
+    echo '      nameservers:'
+    echo '        addresses:'
+    # IPV4
+    if [ "$V6ONLY" -eq 1 ]; then
+      debug "# skipping IPv4 DNS resolvers"
+    else
+      for index in $(shuf --input-range=0-$(( ${#NAMESERVER[*]} - 1 )) | tr '\n' ' ') ; do
+        echo "          - ${NAMESERVER[$index]}"
+      done
+    fi
+    # IPv6
+    if [ -n "$DOIPV6" ]; then
+      for index in $(shuf --input-range=0-$(( ${#DNSRESOLVER_V6[*]} - 1 )) | tr '\n' ' ') ; do
+        echo "          - ${DNSRESOLVER_V6[$index]}"
+      done
+    fi
   fi
 }
 
@@ -638,15 +669,16 @@ gen_network_file() {
   echo
   echo '[Network]'
   local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
+  local gateway="$(network_interface_ipv4_gateway "$network_interface")"
   if ((${#ipv4_addrs[@]} > 0)); then
     # dhcp
-    if ipv4_addr_is_private "${ipv4_addrs[0]}" && isVServer; then
+    if ipv4_addr_is_private "$gateway" && isVServer; then
       echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
       echo 'DHCP=ipv4'
     # static config
     else
       # ! pointtopoint
-      if ipv4_addr_is_private "${ipv4_addrs[0]}" || isVServer; then
+      if ipv4_addr_is_private "$gateway" || isVServer; then
         echo "Address=${ipv4_addrs[0]}"
       fi
     fi
@@ -655,15 +687,15 @@ gen_network_file() {
   if ((${#ipv6_addrs[@]} > 0)); then
     echo "Address=${ipv6_addrs[0]}"
   fi
-  local gateway="$(network_interface_ipv4_gateway "$network_interface")"
-  if ((${#ipv4_addrs[@]} > 0)) && [[ -n "$gateway" ]]; then
-    echo "Gateway=$gateway"
+  local gateway4="$(network_interface_ipv4_gateway "$network_interface")"
+  if ((${#ipv4_addrs[@]} > 0)) && [[ -n "$gateway4" ]]; then
+    echo "Gateway=$gateway4"
   fi
-  gateway="$(network_interface_ipv6_gateway "$network_interface")"
-  if ((${#ipv6_addrs[@]} > 0)) && [[ -n "$gateway" ]]; then
-    echo "Gateway=$gateway"
+  gateway6="$(network_interface_ipv6_gateway "$network_interface")"
+  if ((${#ipv6_addrs[@]} > 0)) && [[ -n "$gateway6" ]]; then
+    echo "Gateway=$gateway6"
   fi
-  if ((${#ipv4_addrs[@]} > 0)) && ! ipv4_addr_is_private "${ipv4_addrs[0]}" && ! isVServer; then
+  if ((${#ipv4_addrs[@]} > 0)) && ! ipv4_addr_is_private "$gateway4" && ! isVServer; then
     echo
     echo '[Address]'
     echo "Address=$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
@@ -699,17 +731,8 @@ setup_network_config_new() {
     debian) setup_etc_network_interfaces;;
     ubuntu)
      if ((IMG_VERSION >= 1710)); then
-       if use_netplan; then
-         setup_etc_netplan_01_netcfg_yaml
-         execute_chroot_command 'netplan generate' || return 1
-       else
-         setup_etc_systemd_network_files
-         execute_chroot_command 'systemctl enable systemd-networkd' || return 1
-         {
-           echo "### $COMPANY installimage"
-           echo '# network is managed by systemd-networkd'
-         } > "$FOLD/hdd/etc/netplan/01-netcfg.yaml"
-       fi
+       setup_etc_netplan_01_netcfg_yaml
+       execute_chroot_command 'netplan generate' || return 1
      else
        setup_etc_network_interfaces
      fi

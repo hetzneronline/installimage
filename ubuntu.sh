@@ -3,7 +3,7 @@
 #
 # Ubuntu specific functions
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2018, Hetzner Online GmbH
 #
 
 # setup_network_config "$ETH" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK"
@@ -211,7 +211,7 @@ setup_cpufreq() {
     else
       {
         echo 'ENABLE="true"'
-        echo "GOVENOR=\"$1\""
+        echo "GOVERNOR=\"$1\""
         echo 'MAX_SPEED="0"'
         echo 'MIN_SPEED="0"'
       } >> "$cpufreqconf"
@@ -271,8 +271,12 @@ generate_config_grub() {
     grub_linux_default="${grub_linux_default} net.ifnames=0"
   fi
 
-  if has_epyc_cpu; then
-    grub_linux_default+=' idle=nomwait'
+  if has_threadripper_cpu; then
+    grub_linux_default+=' pci=nommconf'
+  fi
+
+  if is_dell_r6415; then
+    grub_linux_default=${grub_linux_default/nomodeset }
   fi
 
   if [ -d "$grubconfdir" ]; then
@@ -300,20 +304,16 @@ generate_config_grub() {
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
 
   # only install grub2 in mbr of all other drives if we use swraid
-  local debconf_drives;
   for ((i=1; i<=COUNT_DRIVES; i++)); do
     if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
       local disk; disk="$(eval echo "\$DRIVE$i")"
       execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
-      if [ "$i" -eq 1 ]; then
-        debconf_drives="$disk"
-      else
-        debconf_drives="$debconf_drives, $disk"
-      fi
     fi
   done
 
-  execute_chroot_command "echo 'set grub-pc/install_devices $debconf_drives' | debconf-communicate"
+  if ((IMG_VERSION >= 1604)); then
+    debconf_set_grub_install_devices #|| return 1
+  fi
 
   uuid_bugfix
 
@@ -325,6 +325,17 @@ generate_config_grub() {
   return "$EXITCODE"
 }
 
+disable_ttyvtdisallocate() {
+  # TTYVTDisallocate=yes may seriously mess up the login screen
+  mkdir -p "$FOLD/hdd/etc/systemd/system/getty@tty1.service.d"
+  {
+    echo "### $COMPANY installimage"
+    echo
+    echo '[Service]'
+    echo 'TTYVTDisallocate=no'
+  } > "$FOLD/hdd/etc/systemd/system/getty@tty1.service.d/override.conf"
+}
+
 #
 # os specific functions
 # for purpose of e.g. debian-sys-maint mysql user password in debian/ubuntu LAMP
@@ -334,6 +345,7 @@ run_os_specific_functions() {
   if nextcloud_install; then
     setup_nextcloud || return 1
   fi
+  ((IMG_VERSION >= 1804)) && disable_ttyvtdisallocate
   return 0
 }
 

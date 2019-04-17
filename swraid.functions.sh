@@ -3,7 +3,7 @@
 #
 # swraid functions
 #
-# (c) 2016, Hetzner Online GmbH
+# (c) 2016-2018, Hetzner Online GmbH
 #
 
 # suspend_swraid_resync

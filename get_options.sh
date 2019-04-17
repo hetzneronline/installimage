@@ -9,7 +9,7 @@
 
 
 # check command line params / options
-while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:" OPTION ; do
+while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:" OPTION ; do
   case $OPTION in
 
     # help
@@ -61,6 +61,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:" OPTION ; do
       echo "  -z PLESK_<Version>    Install optional software like PLESK with version <Version>"
       echo "  -K <path/url>         Install SSH-Keys from file/URL"
       echo '  -t <yes|no>           Take over rescue system SSH public keys'
+      echo '  -u <yes|no>           Allow usb drives'
       echo
       exit 0
     ;;
@@ -242,6 +243,9 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:" OPTION ; do
       else
         export OPT_TAKE_OVER_RESCUE_SYSTEM_SSH_PUBLIC_KEYS='no'
       fi
+    ;;
+    u)
+      [[ -z "$OPTARG" ]] || [[ "${OPTARG,,}" == 'yes' ]] && export ALLOW_USB_DRIVES='1'
     ;;
   esac
 done

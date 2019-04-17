@@ -3,7 +3,7 @@
 #
 # OpenSUSE specific functions
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2018, Hetzner Online GmbH
 #
 
 
@@ -195,6 +195,15 @@ generate_config_grub() {
   cat "$DMAPFILE" >> "$DEBUGFILE"
 
   local grub_linux_default="nomodeset consoleblank=0"
+
+  if is_dell_r6415; then
+    grub_linux_default=${grub_linux_default/nomodeset }
+  fi
+
+  if has_threadripper_cpu; then
+    grub_linux_default+=' pci=nommconf'
+  fi
+
   # set net.ifnames=0 to avoid predictable interface names for opensuse 13.2
   if [ "$IMG_VERSION" -ge 132 ] ; then
     grub_linux_default="${grub_linux_default} net.ifnames=0 quiet systemd.show_status=1"

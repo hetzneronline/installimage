@@ -3,7 +3,7 @@
 #
 # set all necessary vars and functions
 #
-# (c) 2007-2017, Hetzner Online GmbH
+# (c) 2007-2018, Hetzner Online GmbH
 #
 
 
@@ -28,6 +28,10 @@ export IMAGESPATHTYPE="local"
 export IMAGESEXT="tar.gz"
 export IMAGEFILETYPE="tgz"
 export COMPANY_PUBKEY="$SCRIPTPATH/gpg/public-key.asc"
+export COMPANY_PUBKEYS=(
+  "$COMPANY_PUBKEY"
+  "$SCRIPTPATH/gpg/public-key-2018.asc"
+)
 export COMPANY="Hetzner Online GmbH"
 export C_SHORT="hetzner"
 export LOCKFILE='/run/lock/installimage'
@@ -38,7 +42,7 @@ export STATSSERVER="213.133.99.103"
 export HDDMINSIZE="7000000"
 
 export NAMESERVER=("213.133.98.98" "213.133.99.99" "213.133.100.100")
-export DNSRESOLVER_V6=("2a01:4f8:0:a111::add:9898" "2a01:4f8:0:a102::add:9999" "2a01:4f8:0:a0a1::add:1010")
+export DNSRESOLVER_V6=("2a01:4f8:0:1::add:9898" "2a01:4f8:0:1::add:9999" "2a01:4f8:0:1::add:1010")
 export NTPSERVERS=("ntp1.hetzner.de" "ntp2.hetzner.com" "ntp3.hetzner.net")
 export AUTH_DNS1="ns1.first-ns.de"
 export AUTH_DNS2="robotns2.second-ns.de"
@@ -67,21 +71,20 @@ export OSMENULIST=(
   "Debian"       "(Official)"
   "Ubuntu"       "(Official)"
   "CentOS"       "(Official)"
-  "openSUSE"     "(Official)"
-  "Arch Linux"   "(!!NO SUPPORT!!)"
+  "Arch Linux"   "(Official)"
   "Other"        "(!!NO SUPPORT!!)"
   "Old images"   "(!!NO SUPPORT!!)"
   "Custom image" "(Blanco config for user images)"
 )
 
-export PROXMOX4_BASE_IMAGE="Debian-810-jessie-64-minimal"
-export PROXMOX5_BASE_IMAGE="Debian-93-stretch-64-minimal"
+export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
+export PROXMOX5_BASE_IMAGE="Debian-98-stretch-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.de/plesk
-export PLESK_STD_VERSION=PLESK_17_5_3
+export PLESK_STD_VERSION=PLESK_17_8_11
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats

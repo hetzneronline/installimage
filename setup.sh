@@ -3,7 +3,7 @@
 #
 # mainmenu - choose which image should be installed
 #
-# (c) 2007-2016, Hetzner Online GmbH
+# (c) 2007-2018, Hetzner Online GmbH
 #
 
 
