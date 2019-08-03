@@ -79,6 +79,7 @@ export OSMENULIST=(
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-98-stretch-64-minimal"
+export PROXMOX6_BASE_IMAGE="Debian-100-buster-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 

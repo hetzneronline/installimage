@@ -103,6 +103,7 @@ generate_menu() {
     RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Stretch"
+    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Buster"
     RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*-beta.*' -a -not -name '*.sig' -printf '%f\n' | sort)"
   elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
@@ -147,6 +148,7 @@ generate_menu() {
       case "$IMAGENAME" in
         Proxmox-Virtualization-Environment-on-Debian-Jessie) export PROXMOX_VERSION="4" ;;
         Proxmox-Virtualization-Environment-on-Debian-Stretch) export PROXMOX_VERSION="5" ;;
+        Proxmox-Virtualization-Environment-on-Debian-Buster) export PROXMOX_VERSION="6" ;;
       esac
       cp "$SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION" /post-install
       chmod 0755 /post-install

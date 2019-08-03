@@ -52,6 +52,7 @@ postfix postfix/mynetworks         string 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::
 postfix postfix/protocols          select all
 postfix postfix/recipient_delim    string +
 postfix postfix/rfc1035_violation  boolean false
+
 EOF
 
 
