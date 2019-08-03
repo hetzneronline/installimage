@@ -12,6 +12,7 @@
 case $1 in
   proxmox4)             exec "$0" -c proxmox4 -x proxmox4 ;;
   proxmox5)             exec "$0" -c proxmox5 -x proxmox5 ;;
+  proxmox6)             exec "$0" -c promox6 -x proxmox6 ;;
   hsa-baculadir)        exec "$0" -c hsa-baculadir -x hsa-baculadir ;;
   hsa-minimal64)        exec "$0" -c hsa-minimal64 -x hsa-minimal64 ;;
   hsa-managed)          exec "$0" -c hsa-managed -x hsa-managed ;;
