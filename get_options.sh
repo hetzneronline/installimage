@@ -35,7 +35,6 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:" OPTION ; do
       echo "                        installation inside the chroot."
       echo
       echo "  -n <hostname>         set the specified hostNAME."
-      echo "  -b <lilo|grub>        use either lilo or grub as BOOTLOADER."
       echo "  -r <yes|no>           activate software RAID or not."
       echo "  -l <0|1|5|6|10>       set the specified raid LEVEL."
       echo "  -i <imagepath>        use the specified IMAGE to install (full path to the OS image)"
@@ -117,9 +116,6 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:" OPTION ; do
 	sed -i /autosetup -e "s/HOSTNAME.*/HOSTNAME $OPT_HOSTNAME/"
       fi
     ;;
-
-    # bootloader  (lilo|grub)
-    b) OPT_BOOTLOADER=$OPTARG ;;
 
     # raid  (on|off|true|false|yes|no|0|1)
     r)
@@ -268,7 +264,6 @@ fi
 # DEBUG:
 [ "$OPT_CONFIGFILE" ]   && debug "# OPT_CONFIGFILE:   $OPT_CONFIGFILE"
 [ "$OPT_HOSTNAME" ]     && debug "# OPT_HOSTNAME:     $OPT_HOSTNAME"
-[ "$OPT_BOOTLOADER" ]   && debug "# OPT_BOOTLOADER:   $OPT_BOOTLOADER"
 [ "$OPT_SWRAID" ]       && debug "# OPT_SWRAID:       $OPT_SWRAID"
 [ "$OPT_SWRAIDLEVEL" ]  && debug "# OPT_SWRAIDLEVEL:  $OPT_SWRAIDLEVEL"
 [ "$OPT_IMAGE" ]        && debug "# OPT_IMAGE:        $OPT_IMAGE"
