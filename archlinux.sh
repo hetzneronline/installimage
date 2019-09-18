@@ -40,7 +40,7 @@ extract_image() {
     "$arch_chroot_script" "$chroot_dir" pacman $opt |& debugoutput || return 1
   done
   local newroot_dir='/mnt'
-  local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget'
+  local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget python'
   debug "# run $arch_chroot_script $chroot_dir pacstrap -d -G -M $newroot_dir $archlinux_packages"
   "$arch_chroot_script" "$chroot_dir" pacstrap -d -G -M "$newroot_dir" $archlinux_packages |& debugoutput || return 1
   debug "# umount $chroot_dir"
