@@ -56,9 +56,11 @@ systemd_nspawn_wo_debug() {
       cp "$FOLD/hdd/etc/resolv.conf" "$FOLD/hdd/etc/resolv.conf.bak" || return 1
       restore_resolv_conf=1
     fi
-    systemd-nspawn --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
+    systemd-nspawn --bind=/dev --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
       --bind-ro=/etc/resolv.conf:/run/systemd/resolve/stub-resolv.conf \
-      -D "$FOLD/hdd" -q /usr/bin/env bash -c "$*"
+      -D "$FOLD/hdd" \
+      '--property=DeviceAllow=block-* rwm' \
+      -q /usr/bin/env bash -c "$*"
     r=$?
     if [[ -e "$FOLD/hdd/etc/resolv.conf.bak" ]]; then
       if ((restore_resolv_conf == 1)); then
