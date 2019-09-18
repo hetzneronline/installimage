@@ -3,7 +3,7 @@
 #
 # network config functions
 #
-# (c) 2017-2018, Hetzner Online GmbH
+# (c) 2017-2019, Hetzner Online GmbH
 #
 
 # setup /etc/sysconfig/network
@@ -138,6 +138,11 @@ network_interface_ipv6_addrs() {
 use_predictable_network_interface_names() {
   [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 73)) && ((IMG_VERSION != 610)) && return
   [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 90)) && ((IMG_VERSION <= 700)) && return
+  if [[ "$IAM" == 'debian' ]]; then
+    if ((IMG_VERSION == 910)) || ((IMG_VERSION == 911)); then
+      return
+    fi
+  fi
   [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)) && return
   [[ "$IAM" == 'archlinux' ]] && return
   return 1
@@ -213,18 +218,22 @@ network_interface_ipv6_gateway() {
 # $1 <network_interface>
 gen_ifcfg_script_centos() {
   local network_interface="$1"
-  local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
   local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
 
   echo "### $COMPANY installimage"
   echo
-  echo "DEVICE=$predicted_network_interface_name"
+  if use_predictable_network_interface_names; then
+    local network_interface_mac="$(network_interface_mac "$network_interface")"
+    echo "HWADDR=$network_interface_mac"
+  else
+    echo "DEVICE=$network_interface"
+  fi
   echo 'ONBOOT=yes'
   echo -n 'BOOTPROTO='
   # dhcp
   local gateway="$(network_interface_ipv4_gateway "$network_interface")"
   if ipv4_addr_is_private "$gateway" && isVServer; then
-    echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
+    echo "configuring dhcpv4 for $network_interface" >&2
     echo 'dhcp'
   # static config
   else
@@ -242,7 +251,7 @@ gen_ifcfg_script_centos() {
       local netmask='255.255.255.255'
     fi
 
-    echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
+    echo "configuring ipv4 addr ${ipv4_addrs[0]} for $network_interface" >&2
     echo "IPADDR=$address"
     echo "NETMASK=$netmask"
     if [[ -n "$gateway" ]]; then
@@ -254,7 +263,7 @@ gen_ifcfg_script_centos() {
         echo "SCOPE=\"peer $gateway\""
       # ! pointtopoint
       else
-        echo "configuring ipv4 gateway $gateway for $predicted_network_interface_name" >&2
+        echo "configuring ipv4 gateway $gateway for $network_interface" >&2
         echo "GATEWAY=$gateway"
       fi
     fi
@@ -263,7 +272,7 @@ gen_ifcfg_script_centos() {
   local ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
   ((${#ipv6_addrs[@]} == 0)) && return
 
-  echo "configuring ipv6 addr ${ipv6_addrs[0]} for $predicted_network_interface_name" >&2
+  echo "configuring ipv6 addr ${ipv6_addrs[0]} for $network_interface" >&2
   echo
   echo 'IPV6INIT=yes'
   echo "IPV6ADDR=${ipv6_addrs[0]}"
@@ -271,13 +280,13 @@ gen_ifcfg_script_centos() {
   local gatewayv6="$(network_interface_ipv6_gateway "$network_interface")"
   [[ -z "$gatewayv6" ]] && return
 
-  echo "configuring ipv6 gateway $gatewayv6 for $predicted_network_interface_name" >&2
+  echo "configuring ipv6 gateway $gatewayv6 for $network_interface" >&2
   echo "IPV6_DEFAULTGW=$gatewayv6"
 
   # always add IPV6_DEFAULTDEV
   # ipv6_addr_is_link_local_unicast_addr "$gatewayv6" || return
 
-  echo "IPV6_DEFAULTDEV=$predicted_network_interface_name"
+  echo "IPV6_DEFAULTDEV=$network_interface"
 }
 
 # gen route script
@@ -292,21 +301,23 @@ gen_route_script() {
   echo "GATEWAY0=$gateway"
 }
 
+clean_up_etc_sysconfig_network_scripts_centos() {
+  # clean up /etc/sysconfig/network-scripts
+  find "$FOLD/hdd/etc/sysconfig/network-scripts" -type f \( -name 'ifcfg-*' -or -name 'route-*' \) -and -not -name 'ifcfg-lo' -delete
+}
+
 # setup /etc/sysconfig/network-scripts for centos
 setup_etc_sysconfig_network_scripts_centos() {
   debug '# setup /etc/sysconfig/network-scripts'
 
-  # clean up /etc/sysconfig/network-scripts
-  find "$FOLD/hdd/etc/sysconfig/network-scripts" -type f \( -name 'ifcfg-*' -or -name 'route-*' \) -and -not -name 'ifcfg-lo' -delete
+  clean_up_etc_sysconfig_network_scripts_centos || return 1
 
   while read network_interface; do
     local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
     local ip_addrs=("${ipv4_addrs[@]}" $(network_interface_ipv6_addrs "$network_interface"))
     ((${#ip_addrs[@]} == 0)) && continue
 
-    local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
-    local ifcfg_script="/etc/sysconfig/network-scripts/ifcfg-$predicted_network_interface_name"
-
+    local ifcfg_script="/etc/sysconfig/network-scripts/ifcfg-$network_interface"
     debug "# setting up $ifcfg_script"
     gen_ifcfg_script_centos "$network_interface" > "$FOLD/hdd/$ifcfg_script" 2> >(debugoutput)
 
@@ -316,7 +327,7 @@ setup_etc_sysconfig_network_scripts_centos() {
       continue
     fi
 
-    local route_script="/etc/sysconfig/network-scripts/route-$predicted_network_interface_name"
+    local route_script="/etc/sysconfig/network-scripts/route-$network_interface"
     debug "# setting up $route_script"
     gen_route_script "$gateway" > "$FOLD/hdd/$route_script" 2> >(debugoutput)
   done < <(physical_network_interfaces)
@@ -430,31 +441,30 @@ setup_etc_sysconfig_network_scripts_suse() {
 # $1 <network_interface>
 gen_etc_network_interfaces_entry() {
   local network_interface="$1"
-  local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
   local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
   local ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
   ((${#ipv4_addrs[@]} == 0)) && ((${#ipv6_addrs[@]} == 0)) && return
 
   echo
-  echo "auto $predicted_network_interface_name"
+  echo "auto $network_interface"
   if ((${#ipv4_addrs[@]} > 0)); then
-    echo -n "iface $predicted_network_interface_name inet "
+    echo -n "iface $network_interface inet "
     # dhcp
     local gateway="$(network_interface_ipv4_gateway "$network_interface")"
     if ipv4_addr_is_private "$gateway" && isVServer; then
-      echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
+      echo "configuring dhcpv4 for $network_interface" >&2
       echo 'dhcp'
     # static config
     else
       local address="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
       local netmask="$(ipv4_addr_netmask "${ipv4_addrs[0]}")"
 
-      echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
+      echo "configuring ipv4 addr ${ipv4_addrs[0]} for $network_interface" >&2
       echo 'static'
       echo "  address $address"
       echo "  netmask $netmask"
       if [[ -n "$gateway" ]]; then
-        echo "configuring ipv4 gateway $gateway for $predicted_network_interface_name" >&2
+        echo "configuring ipv4 gateway $gateway for $network_interface" >&2
         echo "  gateway $gateway"
       fi
       # pointtopoint
@@ -462,10 +472,10 @@ gen_etc_network_interfaces_entry() {
         local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
         echo "configuring host route $network via $gateway" >&2
         echo "  # route $network via $gateway"
-        # echo "  up ip route add $network via $gateway dev $predicted_network_interface_name"
+        # echo "  up ip route add $network via $gateway dev $network_interface"
 
         local network_without_suffix="$(ip_addr_without_suffix "$network")"
-        echo "  up route add -net $network_without_suffix netmask $netmask gw $gateway dev $predicted_network_interface_name"
+        echo "  up route add -net $network_without_suffix netmask $netmask gw $gateway dev $network_interface"
       fi
     fi
   fi
@@ -478,12 +488,12 @@ gen_etc_network_interfaces_entry() {
   local netmaskv6="$(ip_addr_suffix "${ipv6_addrs[0]}")"
   local gatewayv6="$(network_interface_ipv6_gateway "$network_interface")"
 
-  echo "configuring ipv6 addr ${ipv6_addrs[0]} for $predicted_network_interface_name" >&2
-  echo "iface $predicted_network_interface_name inet6 static"
+  echo "configuring ipv6 addr ${ipv6_addrs[0]} for $network_interface" >&2
+  echo "iface $network_interface inet6 static"
   echo "  address $addressv6"
   echo "  netmask $netmaskv6"
   if [[ -n "$gatewayv6" ]]; then
-    echo "configuring ipv6 gateway $gatewayv6 for $predicted_network_interface_name" >&2
+    echo "configuring ipv6 gateway $gatewayv6 for $network_interface" >&2
     echo "  gateway $gatewayv6"
   fi
 }
@@ -499,26 +509,21 @@ setup_etc_network_interfaces() {
       echo 'source /etc/network/interfaces.d/*'
       echo
     fi
-    echo 'auto lo'
-    echo 'iface lo inet loopback'
-    echo 'iface lo inet6 loopback'
-    while read network_interface; do
-      gen_etc_network_interfaces_entry "$network_interface"
-    done < <(physical_network_interfaces)
+    if use_predictable_network_interface_names; then
+      echo '# Networking is setup using systemd-networkd, since /etc/network/interfaces can '
+      echo '# not match MAC addresses but requires an interface name which may be subject '
+      echo '# to change when upgrading to a newer systemd net naming scheme: '
+      echo '# https://www.freedesktop.org/software/systemd/man/systemd.net-naming-scheme.html'
+    else
+      echo 'auto lo'
+      echo 'iface lo inet loopback'
+      echo 'iface lo inet6 loopback'
+      while read network_interface; do
+        gen_etc_network_interfaces_entry "$network_interface"
+      done < <(physical_network_interfaces)
+    fi
   } > "$FOLD/hdd/etc/network/interfaces" 2> >(debugoutput)
 }
-
-# # check whether installed os supports predictable network interface names
-# installed_os_supports_predictable_network_interface_names() {
-#   installed_os_uses_systemd && (($(installed_os_systemd_version) >= 197))
-# }
-
-# # disable predictable network interface names
-# disable_predictable_network_interface_names() {
-#   debug '# disabling predictable network interface names'
-# 
-#   ln -s /dev/null "$FOLD/hdd/etc/systemd/network/99-default.link"
-# }
 
 # get network interface mac
 network_interface_mac() {
@@ -556,14 +561,23 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
   local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
   local ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
   ((${#ipv4_addrs[@]} == 0)) && ((${#ipv6_addrs[@]} == 0)) && return
-  local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
-  echo "    $predicted_network_interface_name:"
+  if use_predictable_network_interface_names; then
+    local config_name='mainif'
+  else
+    local config_name="$network_interface"
+  fi
+  echo "    $config_name:"
+  if use_predictable_network_interface_names; then
+    local network_interface_mac="$(network_interface_mac "$network_interface")"
+    echo '      match:'
+    echo "        macaddress: $network_interface_mac"
+  fi
   local addresses=()
   if ((${#ipv4_addrs[@]} > 0)); then
     # dhcp
     local gateway4="$(network_interface_ipv4_gateway "$network_interface")"
     if ipv4_addr_is_private "$gateway4" && isVServer; then
-      echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
+      echo "configuring dhcpv4 for $network_interface" >&2
       local dhcp4=true
       local gateway4=false
     # static config
@@ -580,18 +594,18 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
           local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
         fi
       fi
-      echo "configuring ipv4 addr $ipaddr/$netmask for $predicted_network_interface_name" >&2
+      echo "configuring ipv4 addr $ipaddr/$netmask for $network_interface" >&2
       local dhcp4=false
       addresses+=("$ipaddr/$netmask")
       if [[ -n "$gateway4" ]]; then
-        echo "configuring ipv4 gateway $gateway4 for $predicted_network_interface_name" >&2
+        echo "configuring ipv4 gateway $gateway4 for $network_interface" >&2
       else
         gateway4=false
       fi
     fi
   fi
   if ((${#ipv6_addrs[@]} > 0)); then
-    echo "configuring ipv6 addr ${ipv6_addrs[0]} for $predicted_network_interface_name" >&2
+    echo "configuring ipv6 addr ${ipv6_addrs[0]} for $network_interface" >&2
     addresses+=("${ipv6_addrs[0]}")
   fi
   case "${#addresses[@]}" in
@@ -620,7 +634,7 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
   fi
   local gateway6="$(network_interface_ipv6_gateway "$network_interface")"
   if [[ -n "$gateway6" ]]; then
-    echo "configuring ipv6 gateway $gateway6 for $predicted_network_interface_name" >&2
+    echo "configuring ipv6 gateway $gateway6 for $network_interface" >&2
     echo "      gateway6: $gateway6"
   fi
   if [[ "$gateway4" != false ]]; then
@@ -664,8 +678,12 @@ gen_network_file() {
   local network_interface="$1"
   echo "### $COMPANY installimage"
   echo '[Match]'
-  local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
-  echo "Name=$predicted_network_interface_name"
+  if use_predictable_network_interface_names; then
+    local network_interface_mac="$(network_interface_mac "$network_interface")"
+    echo "MACAddress=$network_interface_mac"
+  else
+    echo "Name=$network_interface"
+  fi
   echo
   echo '[Network]'
   local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
@@ -673,7 +691,7 @@ gen_network_file() {
   if ((${#ipv4_addrs[@]} > 0)); then
     # dhcp
     if ipv4_addr_is_private "$gateway" && isVServer; then
-      echo "configuring dhcpv4 for $predicted_network_interface_name" >&2
+      echo "configuring dhcpv4 for $network_interface" >&2
       echo 'DHCP=ipv4'
     # static config
     else
@@ -688,8 +706,11 @@ gen_network_file() {
     echo "Address=${ipv6_addrs[0]}"
   fi
   local gateway4="$(network_interface_ipv4_gateway "$network_interface")"
-  if ((${#ipv4_addrs[@]} > 0)) && [[ -n "$gateway4" ]]; then
-    echo "Gateway=$gateway4"
+  # static config
+  if ! ipv4_addr_is_private "$gateway4" || ! isVServer; then
+    if ((${#ipv4_addrs[@]} > 0)) && [[ -n "$gateway4" ]]; then
+      echo "Gateway=$gateway4"
+    fi
   fi
   gateway6="$(network_interface_ipv6_gateway "$network_interface")"
   if ((${#ipv6_addrs[@]} > 0)) && [[ -n "$gateway6" ]]; then
@@ -707,15 +728,25 @@ gen_network_file() {
 # setup /etc/systemd/network files
 setup_etc_systemd_network_files() {
   debug '# setup /etc/systemd/network files'
+  mkdir -p "$FOLD/hdd/etc/systemd/network"
   while read network_interface; do
     local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
     local ip_addrs=("${ipv4_addrs[@]}" $(network_interface_ipv6_addrs "$network_interface"))
     ((${#ip_addrs[@]} == 0)) && continue
-    local predicted_network_interface_name="$(predict_network_interface_name "$network_interface")"
-    local network_file="/etc/systemd/network/10-$predicted_network_interface_name.network"
+    if use_predictable_network_interface_names; then
+      local config_name='mainif'
+    else
+      local config_name="$network_interface"
+    fi
+    local network_file="/etc/systemd/network/10-$config_name.network"
     debug "# setting up $network_file"
-    gen_network_file "$network_interface" > "$FOLD/hdd/$network_file" 2> >(debugoutput)
+    gen_network_file "$network_interface" > "$FOLD/hdd/$network_file" 2> >(debugoutput) || return 1
   done < <(physical_network_interfaces)
+}
+
+setup_systemd_networkd() {
+  setup_etc_systemd_network_files || return 1
+  execute_chroot_command 'systemctl enable systemd-networkd'
 }
 
 # setup network config
@@ -724,30 +755,41 @@ setup_network_config_new() {
 
   case "$IAM" in
     centos)
-      setup_etc_sysconfig_network
-      setup_etc_sysconfig_network_scripts_centos
+      if use_predictable_network_interface_names; then
+        echo > "$FOLD/hdd/etc/sysconfig/network"
+        clean_up_etc_sysconfig_network_scripts_centos || return 1
+        setup_systemd_networkd || return 1
+      else
+        setup_etc_sysconfig_network || return 1
+        setup_etc_sysconfig_network_scripts_centos || return 1
+      fi
     ;;
-    suse) setup_etc_sysconfig_network_scripts_suse;;
-    debian) setup_etc_network_interfaces;;
+    suse) setup_etc_sysconfig_network_scripts_suse || return 1;;
+    debian)
+      setup_etc_network_interfaces || return 1
+      if use_predictable_network_interface_names; then
+        setup_systemd_networkd || return 1
+      fi
+    ;;
     ubuntu)
-     if ((IMG_VERSION >= 1710)); then
-       setup_etc_netplan_01_netcfg_yaml
-       execute_chroot_command 'netplan generate' || return 1
-     else
-       setup_etc_network_interfaces
-     fi
+      if ((IMG_VERSION >= 1710)); then
+        setup_etc_netplan_01_netcfg_yaml || return 1
+        execute_chroot_command 'netplan generate' || return 1
+      else
+        setup_etc_network_interfaces || return 1
+        if use_predictable_network_interface_names; then
+          setup_systemd_networkd || return 1
+        fi
+      fi
     ;;
     archlinux)
-      setup_etc_systemd_network_files
-      execute_chroot_command 'systemctl enable systemd-networkd' || return 1
+      setup_systemd_networkd || return 1
     ;;
     *) return 1;;
   esac
 
   if ! use_predictable_network_interface_names; then
-    # predictable network interface names are disabled using the net.ifnames=0 kernel parameter
-    # disable_predictable_network_interface_names
-    setup_persistent_net_rules
+    setup_persistent_net_rules || return 1
   fi
 }
 
