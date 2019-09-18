@@ -96,4 +96,17 @@ mysql_user_exists() {
   return
 }
 
+create_mysql_user() {
+  local user="$1"
+  local password="$2"
+  query_mysql "CREATE USER '${user//\'/\\\'}'@'localhost' IDENTIFIED BY '${password//\'/\\\'}';" |& debugoutput
+  (("${PIPESTATUS[0]}" == 0)) || return 1
+  query_mysql "GRANT ALL ON *.* TO '${user//\'/\\\'}'@'localhost' WITH GRANT OPTION;" |& debugoutput
+  (("${PIPESTATUS[0]}" == 0)) || return 1
+  query_mysql "FLUSH PRIVILEGES;" |& debugoutput
+  (("${PIPESTATUS[0]}" == 0)) || return 1
+  echo QUIT | execute_command_wo_debug mysql -u "$user" -p"$password" |& debugoutput
+  return "${PIPESTATUS[1]}"
+}
+
 # vim: ai:ts=2:sw=2:et

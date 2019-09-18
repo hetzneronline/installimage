@@ -64,8 +64,13 @@ install_password_txt_hint() {
     fi
     if hetzner_lamp_install; then
       echo 'echo'
-      echo "echo 'phpMyAdmin URL: http://<your-servers-ip>/phpmyadmin'"
-      echo "echo 'Webmin URL:     https://<your-servers-ip>:10000'"
+      if debian_buster_image; then
+        echo "echo 'Adminer URL: https://<your-servers-ip>/adminer'"
+        echo "echo 'Webmin URL:  https://<your-servers-ip>:10000'"
+      else
+        echo "echo 'phpMyAdmin URL: http://<your-servers-ip>/phpmyadmin'"
+        echo "echo 'Webmin URL:     https://<your-servers-ip>:10000'"
+      fi
     fi
     echo 'echo'
     echo "echo 'Passwords are listed in /password.txt'"
