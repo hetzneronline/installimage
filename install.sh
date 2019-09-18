@@ -458,15 +458,11 @@ status_busy "Installing bootloader $BOOTLOADER"
 debug "# Generating config for $BOOTLOADER"
 if [ "$BOOTLOADER" = "grub" -o "$BOOTLOADER" = "GRUB" ]; then
   generate_config_grub "$VERSION" || status_failed
-else
-  generate_config_lilo "$VERSION" || status_failed
 fi
 
 debug "# Writing bootloader $BOOTLOADER into MBR"
 if [ "$BOOTLOADER" = "grub" -o "$BOOTLOADER" = "GRUB" ]; then
   write_grub "NIL" || status_failed
-else
-  write_lilo "NIL" || status_failed
 fi
 
 status_done

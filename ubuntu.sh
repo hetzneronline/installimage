@@ -221,22 +221,6 @@ setup_cpufreq() {
   fi
 }
 
-# this is just to generate an error and should never be reached
-# because we dropped support for lilo on ubuntu since 12.04
-generate_config_lilo() {
-  if [ -n "$1" ]; then
-    return 1
-  fi
-}
-
-# this is just to generate an error and should never be reached
-# because we dropped support for lilo on ubuntu since 12.04
-write_lilo() {
-  if [ -n "$1" ]; then
-    return 1
-  fi
-}
-
 #
 # generate_config_grub <version>
 #

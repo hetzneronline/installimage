@@ -103,6 +103,7 @@ generate_menu() {
     RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Stretch"
+    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Buster"
     RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*-beta.*' -a -not -name '*.sig' -printf '%f\n' | sort)"
   elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
@@ -147,6 +148,7 @@ generate_menu() {
       case "$IMAGENAME" in
         Proxmox-Virtualization-Environment-on-Debian-Jessie) export PROXMOX_VERSION="4" ;;
         Proxmox-Virtualization-Environment-on-Debian-Stretch) export PROXMOX_VERSION="5" ;;
+        Proxmox-Virtualization-Environment-on-Debian-Buster) export PROXMOX_VERSION="6" ;;
       esac
       cp "$SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION" /post-install
       chmod 0755 /post-install
@@ -299,48 +301,6 @@ create_config() {
         echo ""
         echo "SWRAIDLEVEL $set_level"
       } >> "$CNF"
-    fi
-
-    # bootloader
-    # we no longer support lilo, so don't show this option if it isn't in the image
-#    if [ "$IAM" = "archlinux" ] ||
-#      [ "$IAM" = "coreos" ] ||
-#      [ "$IAM" = "centos" ] ||
-#      [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] ||
-#      [ "$IAM" = "debian" -a "$IMG_VERSION" -ge 70 ] ||
-#      [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 122 ]; then
-      NOLILO="true"
-#    else
-#      NOLILO=''
-#    fi
-
-    {
-      echo ""
-      echo "## ============"
-      echo "##  BOOTLOADER:"
-      echo "## ============"
-      echo ""
-    } >> "$CNF"
-
-    if [ "$NOLILO" ]; then
-      {
-        echo ""
-        echo "## Do not change. This image does not include or support lilo (grub only)!:"
-        echo ""
-        echo "BOOTLOADER grub"
-      } >> "$CNF"
-    else
-      {
-        echo ""
-        echo "## which bootloader should be used?  < lilo | grub >"
-        echo ""
-      } >> "$CNF"
-      case "$OPT_BOOTLOADER" in
-        lilo) echo "BOOTLOADER lilo" >> "$CNF" ;;
-        grub) echo "BOOTLOADER grub" >> "$CNF" ;;
-        *)    echo "BOOTLOADER $DEFAULTLOADER" >> "$CNF" ;;
-      esac
-      echo "" >> "$CNF"
     fi
 
     # hostname
@@ -761,7 +721,7 @@ if [ -n "$1" ]; then
 
   BOOTLOADER="$(grep -m1 -e ^BOOTLOADER "$1" |awk '{print $2}')"
   if [ "$BOOTLOADER" = "" ]; then
-    BOOTLOADER=$(echo "$DEFAULTLOADER" | awk '{ print $2 }')
+    BOOTLOADER="$DEFAULTLOADER"
   fi
   BOOTLOADER="${BOOTLOADER,,}"
 
@@ -1138,30 +1098,12 @@ validate_vars() {
     for ((i=1; i<=LVM_VG_COUNT; i++)); do
       names="$names\n${LVM_VG_NAME[$i]}"
     done
-
-    if [ "$(echo -e "$names" | egrep -v "^$" | sort | uniq -d | wc -l)" -gt 1 ] && [ "$BOOTLOADER" = "lilo" ] ; then
-      graph_error "ERROR: you cannot use more than one VG with lilo - use grub as bootloader"
-      return 1
-    fi
-
   fi
 
-  CHECK="$(echo "$BOOTLOADER" |grep -i -e "^grub$\|^lilo$")"
+  CHECK="$(echo "$BOOTLOADER" |grep -i -e "^grub$")"
   if [ -z "$CHECK" ]; then
    graph_error "ERROR: No valid BOOTLOADER"
    return 1
-  fi
-
-  if [ "$BOOTLOADER" = "lilo" ]; then
-    if [ "$IAM" = "archlinux" ] ||
-       [ "$IAM" = "coreos" ] ||
-       [ "$IAM" = "centos" ] ||
-       [ "$IAM" = "ubuntu" -a "$IMG_VERSION" -ge 1204 ] ||
-       [ "$IAM" = "debian" -a "$IMG_VERSION" -ge 70 ] ||
-       [ "$IAM" = "suse" -a "$IMG_VERSION" -ge 122 ]; then
-         graph_error "ERROR: Image doesn't support lilo"
-         return 1
-    fi
   fi
 
 
@@ -1384,10 +1326,6 @@ validate_vars() {
         fi
       fi
     fi
-  fi
-
-  if [ "$BOOTLOADER" == "lilo" ]; then
-    graph_notice "WARNING: Lilo is deprecated and no longer supported. Please consider using grub"
   fi
 
   if [ -z "$NEWHOSTNAME" ]; then
@@ -1965,7 +1903,7 @@ make_swraid() {
         local can_assume_clean=''
         local array_layout=''
 
-        # lilo and GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
+        # GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
         if [ "$(echo "$line" | grep "/boot")" ]; then
           array_raidlevel="1"
           array_metadata=$metadata_boot
@@ -1995,7 +1933,7 @@ make_swraid() {
     done < $fstab.tmp
 
   fi
-  return 0 
+  return 0
 }
 
 
@@ -2119,6 +2057,18 @@ format_partitions() {
     if [ -b $DEV ] ; then
       debug "# formatting  $DEV  with  $FS"
       wipefs -af $DEV |& debugoutput
+      local xfs_force_v4=0
+      if [[ "$FS" == 'xfs' ]]; then
+        if [[ "$IAM" == 'centos' ]]; then
+          if ((IMG_VERSION < 70)) || ((IMG_VERSION == 610)); then
+            xfs_force_v4=1
+          fi
+        elif [[ "$IAM" == 'debian' ]]; then
+          if ((IMG_VERSION < 90)) || ((IMG_VERSION == 810)) || ((IMG_VERSION == 811)); then
+            xfs_force_v4=1
+          fi
+        fi
+      fi
       if [ "$FS" = "swap" ]; then
         # format swap partition with dd first because mkswap
         # doesnt overwrite sw-raid information!
@@ -2139,6 +2089,8 @@ format_partitions() {
         fi
       elif [ "$FS" = "btrfs" ]; then
         mkfs -t $FS $DEV 2>&1 | debugoutput ; EXITCODE=$?
+      elif [[ "$FS" == 'xfs' ]] && ((xfs_force_v4 == 1)); then
+        mkfs -t $FS -q -f $DEV -m crc=0,finobt=0 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
       else
         mkfs -t $FS -q -f $DEV 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
       fi
@@ -2657,7 +2609,7 @@ set_hostname() {
 
 
     if [ -f $machinefile ]; then
-      # clear machine-id from image 
+      # clear machine-id from image
       echo -n > $machinefile
       [[ -e $dbusfile ]] && rm $dbusfile
       if [ $systemd -eq 1 ]; then
@@ -3152,50 +3104,6 @@ write_grub() {
 
 }
 
-generate_config_lilo() {
-  if [ "$1" ]; then
-    local bfile="$FOLD/hdd/etc/lilo.conf"
-    rm -f "$FOLD/hdd/boot/grub/menu.lst" 2>&1 | debugoutput
-    {
-      echo "### $COMPANY installimage"
-      echo "# bootloader config"
-      if [ "$LILOEXTRABOOT" ]; then
-        echo "$LILOEXTRABOOT"
-      fi
-      echo "boot=$SYSTEMDEVICE"
-      echo "root=$(grep " / " "$FOLD/hdd/etc/fstab" |cut -d " " -f 1)"
-      echo "vga=0x317"
-      echo "timeout=40"
-      echo "prompt"
-      echo "default=Linux"
-      echo "large-memory"
-      echo ""
-    } > "$bfile"
-    if [ -e "$FOLD/hdd/boot/vmlinuz-$VERSION" ]; then
-      echo "image=/boot/vmlinuz-$VERSION" >> $bfile
-    else
-      return 1
-    fi
-    echo "  label=Linux" >> $bfile
-    if [ -e "$FOLD/hdd/boot/initrd.img-$VERSION" ]; then
-      echo "  initrd=/boot/initrd.img-$VERSION" >> $bfile
-    elif [ -e "$FOLD/hdd/boot/initrd-$VERSION" ]; then
-      echo "  initrd=/boot/initrd-$VERSION" >> $bfile
-    fi
-    echo "" >> $bfile
-
-    return 0
-  fi
-}
-
-write_lilo() {
-  if [ "$1" ]; then
-    execute_chroot_command "yes |/sbin/lilo -F" | debugoutput
-    EXITCODE=$?
-    return $EXITCODE
-  fi
-}
-
 generate_ntp_config() {
   local CFGNTP="/etc/ntp.conf"
   local CFGCHRONY="/etc/chrony/chrony.conf"
@@ -3400,10 +3308,17 @@ install_robot_report_script() {
   chmod +x "$FOLD/hdd/$robot_report_script"
 
   if installed_os_uses_systemd; then
-    # create robot report service
     if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)); then
-      local robot_report_service='/etc/systemd/system/robot-report.service'
+      local link_service=1
     elif [[ "$IAM" == 'archlinux' ]]; then
+      local link_service=1
+    elif debian_buster_image; then
+      local link_service=1
+    else
+      local link_service=0
+    fi
+    # create robot report service
+    if ((link_service == 1)); then
       local robot_report_service='/etc/systemd/system/robot-report.service'
     else
       local robot_report_service='/etc/systemd/system/multi-user.target.wants/robot-report.service'
@@ -3420,20 +3335,11 @@ install_robot_report_script() {
       echo 'KillMode=none'
       echo 'Type=forking'
     } > "$FOLD/hdd/$robot_report_service"
-    if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)); then
-      ln -s ../robot-report.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/robot-report.service"
-    elif [[ "$IAM" == 'archlinux' ]]; then
-      ln -s ../robot-report.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/robot-report.service"
-    fi
-
+    ((link_service == 1)) && ln -s ../robot-report.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/robot-report.service"
     # extend robot report script
     {
       echo '('
-      if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)); then
-        echo '  unlink /etc/systemd/system/multi-user.target.wants/robot-report.service'
-      elif [[ "$IAM" == 'archlinux' ]]; then
-        echo '  unlink /etc/systemd/system/multi-user.target.wants/robot-report.service'
-      fi
+      ((link_service == 1)) && echo '  unlink /etc/systemd/system/multi-user.target.wants/robot-report.service'
       echo "  rm '$robot_report_service'"
       echo '  systemctl daemon-reload'
       echo ') &'
@@ -3621,8 +3527,6 @@ uuid_bugfix() {
       [ -e "$FOLD/hdd/boot/grub/grub.cfg" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.cfg"
       [ -e "$FOLD/hdd/boot/grub/grub.conf" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.conf"
       [ -e "$FOLD/hdd/boot/grub/menu.lst" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/menu.lst"
-      [ -e "$FOLD/hdd/etc/lilo.conf" ] && sed -i "s|append=\"root=/dev/${LINE}|append=\"root=UUID=${UUID}|" "$FOLD/hdd/etc/lilo.conf"
-      [ -e "$FOLD/hdd/etc/lilo.conf" ] && sed -i "s|/dev/${LINE}|\"UUID=${UUID}\"|" "$FOLD/hdd/etc/lilo.conf"
     done < "$TEMPFILE"
     rm "$TEMPFILE"
     return 0
@@ -3749,7 +3653,7 @@ function part_test_size() {
 function check_dos_partitions() {
 
   echo "check_dos_partitions" | debugoutput
-  if [ "$FORCE_GPT" = "2" ] || [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 -a "$IMG_VERSION" != 610 ] || [ "$BOOTLOADER" == "lilo" ]; then
+  if [ "$FORCE_GPT" = "2" ] || [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 -a "$IMG_VERSION" != 610 ]; then
     if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
       echo "SuSE version older than 12.2, no grub2 support" | debugoutput
     else
