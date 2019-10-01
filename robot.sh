@@ -15,7 +15,7 @@ done
 # and CentOS has also os-release
 #if [ -f /etc/os-release ]; then
 if [ -f /etc/SuSE-release ]; then
-  # openSuSE
+  # openSUSE
   sed -i -e "s#^bash /robot.*##" /etc/init.d/after.local
   sed -i -e "s#^bash /robot.*##" /etc/init.d/boot.local
 else

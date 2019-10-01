@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# OpenSUSE specific functions
+# openSUSE specific functions
 #
 # (c) 2007-2018, Hetzner Online GmbH
 #
@@ -161,7 +161,7 @@ generate_new_ramdisk() {
 
 setup_cpufreq() {
   if [ -n "$1" ]; then
-     # openSuSE defaults to the ondemand governor, so we don't need to set this at all
+     # openSUSE defaults to the ondemand governor, so we don't need to set this at all
      # http://doc.opensuse.org/documentation/html/openSUSE/opensuse-tuning/cha.tuning.power.html
      # check release notes of furture releases carefully, if this has changed!
 
@@ -204,7 +204,7 @@ generate_config_grub() {
     grub_linux_default+=' pci=nommconf'
   fi
 
-  # set net.ifnames=0 to avoid predictable interface names for opensuse 13.2
+  # set net.ifnames=0 to avoid predictable interface names for openSUSE 13.2
   if [ "$IMG_VERSION" -ge 132 ] ; then
     grub_linux_default="${grub_linux_default} net.ifnames=0 quiet systemd.show_status=1"
   fi
@@ -224,7 +224,7 @@ generate_config_grub() {
 
   execute_chroot_command "grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1"
 
-  # the opensuse mkinitrd uses this file to determine where to write the bootloader...
+  # the openSUSE mkinitrd uses this file to determine where to write the bootloader...
   local grubinstalldev_file; grubinstalldev_file="$FOLD/hdd/etc/default/grub_installdevice"
   rm -f "$grubinstalldev_file"
   for ((i=1; i<=COUNT_DRIVES; i++)); do

@@ -1581,7 +1581,7 @@ create_partitions() {
   # write standard entries to fstab
   echo "proc /proc proc defaults 0 0" > "$FOLD/fstab"
   # add fstab entries for devpts, sys and shm in CentOS as they are not
-  # automatically mounted by init skripts like in Debian/Ubuntu and OpenSUSE
+  # automatically mounted by init skripts like in Debian/Ubuntu and openSUSE
   if [ "$IAM" = "centos" ]; then
     {
       echo "devpts /dev/pts devpts gid=5,mode=620 0 0"
@@ -3632,7 +3632,7 @@ function part_test_size() {
   DRIVE_SIZE=$(( DRIVE_SIZE / 1024 / 1024 ))
 
   if [ "$DRIVE_SIZE" -ge $LIMIT ] || [ "$FORCE_GPT" = "1" ]; then
-    # use only GPT if not CentOS or OpenSuSE newer than 12.2
+    # use only GPT if not CentOS or openSUSE newer than 12.2
     if [ "$IAM" != "centos" ] || [ "$IAM" == "centos" -a "$IMG_VERSION" -ge 70 -a "$IMG_VERSION" != 610 ]; then
       if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -lt 122 ]; then
         echo "SuSE older than 12.2. cannot use GPT (but drive size is bigger then 2TB)" | debugoutput
@@ -3859,7 +3859,7 @@ fix_eth_naming() {
 
 
 suse_netdev_fix() {
-# device naming in OpenSuSE 12.3 for multiple NICs is
+# device naming in openSUSE 12.3 for multiple NICs is
 # currently broken. (kernel and systemd disagree with each other)
 # Workaround is to map the NICs to their own namespace (net0 instead of eth0)
 # until the fix is released
