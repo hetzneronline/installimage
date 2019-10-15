@@ -589,6 +589,12 @@ if [ -n "$1" ]; then
   FORCE_PASSWORD="$(grep -m1 -e ^FORCE_PASSWORD "$1" |awk '{print $2}')"
   export FORCE_PASSWORD
 
+  LUKS_PASSWORD="$(grep -m1 -e ^LUKS_PASSWORD "$1" |awk '{print $2}')"
+  export LUKS_PASSWORD
+
+  FDE_SSH_UNLOCK="$(grep -m1 -e ^FDE_SSH_UNLOCK "$1" |awk '{print $2}')"
+  export FDE_SSH_UNLOCK
+
   # another configure option: allow usb drives
   # if set to 1: allow usb drives
   [[ -z "$ALLOW_USB_DRIVES" ]] && export ALLOW_USB_DRIVES="$(grep -m1 -e ^ALLOW_USB_DRIVES "$1" |awk '{print $2}')"
@@ -658,15 +664,16 @@ if [ -n "$1" ]; then
   done < /tmp/part_lines.tmp
 
   # get LVM volume group config
-  LVM_VG_COUNT="$(egrep -c '^PART *lvm ' "$1")"
-  LVM_VG_ALL="$(egrep '^PART *lvm ' "$1")"
+  LVM_VG_COUNT="$(egrep -c '^PART *lvm(\+luks)? ' "$1")"
+  LVM_VG_ALL="$(egrep '^PART *lvm(\+luks)? ' "$1")"
 
   # void the check var
   LVM_VG_CHECK=""
   for ((i=1; i<=LVM_VG_COUNT; i++)); do
     LVM_VG_LINE="$(echo "$LVM_VG_ALL" | head -n$i | tail -n1)"
     #LVM_VG_PART[$i]=$i #"$(echo $LVM_VG_LINE | awk '{print $2}')"
-    LVM_VG_PART[$i]=$(echo "$PART_LINES" | egrep -n '^PART *lvm ' | head -n$i | tail -n1 | cut -d: -f1)
+    LVM_VG_PART[$i]=$(echo "$PART_LINES" | egrep -n '^PART *lvm(\+luks)? ' | head -n$i | tail -n1 | cut -d: -f1)
+    LVM_VG_LUKS[$i]=$(echo "$PART_LINES" | egrep -n '^PART *lvm(\+luks)? ' | head -n$i | tail -n1 | egrep -o luks)
     LVM_VG_NAME[$i]="$(echo "$LVM_VG_LINE" | awk '{print $3}')"
     LVM_VG_SIZE[$i]="$(translate_unit "$(echo "$LVM_VG_LINE" | awk '{print $4}')")"
 
@@ -796,6 +803,10 @@ validate_vars() {
     return 1
   fi
 
+  if [ "$FDE_SSH_UNLOCK" != "0" ] && [ "$OPT_USE_SSHKEYS" != "1" ]; then
+    graph_error "ERROR: You must provide SSH keys for remote SSH unlock to work"
+    return 1
+  fi
   # test if $DRIVE1 is not busy
 #  CHECK="$(hdparm -z $DRIVE1 2>&1 | grep 'BLKRRPART failed: Device or resource busy')"
 #  if [ "$CHECK" ]; then
@@ -988,15 +999,15 @@ validate_vars() {
     for ((i=1; i<=PART_COUNT; i++)); do
 
       # test if the mountpoint is valid (start with / or swap or lvm)
-      CHECK="$(echo "${PART_MOUNT[$i]}" | grep -e "^none\|^/\|^swap$\|^lvm$")"
+      CHECK="$(echo "${PART_MOUNT[$i]}" | grep -e "^none\|^/\|^swap$\|^lvm$\|^lvm+luks$")"
       if [ -z "$CHECK" ]; then
-        graph_error "ERROR: Mountpoint for partition $i is not correct"
+        graph_error "ERROR: Mountpoint for partition $i is not correct (value ${PART_MOUNT[$i]})"
         return 1
       fi
 
       # test if the filesystem is one of our supportet types (btrfs/ext2/ext3/ext4/reiserfs/xfs/swap)
       CHECK="$(echo "${PART_FS[$i]}" |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^lvm$")"
-      if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
+      if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" -a "${PART_MOUNT[$i]}" != "lvm+luks" ]; then
         graph_error "ERROR: Filesystem for partition $i is not correct"
         return 1
       fi
@@ -1097,6 +1108,16 @@ validate_vars() {
 
     for ((i=1; i<=LVM_VG_COUNT; i++)); do
       names="$names\n${LVM_VG_NAME[$i]}"
+      if [ -n "${LVM_VG_LUKS[${i}]}" ]; then
+        if [ "$IAM" != "debian" -a "$IAM" != "ubuntu" ]; then
+          graph_error "ERROR: Disk encryption is supported only for Ubuntu and Debian images"
+          return 1
+        fi
+        if [ -z "$LUKS_PASSWORD" ]; then
+          graph_error "ERROR: No LUKS_PASSWORD set"
+          return 1
+        fi
+      fi
     done
   fi
 
@@ -1786,7 +1807,7 @@ make_fstab_entry() {
 
   if [ "$4" = "swap" ] ; then
     ENTRY="$1$p$2 none swap sw 0 0"
- elif [ "$3" = "lvm" ] ; then
+  elif [ "$3" = "lvm" -o "$3" = "lvm+luks" ] ; then
     ENTRY="# $1$2  belongs to LVM volume group '$4'"
   else
     if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
@@ -1975,13 +1996,27 @@ make_lvm() {
       pv=${dev[${LVM_VG_PART[${i}]}]}
       debug "# Creating PV $pv"
       wipefs -af $pv |& debugoutput
+      if [ -n "${LVM_VG_LUKS[${i}]}" ]; then
+        crypt_pv="${pv#/dev/}_crypt"
+        debug "# Creating encrypted PV $pv"
+        cryptsetup luksClose /dev/mapper/$crypt_pv &> /dev/null
+        echo -n "$LUKS_PASSWORD" | cryptsetup luksFormat $pv -d -  2>&1 | debugoutput
+        echo -n "$LUKS_PASSWORD" | cryptsetup luksOpen $pv $crypt_pv -d -  2>&1 | debugoutput
+        echo "$crypt_pv $pv none luks" >> "$FOLD/crypttab"
+        pv=/dev/mapper/$crypt_pv
+      fi
       pvcreate -ff $pv 2>&1 | debugoutput
     done
 
     # create VGs
     for i in $(seq 1 $LVM_VG_COUNT) ; do
       vg=${LVM_VG_NAME[$i]}
-      pv=${dev[${LVM_VG_PART[${i}]}]}
+      if [ -z "${LVM_VG_LUKS[${i}]}" ]; then
+        pv=${dev[${LVM_VG_PART[${i}]}]}
+      else
+        disk=${dev[${LVM_VG_PART[${i}]}]}
+        pv="/dev/mapper/${disk#/dev/}_crypt"
+      fi
 
       # extend the VG if a VG with the same name already exists
       if [ "$(vgs --noheadings 2>/dev/null | grep "$vg")" ]; then
@@ -2302,6 +2337,7 @@ extract_image() {
 
     if [ "$EXITCODE" -eq "0" ]; then
       cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput
+      cp -r "$FOLD/crypttab" "$FOLD/hdd/etc/crypttab" 2>&1 | debugoutput
       return 0
     else
       return 1
@@ -3926,6 +3962,27 @@ is_usb_disk() {
   echo "$udevadm_info" | grep --quiet 'DEVTYPE=disk' || return 1
   echo "$udevadm_info" | grep --quiet 'ID_BUS=usb' || return 1
   echo "$udevadm_info" | grep --quiet 'ID_USB_DRIVER=usb-storage'
+}
+
+install_initramfs_dropbear() {
+  return 1
+}
+
+debian_install_initramfs_dropbear() {
+  execute_command "apt-get --assume-yes update" || return 1
+
+  # install ssh keys for dropbear
+  mkdir -p "$FOLD/hdd/etc/dropbear-initramfs/" || return 1
+  cat "$FOLD/authorized_keys" >> "$FOLD/hdd/etc/dropbear-initramfs/authorized_keys" || return 1
+  
+  # install initramfs routes fix
+  curl --silent --output "$FOLD/hdd/etc/initramfs-tools/scripts/init-premount/zz-hetzner-fix-routes" "https://gist.githubusercontent.com/overlordtm/b4ea42af162df528be60c0fb1193415f/raw/979772a17a694d9f9e9455b662b6b11a73bbc855/zz-hetzner-fix-routes" || return 1
+  chmod +x "$FOLD/hdd/etc/initramfs-tools/scripts/init-premount/zz-hetzner-fix-routes" || return 1
+  # install dropbear-initramfs
+  execute_command "apt-get --assume-yes install dropbear-initramfs" || return 1
+  
+  # configure dropbear
+  sed -i '/^#DROPBEAR_OPTIONS=/a DROPBEAR_OPTIONS="-s -j -k -I 60 -p 54321"' "$FOLD/hdd/etc/dropbear-initramfs/config" || return 1
 }
 
 # vim: ai:ts=2:sw=2:et

@@ -371,10 +371,12 @@ if [ "$SWRAID" = "1" ]; then
   status_done
 fi
 
-status_busy_nostep "  Generating ramdisk"
-debug "# Generating ramdisk"
-generate_new_ramdisk "NIL" || status_failed
-status_done
+if [ "$FDE_SSH_UNLOCK" != "1" ]; then
+  status_busy_nostep "  Generating ramdisk"
+  debug "# Generating ramdisk"
+  generate_new_ramdisk "NIL" || status_failed
+  status_done
+fi
 
 status_busy_nostep "  Generating ntp config"
 debug "# Generating ntp config"
@@ -447,6 +449,18 @@ if [ "$OPT_USE_SSHKEYS" = "1" ] ; then
     debug "# Adding public SSH keys"
     copy_ssh_keys
     status_donefailed $?
+fi
+
+if [ "$FDE_SSH_UNLOCK" = "1" ]; then
+    status_busy_nostep "  Installing dropbear-initramfs"
+    debug "# Installing dropbear-initramfs"
+    install_initramfs_dropbear
+    status_donefailed $?
+
+    status_busy_nostep "  Generating ramdisk"
+    debug "# Generating ramdisk"
+    generate_new_ramdisk "NIL" || status_failed
+    status_done
 fi
 
 #
