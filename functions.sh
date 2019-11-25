@@ -1997,7 +1997,7 @@ make_lvm() {
       debug "# Creating PV $pv"
       wipefs -af $pv |& debugoutput
       if [ -n "${LVM_VG_LUKS[${i}]}" ]; then
-        crypt_pv="${pv#/dev/}_crypt"
+        crypt_pv="crypt$(echo ${pv} | tr / _)"
         debug "# Creating encrypted PV $pv"
         cryptsetup luksClose /dev/mapper/$crypt_pv &> /dev/null
         echo -n "$LUKS_PASSWORD" | cryptsetup luksFormat $pv -d -  2>&1 | debugoutput
@@ -2015,7 +2015,7 @@ make_lvm() {
         pv=${dev[${LVM_VG_PART[${i}]}]}
       else
         disk=${dev[${LVM_VG_PART[${i}]}]}
-        pv="/dev/mapper/${disk#/dev/}_crypt"
+        pv="/dev/mapper/crypt$(echo ${disk} | tr / _)"
       fi
 
       # extend the VG if a VG with the same name already exists
