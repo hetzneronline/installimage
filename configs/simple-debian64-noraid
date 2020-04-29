@@ -8,10 +8,10 @@ SWRAIDLEVEL 1
 
 BOOTLOADER grub
 
-HOSTNAME Debian-101-buster-64-minimal
+HOSTNAME Debian-103-buster-64-minimal
 
 PART swap swap 8G
 PART /boot ext3 512M
 PART /    ext4 all
 
-IMAGE /root/images/Debian-101-buster-64-minimal.tar.gz
+IMAGE /root/images/Debian-103-buster-64-minimal.tar.gz
