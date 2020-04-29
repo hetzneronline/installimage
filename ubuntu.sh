@@ -239,11 +239,11 @@ generate_config_grub() {
   # set linux_default in grub
   local grub_linux_default="nomodeset consoleblank=0"
   if isVServer; then
-     grub_linux_default="${grub_linux_default} elevator=noop"
+    grub_linux_default="${grub_linux_default} elevator=noop"
   else
-     if [ "$IMG_VERSION" -eq 1404 ]; then
-       grub_linux_default="${grub_linux_default} intel_pstate=enable"
-     fi
+    if [ "$IMG_VERSION" -eq 1404 ]; then
+      grub_linux_default="${grub_linux_default} intel_pstate=enable"
+    fi
   fi
 
   # H8SGL need workaround for iommu
@@ -282,18 +282,36 @@ generate_config_grub() {
     echo 'GRUB_GFXPAYLOAD_LINUX="text"'
   } >> "$grubdefconf"
 
+  if [ "$UEFI" -eq 1 ]; then
+    # ubuntu always installs to removable path as well (which is what we want)
+    # unless grub2/no_efi_extra_removable is set to true
+    execute_chroot_command "echo 'set grub2/update_nvram false' | debconf-communicate"
+  fi
+
   # create /run/lock if it didn't exist because it is needed by grub-mkconfig
   mkdir -p "$FOLD/hdd/run/lock"
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
-
-  # only install grub2 in mbr of all other drives if we use swraid
-  for ((i=1; i<=COUNT_DRIVES; i++)); do
-    if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
-      local disk; disk="$(eval echo "\$DRIVE$i")"
-      execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
+  if [ "$UEFI" -eq 1 ]; then
+    local efi_target="x86_64-efi"
+    local efi_dir="/boot/efi"
+    local efi_grub_options="--no-floppy --no-nvram --removable"
+    # if/after installing grub-efi-amd64-signed, this will always install the "static" grubx64.efi
+    execute_chroot_command "grub-install --target=${efi_target} --efi-directory=${efi_dir} ${efi_grub_options} 2>&1"
+    declare -i EXITCODE=$?
+    local shimdir="$FOLD/hdd/usr/lib/shim"
+    if [ -d "$shimdir" ]; then
+      cp "$shimdir/*" "$FOLD/hdd/boot/efi/EFI/ubuntu/"
     fi
-  done
+  else
+    # only install grub2 in mbr of all other drives if we use swraid
+    for ((i=1; i<=COUNT_DRIVES; i++)); do
+      if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
+        local disk; disk="$(eval echo "\$DRIVE$i")"
+        execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
+      fi
+    done
+  fi
 
   if ((IMG_VERSION >= 1604)); then
     debconf_set_grub_install_devices #|| return 1
@@ -305,6 +323,7 @@ generate_config_grub() {
   if [ "$SWRAID" = "0" ]; then
     PARTNUM="$((PARTNUM - 1))"
   fi
+
 
   return "$EXITCODE"
 }
@@ -330,6 +349,8 @@ run_os_specific_functions() {
     setup_nextcloud || return 1
   fi
   ((IMG_VERSION >= 1804)) && disable_ttyvtdisallocate
+
+  disable_resume
   return 0
 }
 

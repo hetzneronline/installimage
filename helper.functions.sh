@@ -29,4 +29,14 @@ grub_install_devices() {
   done
 }
 
+# Hetzner images come with an empty resume file
+disable_resume() {
+  if [[ -s "$FOLD/hdd/etc/initramfs-tools/conf.d/resume" ]]; then
+    debug '# disable resume'
+    echo 'RESUME=none' > "$FOLD/hdd/etc/initramfs-tools/conf.d/resume"
+    return 0
+  fi
+  debug '# not disabling resume, /etc/initramfs-tools/conf.d/resume not empty'
+}
+
 # vim: ai:ts=2:sw=2:et

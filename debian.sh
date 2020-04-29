@@ -171,7 +171,6 @@ setup_cpufreq() {
         echo 'MIN_SPEED="0"'
       } >> "$cpufreqconf"
     fi
-
     return 0
   fi
 }
@@ -203,15 +202,27 @@ generate_config_grub() {
 
   rm "$FOLD/hdd/boot/grub/grub.cfg"
 
-  execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
+  if [ "$UEFI" -eq 1 ]; then
+    execute_chroot_command "echo 'set grub2/update_nvram false' | debconf-communicate"
+    execute_chroot_command "echo 'set grub2/force_efi_extra_removable true' | debconf-communicate"
+  fi
 
-  # only install grub2 in mbr of all other drives if we use swraid
-  for ((i=1; i<=COUNT_DRIVES; i++)); do
-    if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
-      local disk; disk="$(eval echo "\$DRIVE"$i)"
-      execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
-    fi
-  done
+  execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
+  if [ "$UEFI" -eq 1 ]; then
+    local efi_target="x86_64-efi"
+    local efi_dir="/boot/efi"
+    local efi_grub_options="--no-floppy --no-nvram --removable"
+    execute_chroot_command "grub-install --target=${efi_target} --efi-directory=${efi_dir} ${efi_grub_options} 2>&1"
+    declare -i EXITCODE=$?
+  else
+    # only install grub2 in mbr of all other drives if we use swraid
+    for ((i=1; i<=COUNT_DRIVES; i++)); do
+      if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
+        local disk; disk="$(eval echo "\$DRIVE"$i)"
+        execute_chroot_command "grub-install --no-floppy --recheck $disk 2>&1"
+      fi
+    done
+  fi
 
   if ((IMG_VERSION >= 70)); then
     debconf_set_grub_install_devices #|| return 1
@@ -249,8 +260,7 @@ run_os_specific_functions() {
 
   [[ -e "$FOLD/hdd/var/spool/exim4/input" ]] && find "$FOLD/hdd/var/spool/exim4/input" -type f -delete
 
-  (( "${IMG_VERSION}" >= 80 )) && [[ -e "$FOLD/hdd/etc/initramfs-tools/conf.d/resume" ]] && echo > "$FOLD/hdd/etc/initramfs-tools/conf.d/resume"
-
+  disable_resume
   return 0
 }
 

@@ -13,10 +13,13 @@ extract_image() {
     $(source "$FUNCTIONSFILE"; extract_image "$@")
     return $?
   fi
+
   local archlinux_bootstrap_archive="$SCRIPTPATH/../archlinux/archlinux-bootstrap-latest-x86_64.tar.gz"
   local hdd_dir="$FOLD/hdd"
+
   debug "# run tar xzf $archlinux_bootstrap_archive -C $hdd_dir"
   tar xzf "$archlinux_bootstrap_archive" -C "$hdd_dir" |& debugoutput || return 1
+
   local chroot_dir="$hdd_dir/root.x86_64"
   debug "# mount --bind $chroot_dir $chroot_dir"
   mount --bind "$chroot_dir" "$chroot_dir" |& debugoutput || return 1
@@ -31,6 +34,7 @@ extract_image() {
     debug "# run $arch_chroot_script $chroot_dir pacman-key $opt"
     "$arch_chroot_script" "$chroot_dir" pacman-key $opt |& debugoutput || return 1
   done
+
   local mirrorlist="$chroot_dir/etc/pacman.d/mirrorlist"
   local archlinux_mirror_uri='https://mirror.hetzner.de/archlinux'
   debug "# update $mirrorlist"
@@ -39,14 +43,16 @@ extract_image() {
     debug "# run $arch_chroot_script $chroot_dir pacman $opt"
     "$arch_chroot_script" "$chroot_dir" pacman $opt |& debugoutput || return 1
   done
+
   local newroot_dir='/mnt'
-  local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget python'
+  local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget python linux mdadm lvm2 xfsprogs'
   debug "# run $arch_chroot_script $chroot_dir pacstrap -d -G -M $newroot_dir $archlinux_packages"
   "$arch_chroot_script" "$chroot_dir" pacstrap -d -G -M "$newroot_dir" $archlinux_packages |& debugoutput || return 1
   debug "# umount $chroot_dir"
   umount "$chroot_dir" |& debugoutput || return 1
   debug "# run rsync -a --remove-source-files $chroot_dir/$newroot_dir/ $hdd_dir/"
   rsync -a --remove-source-files "$chroot_dir/$newroot_dir/" "$hdd_dir/" |& debugoutput || return 1
+
   local fstab="$hdd_dir/etc/fstab"
   debug "# update $fstab"
   {
@@ -56,13 +62,16 @@ extract_image() {
   } >> "$fstab" || return 1
   debug "# run rm -fr $chroot_dir"
   rm -fr "$chroot_dir" |& debugoutput || return 1
+
   local locale_gen_file="$hdd_dir/etc/locale.gen"
   debug "# update $locale_gen_file"
   sed -i 's/#en_US\.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' "$locale_gen_file" |& debugoutput || return 1
   execute_chroot_command locale-gen || return 1
+
   local locale_conf="$hdd_dir/etc/locale.conf"
   debug "# create $locale_conf"
   echo 'LANG=en_US.UTF-8' > "$locale_conf" || return 1
+
   local bash_profile_file="$hdd_dir/root/.bash_profile"
   debug "# create $bash_profile_file"
   {
@@ -75,13 +84,16 @@ extract_image() {
     echo 'HISTFILESIZE=-1'
     echo 'HISTSIZE=-1'
   } > "$bash_profile_file" || return 1
+
   local inputrc="$hdd_dir/etc/inputrc"
   debug "# update $inputrc"
   sed -i 's/"\\\e\[5~": beginning-of-history/#"\e[5~": beginning-of-history\n"\e[5~": history-search-backward/' "$inputrc" |& debugoutput || return 1
   sed -i 's/"\\\e\[6~": end-of-history/#"\e[6~": end-of-history\n"\e[6~": history-search-forward/' "$inputrc" |& debugoutput || return 1
+
   local localtime_file="$hdd_dir/etc/localtime"
   debug "# link $localtime_file"
   ln -f -s /usr/share/zoneinfo/Europe/Berlin "$localtime_file" |& debugoutput || return 1
+
   local mirrorlist="$hdd_dir/etc/pacman.d/mirrorlist"
   local mirrorlist_bak="$mirrorlist.bak"
   debug "# update $mirrorlist"
@@ -94,6 +106,7 @@ extract_image() {
     echo
     sed s/^#Server/Server/g "$mirrorlist_bak"
   } > "$mirrorlist" || return 1
+
   local resolv_conf="$hdd_dir/etc/resolv.conf"
   debug "# update $resolv_conf"
   {
@@ -101,6 +114,7 @@ extract_image() {
       echo "nameserver $ip"
     done
   } > "$resolv_conf" || return 1
+
   local vconsole_conf="$hdd_dir/etc/vconsole.conf"
   debug "# create $vconsole_conf"
   echo 'KEYMAP=de-latin1-nodeadkeys' > "$vconsole_conf" || return 1
@@ -166,18 +180,27 @@ generate_config_grub() {
   fi
 
   sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/g" "$grub_file" |& debugoutput || return 1
-  # Run grub-install to create /boot/grub
-  execute_chroot_command "grub-install $DRIVE1" || return 1
-  execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg" || return 1
-  execute_chroot_command "grub-install $DRIVE1" || return 1
-  [[ "$SWRAID" != 1 ]] && return
-  local i=2
-  while :; do
-    local drive="$(eval echo "\$DRIVE$i")"
-    [[ -n "$drive" ]] || break
-    execute_chroot_command "grub-install $drive" || return 1
-    ((i++))
-  done
+  if [ "$UEFI" -eq 1 ]; then
+    local efi_target="x86_64-efi"
+    local efi_dir="/boot/efi"
+    local efi_grub_options="--no-floppy --no-nvram --removable"
+    execute_chroot_command "grub-install --target=${efi_target} --efi-directory=${efi_dir} ${efi_grub_options} 2>&1"
+    execute_chroot_command "umount /run; grub-mkconfig -o /boot/grub/grub.cfg; mount --bind /var/empty /run" || return 1
+  else
+    execute_chroot_command "grub-install $DRIVE1" || return 1
+    # If /run is mounted, grub-mkconfig will gen broken configs
+    # execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg" || return 1
+    execute_chroot_command "umount /run; grub-mkconfig -o /boot/grub/grub.cfg; mount --bind /var/empty /run" || return 1
+    execute_chroot_command "grub-install $DRIVE1" || return 1
+    [[ "$SWRAID" != 1 ]] && return
+    local i=2
+    while :; do
+      local drive="$(eval echo "\$DRIVE$i")"
+      [[ -n "$drive" ]] || break
+      execute_chroot_command "grub-install $drive" || return 1
+      ((i++))
+    done
+  fi
 }
 
 run_os_specific_functions() {

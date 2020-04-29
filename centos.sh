@@ -74,7 +74,7 @@ setup_network_config() {
             echo "NETMASK=255.255.255.255"
             echo "SCOPE=\"peer $6\""
           } >> "$CONFIGFILE"
-  
+
           {
             echo "### $COMPANY - installimage"
             echo "# routing for eth0"
@@ -181,7 +181,7 @@ generate_new_ramdisk() {
     fi
 
     if [ "$IMG_VERSION" -ge 70 ] && ((IMG_VERSION != 610)); then
-      execute_chroot_command "/sbin/dracut -f --kver $VERSION"
+      execute_chroot_command "dracut -f --kver $VERSION"
       declare -i EXITCODE=$?
     else
       if [ "$IMG_VERSION" -ge 60 ] ; then
@@ -340,8 +340,11 @@ generate_config_grub() {
     sed -i "s/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"$grub_cmdline_linux\"/" "$FOLD/hdd/etc/default/grub"
 
     rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
-    execute_chroot_command "grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1"; declare -i EXITCODE="$?"
-
+    if [ "$UEFI" -eq 1 ]; then
+      execute_chroot_command "grub2-mkconfig -o /boot/efi/EFI/centos/grub.cfg 2>&1"; declare -i EXITCODE="$?"
+    else
+      execute_chroot_command "grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1"; declare -i EXITCODE="$?"
+    fi
   fi
   uuid_bugfix
   return "$EXITCODE"
@@ -349,14 +352,23 @@ generate_config_grub() {
 
 write_grub() {
   if [ "$IMG_VERSION" -ge 70 ] && ((IMG_VERSION != 610)); then
-    # only install grub2 in mbr of all other drives if we use swraid
-    for ((i=1; i<=COUNT_DRIVES; i++)); do
-      if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
-        local disk; disk="$(eval echo "\$DRIVE"$i)"
-        execute_chroot_command "grub2-install --no-floppy --recheck $disk 2>&1"
-        declare -i EXITCODE=$?
-      fi
-    done
+    if [ "$UEFI" -eq 1 ]; then
+      # we must NOT use grub2-install here. This will replace the prebaked
+      # grubx64.efi (which looks for grub.cfg in ESP) with a new one, which
+      # looks for in in /boot/grub2 (which may be more difficult to read)
+      rm -f "$FOLD/hdd/boot/grub2/grubenv"
+      execute_chroot_command "ln -s /boot/efi/EFI/centos/grubenv /boot/grub2/grubenv"
+      declare -i EXITCODE=$?
+    else
+      # only install grub2 in mbr of all other drives if we use swraid
+      for ((i=1; i<=COUNT_DRIVES; i++)); do
+        if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then
+          local disk; disk="$(eval echo "\$DRIVE"$i)"
+          execute_chroot_command "grub2-install --no-floppy --recheck $disk 2>&1"
+          declare -i EXITCODE=$?
+        fi
+      done
+    fi
   else
     for ((i=1; i<=COUNT_DRIVES; i++)); do
       if [ "$SWRAID" -eq 1 ] || [ "$i" -eq 1 ] ;  then

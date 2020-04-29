@@ -48,9 +48,9 @@ export AUTH_DNS1="ns1.first-ns.de"
 export AUTH_DNS2="robotns2.second-ns.de"
 export AUTH_DNS3="robotns3.second-ns.com"
 
-export DEFAULTPARTS="PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 all"
-export DEFAULTPARTS_BIG="PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 1024G\nPART /home ext4 all"
-export DEFAULTPARTS_LARGE="PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 2014G\nPART /home ext4 all"
+export DEFAULTPARTS="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 all"
+export DEFAULTPARTS_BIG="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 1024G\nPART /home ext4 all"
+export DEFAULTPARTS_LARGE="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 2014G\nPART /home ext4 all"
 export DEFAULTPARTS_VSERVER="PART / ext3 all"
 export DEFAULTPARTS_CLOUDSERVER="PART / ext4 all"
 export DEFAULTSWRAID="1"
@@ -79,7 +79,7 @@ export OSMENULIST=(
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-911-stretch-64-minimal"
-export PROXMOX6_BASE_IMAGE="Debian-101-buster-64-minimal"
+export PROXMOX6_BASE_IMAGE="Debian-103-buster-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 
@@ -92,7 +92,6 @@ export PLESK_COMPONENTS=(
   bind
   config-troubleshooter
   dovecot
-  drweb
   heavy-metal-skin
   horde
   l10n

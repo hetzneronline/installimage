@@ -13,7 +13,6 @@ PART_MOUNT=""
 PART_FS=""
 PART_SIZE=""
 PARTS_SUM_SIZE=""
-MOUNT_POINT_SIZE=""
 HASROOT=""
 SWRAID=""
 SWRAIDLEVEL=""
@@ -58,7 +57,6 @@ export IP6PREFLEN=""
 export IP6GATEWAY=""
 
 ROOTHASH=""
-LILOEXTRABOOT=""
 
 ERROREXIT="0"
 FINALIMAGEPATH=""
@@ -155,6 +153,9 @@ generate_menu() {
       PROXMOX=true
       IMAGENAME=$(eval echo \$PROXMOX${PROXMOX_VERSION}_BASE_IMAGE)
       DEFAULTPARTS=""
+      if [ "$UEFI" -eq 1 ]; then
+        DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot/efi  esp  256M"
+      fi
       DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot  ext3  512M"
       DEFAULTPARTS="$DEFAULTPARTS\nPART  lvm    vg0    all\n"
       DEFAULTPARTS="$DEFAULTPARTS\nLV  vg0  root  /     ext3  15G"
@@ -356,26 +357,40 @@ create_config() {
       echo "##"
       echo "## * <mountpoint/lvm> mountpoint for this filesystem  *OR*  keyword 'lvm'"
       echo "##                    to use this PART as volume group (VG) for LVM"
-      echo "## * <filesystem/VG>  can be ext2, ext3, reiserfs, xfs, swap  *OR*  name"
+      if [ "$UEFI" -eq 1 ]; then
+        echo "## * <filesystem/VG>  can be ext2, ext3, reiserfs, xfs, swap, esp *OR*  name"
+      else
+        echo "## * <filesystem/VG>  can be ext2, ext3, reiserfs, xfs, swap  *OR*  name"
+      fi
       echo "##                    of the LVM volume group (VG), if this PART is a VG"
       echo "## * <size>           you can use the keyword 'all' to assign all the"
       echo "##                    remaining space of the drive to the *last* partition."
-      echo "##                    you can use M/G/T for unit specification in MIB/GIB/TIB"
+      echo "##                    you can use M/G/T for unit specification in MiB/GiB/TiB"
       echo "##"
       echo "## notes:"
       echo "##   - extended partitions are created automatically"
       echo "##   - '/boot' cannot be on a xfs filesystem"
       echo "##   - '/boot' cannot be on LVM!"
       echo "##   - when using software RAID 0, you need a '/boot' partition"
+      if [ "$UEFI" -eq 1 ]; then
+        echo "##   - when installing in UEFI mode, you need an EFI System Partition (ESP) '/boot/efi'"
+        echo "##     with at least 256MB space"
+      fi
       echo "##"
       echo "## example without LVM (default):"
       echo "## -> 4GB   swapspace"
       echo "## -> 512MB /boot"
+      if [ "$UEFI" -eq 1 ]; then
+        echo "## -> 256MB /boot/efi"
+      fi
       echo "## -> 10GB  /"
       echo "## -> 5GB   /tmp"
       echo "## -> all the rest to /home"
       echo "#PART swap   swap        4G"
       echo "#PART /boot  ext2      512M"
+      if [ "$UEFI" -eq 1 ]; then
+        echo "#PART /boot/efi  esp          256M"
+      fi
       echo "#PART /      ext4       10G"
       echo "#PART /tmp   xfs         5G"
       echo "#PART /home  ext3       all"
@@ -456,9 +471,27 @@ create_config() {
       SWAPSIZE=$((RAM / 2 / 1024 + 1))
     fi
 
-    DEFAULTPARTS=${DEFAULTPARTS/SWAPSIZE##/$SWAPSIZE}
-    DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/SWAPSIZE##/$SWAPSIZE}
-    DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/SWAPSIZE##/$SWAPSIZE}
+    ESPPART='PART /boot/efi esp 256M\n'
+
+    if [ "$UEFI" -eq 1 ]; then
+      # replace UEFI## placeholder
+      DEFAULTPARTS=${DEFAULTPARTS/UEFI##/$ESPPART}
+      DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/UEFI##/$ESPPART}
+      DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/UEFI##/$ESPPART}
+      # replace SWAPSIZE## placeholder
+      DEFAULTPARTS=${DEFAULTPARTS/SWAPSIZE##/$SWAPSIZE}
+      DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/SWAPSIZE##/$SWAPSIZE}
+      DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/SWAPSIZE##/$SWAPSIZE}
+    else
+      # remove UEFI## placeholder
+      DEFAULTPARTS=${DEFAULTPARTS/UEFI##/}
+      DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/UEFI##/}
+      DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/UEFI##/}
+      # replace SWAPSIZE## placeholder
+      DEFAULTPARTS=${DEFAULTPARTS/SWAPSIZE##/$SWAPSIZE}
+      DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/SWAPSIZE##/$SWAPSIZE}
+      DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/SWAPSIZE##/$SWAPSIZE}
+    fi
 
     # use ext3 for vservers, because ext4 is too trigger happy of device timeouts
     if isVServer; then
@@ -633,10 +666,9 @@ if [ -n "$1" ]; then
     PART_MOUNT[$i]="$(echo "$PART_LINE" | awk '{print $2}')"
     PART_FS[$i]="$(echo "$PART_LINE" | awk '{print $3}')"
     PART_SIZE[$i]="$(translate_unit "$(echo "$PART_LINE" | awk '{ print $4 }')")"
-    MOUNT_POINT_SIZE[$i]=${PART_SIZE[$i]}
     #calculate new partition size if software raid is enabled and it is not /boot or swap
     if [ "$SWRAID" = "1" ]; then
-      if [ "${PART_MOUNT[$i]}" != "/boot" ] && [ "${PART_SIZE[$i]}" != "all" ] && [ "${PART_MOUNT[$i]}" != "swap" ]; then
+      if [ "${PART_MOUNT[$i]}" != "/boot" ] && [ "${PART_MOUNT[$i]}" != "/boot/efi" ] && [ "${PART_SIZE[$i]}" != "all" ] && [ "${PART_MOUNT[$i]}" != "swap" ]; then
         if [ "$SWRAIDLEVEL" = "0" ]; then
           PART_SIZE[$i]=$((${PART_SIZE[$i]}/COUNT_DRIVES))
         elif [ "$SWRAIDLEVEL" = "5" ]; then
@@ -983,7 +1015,8 @@ validate_vars() {
 
   # test if there are partitions in the configfile
   if [ "$PART_COUNT" -gt "0" ]; then
-  WARNBTRFS=0
+    local warnbtrfs=0
+    local espcount=0
     # test each partition line
     for ((i=1; i<=PART_COUNT; i++)); do
 
@@ -994,8 +1027,8 @@ validate_vars() {
         return 1
       fi
 
-      # test if the filesystem is one of our supportet types (btrfs/ext2/ext3/ext4/reiserfs/xfs/swap)
-      CHECK="$(echo "${PART_FS[$i]}" |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^lvm$")"
+      # test if the filesystem is one of our supportet types (btrfs/ext2/ext3/ext4/reiserfs/xfs/swap/esp)
+      CHECK="$(echo "${PART_FS[$i]}" |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^lvm$\|^esp$")"
       if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
         graph_error "ERROR: Filesystem for partition $i is not correct"
         return 1
@@ -1008,11 +1041,29 @@ validate_vars() {
 
       # warn if using btrfs
       if [ "${PART_FS[$i]}" = "btrfs" ]; then
-        WARNBTRFS=1
+        warnbtrfs=1
       fi
 
-      # we can't use bsdtar on non ext2/3/4 partitions
-      CHECK=$(echo "${PART_FS[$i]}" |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$")
+      # count ESP
+      if [ "${PART_FS[$i]}" = "esp" ]; then
+        espcount+=1
+        if [ "${PART_MOUNT[$i]}" != "/boot/efi" ]; then
+          graph_error "ERROR: EFI System Partition (ESP) must be mounted at /boot/efi"
+          return 1
+        else
+          if [ "${PART_SIZE[$i]}" = "all" ]; then
+            graph_error "ERROR: EFI System Partition MUST NOT be all remaining disk space"
+            return 1
+          fi
+          if [ "${PART_SIZE[$i]}" -lt "256" ]; then
+            graph_error "ERROR: Your /boot/efi partition has to be at least 256M (current size: ${PART_SIZE[$i]})"
+            return 1
+          fi
+        fi
+     fi
+
+      # we can't use bsdtar on non ext2/3/4 partitions (also exclude ESP even though it uses FAT)
+      CHECK=$(echo "${PART_FS[$i]}" |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$\|^esp$")
       if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
         export TAR="tar"
         echo "setting TAR to GNUtar" | debugoutput
@@ -1021,6 +1072,12 @@ validate_vars() {
       if [ "${PART_FS[$i]}" = "btrfs" -a "$IAM" = "centos" -a "$IMG_VERSION" -lt 62 ]; then
         graph_error "ERROR: CentOS older than 6.2 doesn't support btrfs"
         return 1
+      fi
+      if [ "${PART_FS[$i]}" = "btrfs" -a "$IAM" = "centos" ]; then
+        if ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)); then
+          graph_error "ERROR: CentOS 8 doesn't support btrfs"
+          return 1
+        fi
       fi
 
       # test if "all" is at the last partition entry
@@ -1032,30 +1089,29 @@ validate_vars() {
 
       # Check if the partition size is a valid number
       if [ "${PART_SIZE[$i]}" != "all" -a "$(echo "${PART_SIZE[$i]}" | sed "s/[0-9]//g")" != "" -o "${PART_SIZE[$i]}" = "0" ]; then
-        graph_error "ERROR: The size of the partiton PART ${PART_MOUNT[$i]} is not a valid number"
+        graph_error "ERROR: The size of the partition PART ${PART_MOUNT[$i]} is not a valid number"
         return 1
       fi
 
-
       # check if /boot partition has at least 200M
       if [ "${PART_MOUNT[$i]}" = "/boot" -a "${PART_SIZE[$i]}" != "all" ]; then
-        if [ "${MOUNT_POINT_SIZE[$i]}" -lt "200" ]; then
-          graph_error "ERROR: Your /boot partition has to be at least 200M (current size: ${MOUNT_POINT_SIZE[$i]})"
+        if [ "${PART_SIZE[$i]}" -lt "200" ]; then
+          graph_error "ERROR: Your /boot partition has to be at least 200M (current size: ${PART_SIZE[$i]})"
           return 1
         fi
       fi
 
       # check if / partition has at least 1500M
       if [ "${PART_MOUNT[$i]}" = "/" -a "${PART_SIZE[$i]}" != "all" ]; then
-        if [ "${MOUNT_POINT_SIZE[$i]}" -lt "1500" ]; then
-          graph_error "ERROR: Your / partition has to be at least 1500M (current size: ${MOUNT_POINT_SIZE[$i]})"
+        if [ "${PART_SIZE[$i]}" -lt "1500" ]; then
+          graph_error "ERROR: Your / partition has to be at least 1500M (current size: ${PART_SIZE[$i]})"
           return 1
         fi
       fi
 
       if [ "$BOOTLOADER" = "grub" ]; then
         if [ "${PART_MOUNT[$i]}" = "/boot" -a "${PART_FS[$i]}" = "xfs" ]; then
-          graph_error "ERROR: /boot partiton will not work properly with xfs"
+          graph_error "ERROR: /boot partition will not work properly with xfs"
           return 1
         fi
 
@@ -1071,14 +1127,19 @@ validate_vars() {
             fi
           done
           if [ "$TMPCHECK" = "0" ]; then
-            graph_error "ERROR: / partiton will not work properly with xfs with no /boot partition"
+            graph_error "ERROR: / partition will not work properly with xfs with no /boot partition"
             return 1
           fi
         fi
       fi
 
     done
-    if [ "$WARNBTRFS" = "1" ]; then
+
+    if [ "$UEFI" -eq 1 ] && [ "$espcount" -ne 1 ]; then
+      graph_error "ERROR: ESP missing or multiple ESP found"
+    fi
+
+    if [ "$warnbtrfs" -eq 1 ]; then
       if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
         echo "WARNING: the btrfs filesystem is still under development. Data loss may occur!" | debugoutput
       else
@@ -1086,8 +1147,8 @@ validate_vars() {
       fi
     fi
   else
-   graph_error "ERROR: The config has no partitions"
-   return 1
+    graph_error "ERROR: The config has no partitions"
+    return 1
   fi
 
 
@@ -1437,7 +1498,7 @@ unmount_all() {
   unmount_errors=0
 
   while read line ; do
-    device="$(echo "$line" | grep -v "^/dev/loop" | grep -v "^/dev/root" | grep "^/" | awk '{ print $1 }')"
+    device="$(echo "$line" | grep -v "^/dev/loop" | grep -v "^/dev/root" | grep "^/" | grep -v '^//.* cifs .*' | awk '{ print $1 }')"
     if [ "$device" ] ; then
       unmount_output="$unmount_output\n$(umount $device 2>&1)"; EXITCODE=$?
       unmount_errors=$[$unmount_errors + $EXITCODE]
@@ -1469,7 +1530,7 @@ stop_lvm_raid() {
 delete_partitions() {
  if [ "$1" ]; then
   # clean RAID information for every partition not only for the blockdevice
-  for raidmember in $(sfdisk -l "$1" 1>/dev/null 2>/dev/null | grep -o "$1[0-9]"); do
+  for raidmember in $(sfdisk -l "$1" 2>/dev/null | grep -o "${1}p\?[0-9]\+"); do
     mdadm --zero-superblock $raidmember 2> /dev/null
   done
   # clean RAID information in superblock of blockdevice
@@ -1607,7 +1668,9 @@ create_partitions() {
 
     # set dummy partition active/bootable in protective MBR to give some too
     # smart BIOS the clue that this disk can be booted in legacy mode
-    sfdisk -A $1 1 --force 1>/dev/null 2>/dev/null
+    if [ "$UEFI" -ne "1" ]; then
+      sfdisk -A $1 1 --force 1>/dev/null 2>/dev/null
+    fi
   else
     parted -s $1 mklabel msdos 1>/dev/null 2>/tmp/$$.tmp
     cat /tmp/$$.tmp | debugoutput
@@ -1617,13 +1680,16 @@ create_partitions() {
   for i in $(seq 1 $PART_COUNT); do
 
    SFDISKTYPE="83"
+   if [ "${PART_FS[$i]}" = "esp" ]; then
+     SFDISKTYPE="ef"
+   fi
    if [ "${PART_FS[$i]}" = "swap" ]; then
      SFDISKTYPE="82"
    fi
    if [ "${PART_MOUNT[$i]}" = "lvm" ]; then
      SFDISKTYPE="8e"
    fi
-   if [ "$SWRAID" -eq "1" ]; then
+   if [[ "$SWRAID" -eq "1" && "${PART_FS[$i]}" != "esp" ]]; then
      SFDISKTYPE="fd"
    fi
 
@@ -1651,7 +1717,7 @@ create_partitions() {
 
      local gpt_part_type="${SFDISKTYPE}00"
 
-     if [ $i -eq $PART_COUNT ]; then
+     if [ $i -eq $PART_COUNT ] && [ "$UEFI" -eq 0 ]; then
        local bios_grub_start=$((1048576 / sectorsize))
        echo "Creating BIOS_GRUB partition" | debugoutput
        sgdisk --new $i:$bios_grub_start:+1M -t $i:EF02 $1 2>&1 | debugoutput
@@ -1772,6 +1838,13 @@ create_partitions() {
   dmraid -a no 2>&1 | debugoutput
   dmsetup remove_all 2>&1 | debugoutput
 
+  # Dump debug info if partprobe fails
+  if ! partprobe "$1" &> /dev/null; then
+    debug "partprobe $1 failed:"
+    dmsetup ls |& debugoutput
+    cat /proc/mdstat | debugoutput
+  fi
+
  return $EXITCODE
  fi
 }
@@ -1786,7 +1859,9 @@ make_fstab_entry() {
 
   if [ "$4" = "swap" ] ; then
     ENTRY="$1$p$2 none swap sw 0 0"
- elif [ "$3" = "lvm" ] ; then
+  elif [ "$4" = "esp" ] ; then
+    ENTRY="$1$p$2 $3 vfat umask=0077 0 1"
+  elif [ "$3" = "lvm" ] ; then
     ENTRY="# $1$2  belongs to LVM volume group '$4'"
   else
     if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
@@ -1837,12 +1912,6 @@ make_swraid() {
     LASTDRIVE="$(eval echo \$DRIVE${COUNT_DRIVES})"
     SEDHDD="$(echo $LASTDRIVE | sed 's/\//\\\//g')"
 
-    LILOEXTRABOOT="raid-extra-boot="
-    for i in $(seq 1 $COUNT_DRIVES) ; do
-      TARGETDISK="$(eval echo \$DRIVE${i})"
-      LILOEXTRABOOT="$LILOEXTRABOOT,$TARGETDISK"
-    done
-
     mv $fstab $fstab.tmp
 
     debug "# create software raid array(s)"
@@ -1866,11 +1935,11 @@ make_swraid() {
     # use it when we have Metadata format 0.90 in Ubuntu 11.04 we have to use
     # /boot with metadata format 0.90
     if [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -lt 1204 ]; then
-    	if [ "$IMG_VERSION" -le 1004 ]; then
-          metadata="--metadata=0.90"
-        else
-          metadata_boot="--metadata=0.90"
-        fi
+      if [ "$IMG_VERSION" -le 1004 ]; then
+        metadata="--metadata=0.90"
+      else
+        metadata_boot="--metadata=0.90"
+      fi
     fi
     [ "$IAM" == "suse" -a "$IMG_VERSION" -lt 123 ] && metadata="--metadata=0.90"
 
@@ -1904,12 +1973,16 @@ make_swraid() {
         local array_layout=''
 
         # GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
-        if [ "$(echo "$line" | grep "/boot")" ]; then
+        if [ "$(echo "$line" | grep "/boot ")" ]; then
           array_raidlevel="1"
           array_metadata=$metadata_boot
         # make swap partiton RAID1 for all levels except RAID0
-        elif [ "$(echo "$line" | grep "swap")" ] && [ "$SWRAIDLEVEL" != "0" ]; then
+        elif [ "$(echo "$line" | grep "swap ")" ] && [ "$SWRAIDLEVEL" != "0" ]; then
           array_raidlevel="1"
+        # make ESP always RAID1 and use metadata 1.0 (end of partition)
+        elif [ "$(echo "$line" | grep "/boot/efi")" ]; then
+          array_raidlevel="1"
+          array_metadata="--metadata=1.0"
         fi
 
         if [ "$RAID_ASSUME_CLEAN" = "1" ]; then
@@ -2087,7 +2160,7 @@ format_partitions() {
         else
           mkfs -t $FS -q $DEV 2>&1 | debugoutput ; EXITCODE=$?
         fi
-      elif [ "$FS" = "btrfs" ]; then
+      elif [ "$FS" = "btrfs" ] || [ "$FS" = "vfat" ]; then
         mkfs -t $FS $DEV 2>&1 | debugoutput ; EXITCODE=$?
       elif [[ "$FS" == 'xfs' ]] && ((xfs_force_v4 == 1)); then
         mkfs -t $FS -q -f $DEV -m crc=0,finobt=0 2>&1 >/dev/null | debugoutput ; EXITCODE=$?
@@ -2104,10 +2177,13 @@ format_partitions() {
 
 mount_partitions() {
   if [ "$1" -a "$2" ]; then
-    fstab="$1"
-    basedir="$2"
+    local fstab="$1"
+    local basedir="$2"
+    #extra variables if /boot/efi is set
+    local efipart=0
+    local efipartdevice=""
 
-    ROOTDEVICE="$(cat $fstab | grep " / " | cut -d " " -f 1)"
+    ROOTDEVICE="$(grep " / " $fstab | cut -d " " -f 1)"
     SYSTEMROOTDEVICE="$ROOTDEVICE"
     SYSTEMBOOTDEVICE="$SYSTEMROOTDEVICE"
 
@@ -2119,6 +2195,13 @@ mount_partitions() {
     while read line ; do
       DEVICE="$(echo $line | cut -d " " -f 1)"
       MOUNTPOINT="$(echo $line | cut -d " " -f 2)"
+      # skip mounting /boot/efi and do it last
+      if [ "$MOUNTPOINT" = "/boot/efi" ]; then
+        efipart=1
+        efipartdevice=$DEVICE
+        continue
+      fi
+
       mkdir -p "$basedir$MOUNTPOINT" 2>&1 | debugoutput
 
       # create lock and run dir for ubuntu if /var has its own filesystem
@@ -2137,6 +2220,13 @@ mount_partitions() {
         SYSTEMBOOTDEVICE="$DEVICE"
       fi
     done < $fstab.tmp
+
+    #create EFI directory in /boot/efi and mount EFI partition
+    if [ "$efipart" -eq 1 ]; then
+      mkdir -p "$basedir/boot/efi" 2>&1 | debugoutput
+      mount "$efipartdevice" "$basedir/boot/efi" 2>&1 | debugoutput
+      mkdir -p "$basedir/boot/efi/EFI/BOOT" 2>&1 | debugoutput
+    fi
 
     if [ "$SWRAID" -eq "1" ]; then
       SYSTEMDEVICE="$SYSTEMBOOTDEVICE"
@@ -2291,12 +2381,23 @@ extract_image() {
       *)return 1;;
     esac
 
+    local tar_options=(-x --anchored --numeric-owner --exclude 'sys' --exclude 'proc' --exclude 'dev')
+    local bsdtar_options=(-x --numeric-owner --exclude '^sys' --exclude '^proc' --exclude '^dev')
+
+    # extract ESP content first, so we can still use bsdtar later
+    if [ "$UEFI" -eq 1 ]; then
+      tar "${tar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" boot/efi 2>&1 | debugoutput ; EXITCODE=$?
+      tar_options+=(--exclude 'boot/efi')
+      bsdtar_options+=(--exclude '^boot/efi')
+    fi
+
     # extract image with given compression
     if [ "$TAR" = "tar" ] || [ ! -x /usr/bin/bsdtar ]; then
-      tar --anchored --numeric-owner --exclude "sys" --exclude "proc" --exclude "dev" $COMPRESSION -x -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
+      tar "${tar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
     else
-      bsdtar --numeric-owner --exclude '^sys' --exclude '^proc' --exclude '^dev' $COMPRESSION -x -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
+      bsdtar "${bsdtar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
     fi
+
     # remove image after extraction if we got it via wget (http(s)/ftp)
     [ "$1" = "http" ] && rm -f $EXTRACTFROM
 
@@ -3312,6 +3413,8 @@ install_robot_report_script() {
       local link_service=1
     elif [[ "$IAM" == 'archlinux' ]]; then
       local link_service=1
+    elif [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)); then
+      local link_service=1
     elif debian_buster_image; then
       local link_service=1
     else
@@ -3519,11 +3622,13 @@ uuid_bugfix() {
     TEMPFILE="$(mktemp)"
     sed -n 's|^/dev/\([hsv]d[a-z][1-9][0-9]\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" > "$TEMPFILE"
     sed -n 's|^/dev/\(nvme[0-9]*n[p0-9]*\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
+    # Also use UUID for md devices to prevent update-initramfs warnings
+    sed -n 's|^/dev/\(md\/[0-9]\+\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
     while read LINE; do
       UUID="$(blkid -o value -s UUID "/dev/$LINE")"
       # not quite perfect. We need to match /dev/sda1 but not /dev/sda10.
       # device name may not always be followed by whitespace
-      [ -e "$FOLD/hdd/etc/fstab" ] && sed -i "s|^/dev/${LINE} |# /dev/${LINE} during Installation (RescueSystem)\nUUID=${UUID} |" "$FOLD/hdd/etc/fstab"
+      [ -e "$FOLD/hdd/etc/fstab" ] && sed -i "s|^/dev/${LINE} |# /dev/${LINE}\nUUID=${UUID} |" "$FOLD/hdd/etc/fstab"
       [ -e "$FOLD/hdd/boot/grub/grub.cfg" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.cfg"
       [ -e "$FOLD/hdd/boot/grub/grub.conf" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.conf"
       [ -e "$FOLD/hdd/boot/grub/menu.lst" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/menu.lst"
@@ -3616,6 +3721,11 @@ function part_test_size() {
   local LIMIT=2096128
 
   GPT=0
+  if [ "$UEFI" -eq 1 ]; then
+    debug "Using GPT partition layout."
+    GPT=1
+    return 0
+  fi
 
   if [ "$FORCE_GPT" = "2" ]; then
     debug "Forcing use of GPT as directed"
