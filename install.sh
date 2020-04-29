@@ -201,7 +201,7 @@ wait_for_udev
 if [ "$LVM" = "1" ]; then
   inc_step
   status_busy "Creating LVM volumes"
-  make_lvm "$FOLD/fstab" 
+  make_lvm "$FOLD/fstab"
   LVM_EXIT=$?
   if [ $LVM_EXIT -eq 2 ] ; then
     status_failed "LVM thin-pool detected! Can't remove automatically!"
@@ -359,10 +359,14 @@ debug "# Setting hostname"
 set_hostname "$NEWHOSTNAME" "$IPADDR" "$IP6ADDR" || status_failed
 status_done
 
-status_busy_nostep "  Generating new SSH keys"
-debug "# Generating new SSH keys"
-generate_new_sshkeys "NIL" || status_failed
-status_done
+if [[ "$GENERATE_NEW_SSH_HOST_KEYS" == no ]]; then
+  debug '-G specified, skipping new SSH host key generation'
+else
+  status_busy_nostep "  Generating new SSH keys"
+  debug "# Generating new SSH keys"
+  generate_new_sshkeys "NIL" || status_failed
+  status_done
+fi
 
 if [ "$SWRAID" = "1" ]; then
   status_busy_nostep "  Generating mdadm config"
@@ -582,7 +586,7 @@ chmod 640 $FOLD/hdd/installimage.debug
 
 echo
 echo_bold "                  INSTALLATION COMPLETE"
-echo_bold "   You can now reboot and log in to your new system with"
-echo_bold "  the same password as you logged in to the rescue system.\n"
+echo_bold "   You can now reboot and log in to your new system with the"
+echo_bold " same credentials that you used to log into the rescue system.\n"
 
 # vim: ai:ts=2:sw=2:et

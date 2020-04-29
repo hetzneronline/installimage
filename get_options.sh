@@ -9,7 +9,7 @@
 
 
 # check command line params / options
-while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:" OPTION ; do
+while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:G:" OPTION ; do
   case $OPTION in
 
     # help
@@ -61,6 +61,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:" OPTION ; do
       echo "  -K <path/url>         Install SSH-Keys from file/URL"
       echo '  -t <yes|no>           Take over rescue system SSH public keys'
       echo '  -u <yes|no>           Allow usb drives'
+      echo '  -G <yes|no>           Generate new SSH host keys (default: yes)'
       echo
       exit 0
     ;;
@@ -242,6 +243,15 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:" OPTION ; do
     ;;
     u)
       [[ -z "$OPTARG" ]] || [[ "${OPTARG,,}" == 'yes' ]] && export ALLOW_USB_DRIVES='1'
+    ;;
+    G)
+      if [[ -n "$OPTARG" ]]; then
+        if [[ "${OPTARG,,}" == 'no' ]]; then
+          export GENERATE_NEW_SSH_HOST_KEYS=no
+        else
+          export GENERATE_NEW_SSH_HOST_KEYS=yes
+        fi
+      fi
     ;;
   esac
 done
