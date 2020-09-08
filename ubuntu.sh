@@ -182,6 +182,11 @@ generate_new_ramdisk() {
       } > "$blacklist_conf"
     fi
 
+    if [ "$CRYPT" = 1 ]; then
+      debug "# Enabling dm-crypt on chroot system"
+      echo "dm-crypt" >> "$FOLD/hdd/etc/modules"
+    fi
+
     # just make sure that we do not accidentally try to install a bootloader
     # when we haven't configured grub yet
     sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
@@ -295,7 +300,7 @@ generate_config_grub() {
   if [ "$UEFI" -eq 1 ]; then
     local efi_target="x86_64-efi"
     local efi_dir="/boot/efi"
-    local efi_grub_options="--no-floppy --no-nvram --removable"
+    local efi_grub_options="--no-floppy --no-nvram --removable --no-uefi-secure-boot"
     # if/after installing grub-efi-amd64-signed, this will always install the "static" grubx64.efi
     execute_chroot_command "grub-install --target=${efi_target} --efi-directory=${efi_dir} ${efi_grub_options} 2>&1"
     declare -i EXITCODE=$?

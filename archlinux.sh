@@ -45,7 +45,7 @@ extract_image() {
   done
 
   local newroot_dir='/mnt'
-  local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget python linux mdadm lvm2 xfsprogs'
+  local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget python cryptsetup linux mdadm lvm2 xfsprogs'
   debug "# run $arch_chroot_script $chroot_dir pacstrap -d -G -M $newroot_dir $archlinux_packages"
   "$arch_chroot_script" "$chroot_dir" pacstrap -d -G -M "$newroot_dir" $archlinux_packages |& debugoutput || return 1
   debug "# umount $chroot_dir"
@@ -128,6 +128,19 @@ extract_image() {
   for opt in cronie haveged systemd-timesyncd; do
     execute_chroot_command "systemctl enable $opt" || return 1
   done
+
+  # sshdgenkeys.service will generate keys on first boot but we need them now
+  if [[ ! -e "$hdd_dir/etc/ssh/ssh_host_dsa_key" ]] || \
+    [[ ! -e "$hdd_dir/etc/ssh/ssh_host_dsa_key.pub" ]] || \
+    [[ ! -e "$hdd_dir/etc/ssh/ssh_host_ecdsa_key" ]] || \
+    [[ ! -e "$hdd_dir/etc/ssh/ssh_host_ecdsa_key.pub" ]] || \
+    [[ ! -e "$hdd_dir/etc/ssh/ssh_host_ed25519_key" ]] || \
+    [[ ! -e "$hdd_dir/etc/ssh/ssh_host_ed25519_key.pub" ]] || \
+    [[ ! -e "$hdd_dir/etc/ssh/ssh_host_rsa_key" ]] || \
+    [[ ! -e "$hdd_dir/etc/ssh/ssh_host_rsa_key.pub" ]]; then
+    debug 'No ssh host keys found, generating host keys'
+    execute_chroot_command 'ssh-keygen -A'
+  fi
 }
 
 generate_config_mdadm() {
@@ -159,6 +172,9 @@ generate_new_ramdisk() {
     hooks+=("$hook")
     [[ "$hook" != 'block' ]] && continue
     hooks+=('mdadm_udev' 'lvm2')
+    if [ "$CRYPT" = "1" ]; then
+      hooks+=('encrypt')
+    fi
   done
   sed -i "s/^HOOKS=.*/HOOKS=(${hooks[*]})/" "$mkinitcpio_conf" |& debugoutput || return 1
   execute_chroot_command 'mkinitcpio -p linux'

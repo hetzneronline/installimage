@@ -408,9 +408,14 @@ run_os_specific_functions() {
 
   ((IMG_VERSION >= 69)) && mkdir -p "$FOLD/hdd/var/run/netreport"
 
-  if ((IMG_VERSION >= 74)) && ((IMG_VERSION != 610)); then
+  if ((IMG_VERSION >= 74)) && ((IMG_VERSION != 610)) && ((IMG_VERSION < 80)); then
     execute_chroot_command 'yum check-update' # || return 1
     execute_chroot_command 'yum -y install polkit' || return 1
+  fi
+
+  # Workaround https://bugs.centos.org/view.php?id=17255 for CentOS 81 minimal
+  if [[ -e "$FOLD/hdd/lib/modules/4.18.0-147.3.1.el8_1.x86_64/vmlinuz" ]]; then
+    execute_chroot_command 'kernel-install add 4.18.0-147.3.1.el8_1.x86_64 /lib/modules/4.18.0-147.3.1.el8_1.x86_64/vmlinuz' || return 1
   fi
 
   return 0

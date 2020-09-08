@@ -29,6 +29,8 @@ IAM=""
 IMG_VERSION=0
 BOOTLOADER=""
 GOVERNOR=""
+CRYPT=""
+CRYPTPASSWORD=""
 # this var is probably not used anymore. keep it for safety
 #SFDISKPARTS=""
 COUNT_DRIVES=0
@@ -302,6 +304,14 @@ create_config() {
         echo ""
         echo "SWRAIDLEVEL $set_level"
       } >> "$CNF"
+    else
+      # automode always take over OPT_SWRAID and OPT_SWRAIDLEVEL
+      if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
+        {
+          [[ -n "$OPT_SWRAID" ]] && echo "SWRAID $OPT_SWRAID"
+          [[ -n "$OPT_SWRAIDLEVEL" ]] && echo "SWRAIDLEVEL $OPT_SWRAIDLEVEL"
+        } >> "$CNF"
+      fi
     fi
 
     # hostname
@@ -570,7 +580,7 @@ create_config() {
 
 getdrives() {
   local drives;
-  drives="$(find /sys/block/ \( -name  'nvme[0-9]*n[0-9]' -o  -name '[hvs]d[a-z]' \) -printf '%f\n' | sort)"
+  drives="$(find /sys/block/ \( -name 'nvme[0-9]*n[0-9]' -o -name '[hvs]d[a-z]' -o -name 'xvd[a-z]' \) -printf '%f\n' | sort)"
   local i=1
 
   #cast drives into an array
@@ -594,6 +604,8 @@ getdrives() {
 # read_vars "CONFIGFILE"
 read_vars(){
 if [ -n "$1" ]; then
+  # reset to 0 in case we are called again after user has been dropped into an editor
+  HASROOT=0
   # count disks again, for setting COUNT_DRIVES correct after restarting installimage
   getdrives
 
@@ -621,6 +633,11 @@ if [ -n "$1" ]; then
   # provided
   FORCE_PASSWORD="$(grep -m1 -e ^FORCE_PASSWORD "$1" |awk '{print $2}')"
   export FORCE_PASSWORD
+
+  # hidden configure option:
+  # skip lvremove/vgremove of matching VG (partitions will still be deleted)
+  PRESERVE_VG="$(grep -m1 -e ^PRESERVE_VG "$1" |awk '{print $2}')"
+  export PRESERVE_VG
 
   # another configure option: allow usb drives
   # if set to 1: allow usb drives
@@ -666,6 +683,8 @@ if [ -n "$1" ]; then
     PART_MOUNT[$i]="$(echo "$PART_LINE" | awk '{print $2}')"
     PART_FS[$i]="$(echo "$PART_LINE" | awk '{print $3}')"
     PART_SIZE[$i]="$(translate_unit "$(echo "$PART_LINE" | awk '{ print $4 }')")"
+    PART_CRYPT[$i]="$(echo "$PART_LINE" | awk '{print $5}')"
+    MOUNT_POINT_SIZE[$i]=${PART_SIZE[$i]}
     #calculate new partition size if software raid is enabled and it is not /boot or swap
     if [ "$SWRAID" = "1" ]; then
       if [ "${PART_MOUNT[$i]}" != "/boot" ] && [ "${PART_MOUNT[$i]}" != "/boot/efi" ] && [ "${PART_SIZE[$i]}" != "all" ] && [ "${PART_MOUNT[$i]}" != "swap" ]; then
@@ -687,7 +706,13 @@ if [ -n "$1" ]; then
     if [ "${PART_MOUNT[$i]}" = "/" ]; then
       HASROOT="true"
     fi
+    if [ -n "${PART_CRYPT[$i]}" ]; then
+      export CRYPT="1"
+    fi
   done < /tmp/part_lines.tmp
+
+  # get encryption password
+  CRYPTPASSWORD="$(grep -e '^CRYPTPASSWORD ' "$1")"
 
   # get LVM volume group config
   LVM_VG_COUNT="$(egrep -c '^PART *lvm ' "$1")"
@@ -810,6 +835,18 @@ validate_vars() {
   if [ -z "$IMAGE_FILE" ]; then
    graph_error "ERROR: No valid IMAGEFILE"
    return 1
+  fi
+
+  if [ "$CRYPT" = "1" ] && [ -z "$CRYPTPASSWORD" ]; then
+    graph_error "ERROR: Value for CRYPTPASSWORD is not defined"
+    return 1
+  fi
+
+  if [ "$CRYPT" = "1" ] && [ "$IAM" = "centos" ]; then
+    if [ "$IMG_VERSION" -lt 70 ] || ((IMG_VERSION == 610)); then
+      graph_error "ERROR: CentOS 7 or higher is needed for encryption!"
+      return 1
+    fi
   fi
 
   # test if FILETYPE is a supported type
@@ -1027,10 +1064,20 @@ validate_vars() {
         return 1
       fi
 
-      # test if the filesystem is one of our supportet types (btrfs/ext2/ext3/ext4/reiserfs/xfs/swap/esp)
-      CHECK="$(echo "${PART_FS[$i]}" |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^lvm$\|^esp$")"
+      # test if the filesystem is one of our supported types (btrfs/ext2/ext3/ext4/reiserfs/xfs/swap/esp)
+      CHECK="$(echo "${PART_FS[$i]}" |grep -e "^bios_grub\|^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^none$\|^esp$")"
       if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
         graph_error "ERROR: Filesystem for partition $i is not correct"
+        return 1
+      fi
+
+      if [ "${PART_FS[$i]}" = "none" ] && [ "${PART_MOUNT[$i]}" != "none" ]; then
+        graph_error "ERROR: No filesystem for partition $i, but mounted to ${PART_MOUNT[$i]}"
+        return 1
+      fi
+      
+      if [ "${PART_FS[$i]}" = "esp" -a "$(echo ${PART_MOUNT[$i]} | grep 'crypt' )" != "" ]; then
+        graph_error "Error: ESP partition can't be crypted"
         return 1
       fi
 
@@ -1296,7 +1343,7 @@ validate_vars() {
 
   # list all mountpoints without the 'lvm' and 'swap' keyword
   for ((i=1; i<=PART_COUNT; i++)); do
-      if [ "${PART_MOUNT[$i]}" != "lvm" ] && [ "${PART_MOUNT[$i]}" != "swap" ]; then
+      if [ "${PART_MOUNT[$i]}" != "lvm" ] && [ "${PART_MOUNT[$i]}" != "swap" ] && [ "${PART_MOUNT[$i]}" != "none" ]; then
           mounts_as_string="$mounts_as_string${PART_MOUNT[$i]}\n"
       fi
   done
@@ -1504,6 +1551,11 @@ unmount_all() {
       unmount_errors=$[$unmount_errors + $EXITCODE]
     fi
   done < /proc/mounts
+  for cryptcontainer in $(dmsetup ls --target crypt | awk '{print $1}') ; do
+    if [ ${cryptcontainer} != "No" ] ; then
+      cryptsetup luksClose ${cryptcontainer} ; EXITCODE=$?
+    fi
+  done
   echo "$unmount_output"
   return $unmount_errors
 }
@@ -1638,6 +1690,7 @@ function get_end_of_partition {
 create_partitions() {
  if [ "$1" ]; then
   local sectorsize; sectorsize=$(blockdev --getss $1)
+  local crypt_part is_crypted
 
   # write standard entries to fstab
   echo "proc /proc proc defaults 0 0" > "$FOLD/fstab"
@@ -1699,6 +1752,12 @@ create_partitions() {
      SFDISKSIZE="${PART_SIZE[$i]}"
    fi
 
+   if [ "${PART_MOUNT[$i]}" = "lvm" ]; then
+     crypt_part=$(grep "${PART_FS[$i]}" /tmp/part_lines.tmp | grep "crypt" | awk '{print $3}')
+   else
+     crypt_part=$(grep "${PART_MOUNT[$i]}" /tmp/part_lines.tmp | grep "crypt" | awk '{print $3}')
+   fi
+   [ -n "$crypt_part" ] && is_crypted='crypt' || is_crypted=''
 
    #create GPT partitions
    if [ $GPT -eq 1 ]; then
@@ -1729,7 +1788,7 @@ create_partitions() {
        fi
      fi
 
-     make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}"
+     make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted"
 
    else
      # part without GPT
@@ -1795,14 +1854,12 @@ create_partitions() {
        parted -s $1 set $PCOUNT raid on
      fi
 
-
      if [ "$PART_COUNT" -ge "4" -a "$i" -ge "4" ]; then
-       make_fstab_entry "$1" "$[$i+1]" "${PART_MOUNT[$i]}" "${PART_FS[$i]}"
+       make_fstab_entry "$1" "$[$i+1]" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted"
      else
-       make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}"
+       make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted"
      fi
    fi
-
   done
 
   # we make sure in get_end_of_partition that the all msdos partitions end at
@@ -1850,7 +1907,7 @@ create_partitions() {
 }
 
 # create fstab entries
-# make_fstab_entry "DRIVE" "NUMBER" "MOUNTPOINT" "FILESYSTEM"
+# make_fstab_entry "DRIVE" "NUMBER" "MOUNTPOINT" "FILESYSTEM" ("crypt")
 make_fstab_entry() {
  if [ "$1" -a "$2" -a "$3" -a "$4" ]; then
   ENTRY=""
@@ -1862,12 +1919,26 @@ make_fstab_entry() {
   elif [ "$4" = "esp" ] ; then
     ENTRY="$1$p$2 $3 vfat umask=0077 0 1"
   elif [ "$3" = "lvm" ] ; then
-    ENTRY="# $1$2  belongs to LVM volume group '$4'"
+    ENTRY="# $1$p$2  belongs to LVM volume group '$4'"
+  elif [ "$4" = "none" ] ; then
+    ENTRY="# $1$p$2  has no filesystem defined"
   else
     if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
       ENTRY="$1$p$2 $3 $4 defaults,discard 0 0"
     else
       ENTRY="$1$p$2 $3 $4 defaults 0 0"
+    fi
+  fi
+
+  if [ "$5" = "crypt" ]; then
+    if [ "$3" = "lvm" ] ; then
+      ENTRY="# $1$p$2  belongs to crypted LVM volume group '$4'"
+    else
+      if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
+        ENTRY="$1$p$2 $3 $4 defaults,discard 0 0 # crypted"
+      else
+        ENTRY="$1$p$2 $3 $4 defaults 0 0 # crypted"
+      fi
     fi
   fi
 
@@ -2017,44 +2088,67 @@ make_lvm() {
     local p; p="$(echo "$disk" | grep nvme)"
     [ -n "$p" ] && p='p'
 
+    # TODO: needs to be removed
     # get device names for PVs depending if we use swraid or not
-    inc_dev=1
-    if [ $SWRAID -eq 1 ]; then
-      for md in $(ls -1 /dev/md/[0-9]*) ; do
-        dev[$inc_dev]="$md"
-        let inc_dev=inc_dev+1
-      done
-    else
-      for inc_dev in $(seq 1 $(ls -1 ${DRIVE1}$p[0-9]* | wc -l)) ; do
-        dev[$inc_dev]="$disk$p$(next_partnum $[$inc_dev-1])"
-      done
-    fi
+    #inc_dev=1
+    #if [ $SWRAID -eq 1 ]; then
+    #  for md in $(ls -1 /dev/md/[0-9]*) ; do
+    #    dev[$inc_dev]="$md"
+    #    let inc_dev=inc_dev+1
+    #  done
+    #else
+    #  for inc_dev in $(seq 1 $(ls -1 ${DRIVE1}$p[0-9]* | wc -l)) ; do
+    #    dev[$inc_dev]="$disk$p$(next_partnum $[$inc_dev-1])"
+    #  done
+    #fi
 
     # remove all Logical Volumes and Volume Groups
     debug "# Removing all Logical Volumes and Volume Groups"
-    vgs --noheadings 2> /dev/null | while read vg pvs; do
-      lvremove -f $vg 2>&1 | debugoutput
-      vgremove -f $vg 2>&1 | debugoutput
-    done
+    while read -r vg; do
+      if [[ "$vg" =~ $PRESERVE_VG ]]; then
+        debug "Not removing VG $vg"
+      else
+        lvremove -f "$vg" 2>&1 | debugoutput
+        vgremove -f "$vg" 2>&1 | debugoutput
+      fi
+    done < <(vgs -o vg_name --noheadings 2> /dev/null)
 
     # remove all Physical Volumes
     debug "# Removing all Physical Volumes"
-    pvs --noheadings 2>/dev/null | while read pv vg; do
-      pvremove -ff $pv 2>&1 | debugoutput
-    done
+    while read -r pv vg; do
+      if [[ "$vg" =~ $PRESERVE_VG ]]; then
+        debug "Not removing VG $vg"
+      else
+        pvremove -ff "$pv" 2>&1 | debugoutput
+      fi
+    done < <(pvs -o pv_name,vg_name --noheadings 2> /dev/null)
 
+    # Read the lines from fstab
+    inc_dev=1
+    while read -r line; do
+      if [ -n "$(echo "$line" | grep "LVM")" ]; then
+        pv="$(echo "$line" | grep "LVM" | awk '{print $2}')"
+        dev[$inc_dev]="$pv"
+        inc_dev=$(( ${inc_dev} + 1 ))
+        debug "# Creating PV $pv"
+        wipefs -af $pv |& debugoutput
+        pvcreate -ff $pv 2>&1 | debugoutput
+      fi
+    done < $fstab
+
+    # TODO: needs to be removed
     # create PVs
-    for i in $(seq 1 $LVM_VG_COUNT) ; do
-      pv=${dev[${LVM_VG_PART[${i}]}]}
-      debug "# Creating PV $pv"
-      wipefs -af $pv |& debugoutput
-      pvcreate -ff $pv 2>&1 | debugoutput
-    done
+    #for i in $(seq 1 $LVM_VG_COUNT) ; do
+    #  pv=${dev[${LVM_VG_PART[${i}]}]}
+    #  debug "# Creating PV $pv"
+    #  wipefs -af $pv |& debugoutput
+    #  pvcreate -ff $pv 2>&1 | debugoutput
+    #done
 
     # create VGs
     for i in $(seq 1 $LVM_VG_COUNT) ; do
       vg=${LVM_VG_NAME[$i]}
-      pv=${dev[${LVM_VG_PART[${i}]}]}
+      pv=${dev[${i}]}
 
       # extend the VG if a VG with the same name already exists
       if [ "$(vgs --noheadings 2>/dev/null | grep "$vg")" ]; then
@@ -2175,6 +2269,33 @@ format_partitions() {
   fi
 }
 
+encrypt_partitions() {
+  if [ "$1" -a "$2" ]; then
+    local fstab="$1"
+    local cryptpassword="$(echo "$2" | awk '{print $2}')"
+    local dev
+    local dev_uuid
+
+    modprobe dm-crypt
+
+    while read line; do
+      if echo "$line" | grep -q "crypted"; then
+        if [ -n "$(echo "$line" | grep "crypted" | grep "LVM")" ]; then
+          dev="$(echo "$line" | grep "crypted" | awk '{print $2}')"
+        else
+          dev="$(echo "$line" | grep "crypted" | awk '{print $1}')"
+        fi
+        echo -n "${cryptpassword}" | cryptsetup --cipher aes-xts-plain64 --key-size 256 --hash sha256 --iter-time 6000 --batch-mode luksFormat "$dev" -
+        dev_uuid=$(blkid $dev -o value -s UUID)
+        echo -n "${cryptpassword}" | cryptsetup --batch-mode luksOpen "$dev" "luks-${dev_uuid}" -
+        touch "$FOLD/crypttab"
+        echo "luks-${dev_uuid} UUID=${dev_uuid} none luks" >> "$FOLD/crypttab"
+        sed -i -e "s+$dev+/dev/mapper/luks-${dev_uuid}+g" "$FOLD/fstab"
+      fi
+    done < $fstab
+  fi
+}
+
 mount_partitions() {
   if [ "$1" -a "$2" ]; then
     local fstab="$1"
@@ -2195,6 +2316,9 @@ mount_partitions() {
     while read line ; do
       DEVICE="$(echo $line | cut -d " " -f 1)"
       MOUNTPOINT="$(echo $line | cut -d " " -f 2)"
+      if [ "$MOUNTPOINT" = "none" ]; then
+        continue
+      fi
       # skip mounting /boot/efi and do it last
       if [ "$MOUNTPOINT" = "/boot/efi" ]; then
         efipart=1
@@ -2403,6 +2527,9 @@ extract_image() {
 
     if [ "$EXITCODE" -eq "0" ]; then
       cp -r "$FOLD/fstab" "$FOLD/hdd/etc/fstab" 2>&1 | debugoutput
+      if [ "$CRYPT" = "1" ]; then
+        cp -r "$FOLD/crypttab" "$FOLD/hdd/etc/crypttab" 2>&1 | debugoutput
+      fi
       return 0
     else
       return 1
@@ -3321,41 +3448,6 @@ create_hostname() {
   fi
 }
 
-install_omsa() {
-# maybe split into separate functions for debian/ubuntu and centos
-#  if [ "$1" ]; then
-#    return 1
-#  fi
-  # need to stop dell_rbu driver before install, or the installation will look
-  # for the kernel modules of the rescue system inside the image
-  /etc/init.d/instsvcdrv stop >/dev/null
-
-  if [ "$IAM" = "debian" ] || [ "$IAM" = "ubuntu" ]; then
-    REPOFILE="$FOLD/hdd/etc/apt/sources.list.d/dell-omsa.list"
-    local codename="precise"
-    if [ "$IAM" = "debian" ] && [ $IMG_VERSION -ge 70 ]; then
-      codename="wheezy"
-    fi
-    echo -e "\n# Community OMSA packages provided by linux.dell.com" >$REPOFILE
-    echo -e "deb http://linux.dell.com/repo/community/$IAM $codename openmanage\n" >>$REPOFILE
-    execute_chroot_command "gpg --keyserver pool.sks-keyservers.net --recv-key 1285491434D8786F"
-    execute_chroot_command "gpg -a --export 1285491434D8786F | apt-key add -"
-    execute_chroot_command "mkdir -p /run/lock"
-    execute_chroot_command "aptitude update >/dev/null"
-    execute_chroot_command "aptitude --without-recommends -y install srvadmin-base srvadmin-idracadm srvadmin-idrac7"; EXITCODE=$?
-    return $EXITCODE
-  elif [ "$IAM" = "centos" ]; then
-    execute_chroot_command "yum -y install perl"
-    execute_chroot_command "wget -q -O - http://linux.dell.com/repo/hardware/latest/bootstrap.cgi | bash"
-    execute_chroot_command "yum -y install srvadmin-base srvadmin-idrac7"
-  else
-    debug "no OMSA packages available for this OS"
-    return 0
-  fi
-  /etc/init.d/instsvcdrv start >/dev/null
-
-}
-
 #
 # translate_unit <value>
 #
@@ -3487,7 +3579,7 @@ report_config() {
   local report_ip="$STATSSERVER"
   local report_status=""
 
-  report_status="$(curl -m 10 -s -k -X POST -T "$config_file" "https://${report_ip}/api/${HWADDR}/image/new")"
+  report_status="$(curl -m 10 -s -k -X POST --data-urlencode "config@$config_file" --data-urlencode "mac=$HWADDR" "https://${report_ip}/api/v1/installimage/installations")"
   echo "report install.conf to rz-admin: ${report_status}" | debugoutput
 
   echo "${report_status}"
@@ -3503,7 +3595,7 @@ report_debuglog() {
   local report_ip="$STATSSERVER"
   local report_status=""
 
-  report_status="$(curl -m 10 -s -k -X POST -T "$DEBUGFILE" "https://${report_ip}/api/${HWADDR}/image/${log_id}/log")"
+  report_status="$(curl -m 10 -s -k -X POST -T "$DEBUGFILE" -H 'Content-Type: text/plain' "https://${report_ip}/api/v1/installimage/installations/${log_id}/logs")"
   echo "report debug.txt to rz-admin: ${report_status}" | debugoutput
 
   return 0
@@ -3620,7 +3712,7 @@ function getHDDsNotInToleranceRange() {
 uuid_bugfix() {
     debug "# change all device names to uuid (e.g. for ide/pata transition)"
     TEMPFILE="$(mktemp)"
-    sed -n 's|^/dev/\([hsv]d[a-z][1-9][0-9]\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" > "$TEMPFILE"
+    sed -n 's|^/dev/\(x?[hvs]d[a-z][1-9][0-9]\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" > "$TEMPFILE"
     sed -n 's|^/dev/\(nvme[0-9]*n[p0-9]*\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
     # Also use UUID for md devices to prevent update-initramfs warnings
     sed -n 's|^/dev/\(md\/[0-9]\+\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"

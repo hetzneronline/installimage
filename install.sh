@@ -111,6 +111,7 @@ test "$SWRAID" = "1" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$LVM" = "1" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$OPT_INSTALL" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$IMAGE_PATH_TYPE" = "http" && TOTALSTEPS=$(($TOTALSTEPS + 1))
+test "$CRYPT" = "1" && TOTALSTEPS=$(($TOTALSTEPS +1))
 
 #
 # Remove partitions
@@ -191,6 +192,15 @@ if [ "$SWRAID" = "1" ]; then
   make_swraid "$FOLD/fstab"
   suspend_swraid_resync
   status_donefailed $?
+fi
+
+wait_for_udev
+
+if [ "$CRYPT" = "1" ]; then
+  inc_step
+  status_busy "Encrypt partitions and create /etc/crypttab"
+  encrypt_partitions "$FOLD/fstab" "$CRYPTPASSWORD"
+  status_done
 fi
 
 wait_for_udev
@@ -492,13 +502,7 @@ if [ "$OPT_INSTALL" ]; then
         status_busy_nostep "  Installing PLESK Control Panel"
         debug "# installing PLESK"
         install_plesk "$opt_item"
-	status_donefailed $?
-        ;;
-      omsa)
-        status_busy_nostep "  Installing Open Manage"
-        debug "# installing OMSA"
-        install_omsa
-	status_donefailed $?
+        status_donefailed $?
         ;;
     esac
   done
