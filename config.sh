@@ -78,14 +78,14 @@ export OSMENULIST=(
 )
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
-export PROXMOX5_BASE_IMAGE="Debian-911-stretch-64-minimal"
-export PROXMOX6_BASE_IMAGE="Debian-103-buster-64-minimal"
+export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
+export PROXMOX6_BASE_IMAGE="Debian-105-buster-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.de/plesk
-export PLESK_STD_VERSION=PLESK_17_8_11
+export PLESK_STD_VERSION=PLESK_18_0_29
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats
