@@ -64,6 +64,7 @@ export DEFAULTGOVERNOR="ondemand"
 export V6ONLY="0"
 
 export UEFI="0"
+declare -x -i BTRFS=0
 
 # dialog settings
 export DIATITLE="$COMPANY"

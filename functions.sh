@@ -31,6 +31,13 @@ BOOTLOADER=""
 GOVERNOR=""
 CRYPT=""
 CRYPTPASSWORD=""
+declare -i BTRFS_VOL_COUNT=0
+declare -a BTRFS_VOL_NAME
+declare -a BTRFS_VOL_SIZE
+declare -i BTRFS_SV_COUNT=0
+declare -a BTRFS_SV_VOL
+declare -a BTRFS_SV_NAME
+declare -a BTRFS_SV_MOUNT
 # this var is probably not used anymore. keep it for safety
 #SFDISKPARTS=""
 COUNT_DRIVES=0
@@ -363,19 +370,26 @@ create_config() {
       echo ""
       echo "## define your partitions and filesystems like this:"
       echo "##"
-      echo "## PART  <mountpoint/lvm>  <filesystem/VG>  <size in MB>"
+      echo "## PART  <mountpoint/lvm/btrfs.X>  <filesystem/VG>  <size in MB>"
       echo "##"
-      echo "## * <mountpoint/lvm> mountpoint for this filesystem  *OR*  keyword 'lvm'"
-      echo "##                    to use this PART as volume group (VG) for LVM"
+      echo "## * <mountpoint/lvm/btrfs.X>"
+      echo "##            mountpoint for this filesystem *OR*"
+      echo "##            keyword 'lvm' to use this PART as volume group (VG) for LVM *OR*"
+      echo "##            identifier 'btrfs.X' to use this PART as volume for"
+      echo "##            btrfs subvolumes. X can be replaced with a unique"
+      echo "##            alphanumeric keyword"
+      echo "##            NOTE: no support btrfs multi-device volumes"
+      echo "## * <filesystem/VG>"
       if [ "$UEFI" -eq 1 ]; then
-        echo "## * <filesystem/VG>  can be ext2, ext3, reiserfs, xfs, swap, esp *OR*  name"
+        echo "##            can be ext2, ext3, ext4, btrfs, reiserfs, xfs, swap, esp *OR*  name"
       else
-        echo "## * <filesystem/VG>  can be ext2, ext3, reiserfs, xfs, swap  *OR*  name"
+        echo "##            can be ext2, ext3, ext4, btrfs, reiserfs, xfs, swap  *OR*  name"
       fi
-      echo "##                    of the LVM volume group (VG), if this PART is a VG"
-      echo "## * <size>           you can use the keyword 'all' to assign all the"
-      echo "##                    remaining space of the drive to the *last* partition."
-      echo "##                    you can use M/G/T for unit specification in MiB/GiB/TiB"
+      echo "##            of the LVM volume group (VG), if this PART is a VG."
+      echo "## * <size>"
+      echo "##            you can use the keyword 'all' to assign all the"
+      echo "##            remaining space of the drive to the *last* partition."
+      echo "##            you can use M/G/T for unit specification in MiB/GiB/TiB"
       echo "##"
       echo "## notes:"
       echo "##   - extended partitions are created automatically"
@@ -415,7 +429,6 @@ create_config() {
       echo "## -> all the rest for LVM VG 'vg0'"
       echo "#PART /boot  ext3     512M"
       echo "#PART lvm    vg0       all"
-
       echo "#"
       echo "## logical volume definitions:"
       echo "#LV <VG> <name> <mount> <filesystem> <size>"
@@ -425,6 +438,22 @@ create_config() {
       echo "#LV vg0   tmp    /tmp     reiserfs      5G"
       echo "#LV vg0   home   /home    xfs          20G"
       echo "#"
+      echo "##"
+      echo "## to use btrfs subvolumes, define a volume identifier on a partition"
+      echo "##"
+      echo "## example with btrfs subvolumes:"
+      echo "##"
+      echo "## -> all space on one partition with volume 'btrfs.1'"
+      echo "#PART btrfs.1    btrfs       all"
+      echo "##"
+      echo "## btrfs subvolume definitions:"
+      echo "#SUBVOL <volume> <subvolume> <mount>"
+      echo "#"
+      echo "#SUBVOL btrfs.1  @           /"
+      echo "#SUBVOL btrfs.1  @/usr       /usr"
+      echo "#SUBVOL btrfs.1  @home       /home"
+
+
     } >> "$CNF"
 
     if [ -x "/usr/local/bin/hwdata" ]; then
@@ -757,9 +786,50 @@ if [ -n "$1" ]; then
   [ "$LVM_VG_COUNT" != "0" ] && [ "$LVM_LV_COUNT" != "0" ] && LVM="1" || LVM="0"
 
 
+  # get btrfs config
+  local btrfs_vol_all btrfs_sv_all
+
+  BTRFS_VOL_COUNT=$(grep -P -c '^PART *btrfs\.\w+' "$1")
+  btrfs_vol_all=$(grep -P '^PART *btrfs\.\w+' "$1")
+
+  i=1
+  while IFS= read -r line
+  do
+    BTRFS_VOL_NAME[$i]=$(echo "$line" | awk '{print $2}')
+    BTRFS_VOL_SIZE[$i]=$(echo "$line" | awk '{print $4}')
+    i=$((i+1))
+  done < <(printf '%s\n' "$btrfs_vol_all")
+
+  # get btrfs subvolume config
+  BTRFS_SV_COUNT="$(grep -c -e "^SUBVOL " "$1")"
+  btrfs_sv_all="$(grep -e "^SUBVOL " "$1")"
+
+  i=1
+  while IFS= read -r line
+  do
+    BTRFS_SV_VOL[$i]=$(echo "$line" | awk '{print $2}')
+    BTRFS_SV_NAME[$i]=$(echo "$line" | awk '{print $3}')
+    BTRFS_SV_MOUNT[$i]=$(echo "$line" | awk '{print $4}')
+    if [ "${BTRFS_SV_MOUNT[$i]}" = "/" ]; then
+      HASROOT="true"
+    fi
+    i=$((i+1))
+  done < <(printf '%s\n' "$btrfs_sv_all")
+
+  # set global var if BTRFS volumes and subvolumes are present
+  [ "$BTRFS_VOL_COUNT" -ne 0 ] && [ "$BTRFS_SV_COUNT" -ne 0 ] && BTRFS=1 || BTRFS=0
+
   IMAGE="$(grep -m1 -e ^IMAGE "$1" | awk '{print $2}')"
   # shellcheck disable=SC2154
   [ -e "$wd/$IMAGE" ] && IMAGE="$wd/$IMAGE"
+
+  # Follow symlinks in /root/.oldroot/nfs/images
+  if [[ "$(readlink -f "${IMAGE%/*}")" == '/root/.oldroot/nfs/images' ]] &&
+    [[ -L "$IMAGE" ]]; then
+    debug "# Following symlink $IMAGE, installing $(readlink -f "$IMAGE")"
+    export IMAGE="$(readlink -f "$IMAGE")"
+  fi
+
   IMAGE_PATH="$(dirname "$IMAGE")/"
   IMAGE_FILE="$(basename "$IMAGE")"
   case "$IMAGE_PATH" in
@@ -1052,13 +1122,12 @@ validate_vars() {
 
   # test if there are partitions in the configfile
   if [ "$PART_COUNT" -gt "0" ]; then
-    local warnbtrfs=0
     local espcount=0
     # test each partition line
     for ((i=1; i<=PART_COUNT; i++)); do
 
       # test if the mountpoint is valid (start with / or swap or lvm)
-      CHECK="$(echo "${PART_MOUNT[$i]}" | grep -e "^none\|^/\|^swap$\|^lvm$")"
+      CHECK="$(echo "${PART_MOUNT[$i]}" | grep -P '^(/\w*|none$|swap$|lvm$|btrfs\.\w+)')"
       if [ -z "$CHECK" ]; then
         graph_error "ERROR: Mountpoint for partition $i is not correct"
         return 1
@@ -1075,7 +1144,7 @@ validate_vars() {
         graph_error "ERROR: No filesystem for partition $i, but mounted to ${PART_MOUNT[$i]}"
         return 1
       fi
-      
+
       if [ "${PART_FS[$i]}" = "esp" -a "$(echo ${PART_MOUNT[$i]} | grep 'crypt' )" != "" ]; then
         graph_error "Error: ESP partition can't be crypted"
         return 1
@@ -1084,11 +1153,6 @@ validate_vars() {
       if [ "${PART_FS[$i]}" = "reiserfs" -a "$IAM" = "centos" ]; then
         graph_error "ERROR: centos doesn't support reiserfs"
         return 1
-      fi
-
-      # warn if using btrfs
-      if [ "${PART_FS[$i]}" = "btrfs" ]; then
-        warnbtrfs=1
       fi
 
       # count ESP
@@ -1109,7 +1173,9 @@ validate_vars() {
         fi
      fi
 
-      # we can't use bsdtar on non ext2/3/4 partitions (also exclude ESP even though it uses FAT)
+      # We can't use bsdtar on non ext2/3/4 partitions because xfs/btrfs can't handle
+      # secondary ext-only flags and we can't just extract the xattrs we want with bsdtar.
+      # Also exclude ESP even though it uses FAT because we handle it seperately
       CHECK=$(echo "${PART_FS[$i]}" |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$\|^esp$")
       if [ -z "$CHECK" -a "${PART_MOUNT[$i]}" != "lvm" ]; then
         export TAR="tar"
@@ -1186,13 +1252,6 @@ validate_vars() {
       graph_error "ERROR: ESP missing or multiple ESP found"
     fi
 
-    if [ "$warnbtrfs" -eq 1 ]; then
-      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
-        echo "WARNING: the btrfs filesystem is still under development. Data loss may occur!" | debugoutput
-      else
-        graph_notice "WARNING: the btrfs filesystem is still under development. Data loss may occur!"
-      fi
-    fi
   else
     graph_error "ERROR: The config has no partitions"
     return 1
@@ -1254,7 +1313,8 @@ validate_vars() {
       return 1
     fi
 
-    # test if one of the filesystem is not using ext
+    # We can't use bsdtar on non ext2/3/4 partitions because xfs/btrfs can't handle
+    # secondary ext-only flags and we can't just extract the xattrs we want with bsdtar.
     CHECK=$(echo "$lv_fs" |grep -e "^ext2$\|^ext3$\|^ext4$\|^swap$")
     if [ -z "$CHECK" ]; then
       export TAR="tar"
@@ -1337,6 +1397,54 @@ validate_vars() {
 
   done
 
+  # btrfs checks
+  if [ "$BTRFS" -eq 0 ] && [ "$BTRFS_VOL_COUNT" -ne 0 ] ; then
+    graph_error "ERROR: There are btrfs volumes defined, but no subvolumes defined"
+    return 1
+  fi
+
+  if [ "$BTRFS" = "0" ] && [ "$BTRFS_SV_COUNT" -ne 0 ] ; then
+    graph_error "ERROR: There are btrfs subvolumes defined, but no volumes defined"
+    return 1
+  fi
+
+  for ((vol=1; vol<=BTRFS_VOL_COUNT; vol++));do
+    local pv_vol; pv_vol="${BTRFS_VOL_NAME[$vol]}"
+    local vol_check=0;
+
+    for ((sv=1; sv<=BTRFS_SV_COUNT; sv++));do
+      sv_mount="${BTRFS_SV_MOUNT[$sv]}"
+      sv_vol="${BTRFS_SV_VOL[$sv]}"
+
+      [ "$pv_vol" == "$sv_vol" ] && vol_check=1
+
+      # test if the mountpoint is valid (start with / or swap)
+      local sv_check
+      sv_check="$(echo "$sv_mount" | grep -P "^/\w*")"
+      if [ -z "$sv_check" ]; then
+        graph_error "ERROR: Mountpoint for btrfs subvolume '${BTRFS_SV_NAME[$sv]}' is not correct"
+        return 1
+      fi
+    done
+    if [ "$vol_check" -ne 1 ]; then
+      graph_error "ERROR: No subvolumes defined for btrfs volume '${BTRFS_VOL_NAME[$vol]}'"
+      return 1
+    fi
+  done
+
+  # Check if there is a volume/partition for every subvolume
+  for ((sv=1; sv<=BTRFS_SV_COUNT; sv++));do
+    local sv_vol_check=0
+    sv_vol="${BTRFS_SV_VOL[$sv]}"
+    for ((vol=1; vol<=BTRFS_VOL_COUNT; vol++));do
+      [ "$sv_vol" == "${BTRFS_VOL_NAME[$vol]}" ] && sv_vol_check=1
+    done
+    if [ "$sv_vol_check" -eq 0 ] ; then
+      graph_error "ERROR: BTRFS volume '$sv_vol' not defined"
+      return 1
+    fi
+  done
+
   #check for identical mountpoints listed in "PART" and "LV"
 
   local mounts_as_string=""
@@ -1347,15 +1455,25 @@ validate_vars() {
           mounts_as_string="$mounts_as_string${PART_MOUNT[$i]}\n"
       fi
   done
+
   # append all logical volume mountpoints to $mounts_as_string
   for ((i=1; i<=LVM_LV_COUNT; i++)); do
       mounts_as_string="$mounts_as_string${LVM_LV_MOUNT[$i]}\n"
   done
 
+  # append all btrfs subvolme mountpoints to $mounts_as_string
+  for ((i=1; i<=BTRFS_SV_COUNT; i++)); do
+      mounts_as_string="$mounts_as_string${BTRFS_SV_MOUNT[$i]}\n"
+  done
+
   # check if there are identical mountpoints
   local identical_mount_points; identical_mount_points="$(echo -e "$mounts_as_string" | sort | uniq -d)"
   if [ "$identical_mount_points" ]; then
-     graph_error "ERROR: There are identical mountpoints in the config ($(echo "$identical_mount_points" | tr " " ", "))"
+     if [[ "$identical_mount_points" =~ ^btrfs\.[0-9A-Za-z]+ ]]; then
+       graph_error "ERROR: Duplicate btrfs volumes in config ($(echo "$identical_mount_points" | tr " " ", ")). Multi-device volumes are not supported"
+     else
+       graph_error "ERROR: There are identical mountpoints in the config ($(echo "$identical_mount_points" | tr " " ", "))"
+     fi
      return 1
   fi
 
@@ -1531,6 +1649,13 @@ whoami() {
  export IMG_VERSION
  export IMG_ARCH
  export IMG_EXT
+
+ # Log image info
+ debug "Image info:"
+ {
+   echo "  DISTRIB ID:               $IAM"
+   echo "  DISTRIB RELEASE/CODENAME: $IMG_VERSION"
+ } | debugoutput
 
  return 0
 }
@@ -1922,6 +2047,8 @@ make_fstab_entry() {
     ENTRY="# $1$p$2  belongs to LVM volume group '$4'"
   elif [ "$4" = "none" ] ; then
     ENTRY="# $1$p$2  has no filesystem defined"
+  elif [[ "$3" =~ ^btrfs\.[0-9A-Za-z]+ ]] ; then
+    ENTRY="# $1$p$2  belongs to btrfs volume '$3'"
   else
     if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
       ENTRY="$1$p$2 $3 $4 defaults,discard 0 0"
@@ -2105,7 +2232,7 @@ make_lvm() {
     # remove all Logical Volumes and Volume Groups
     debug "# Removing all Logical Volumes and Volume Groups"
     while read -r vg; do
-      if [[ "$vg" =~ $PRESERVE_VG ]]; then
+      if [[ -n "$PRESERVE_VG" ]] && [[ "$vg" =~ $PRESERVE_VG ]]; then
         debug "Not removing VG $vg"
       else
         lvremove -f "$vg" 2>&1 | debugoutput
@@ -2296,26 +2423,88 @@ encrypt_partitions() {
   fi
 }
 
+create_btrfs_subvolumes() {
+  if [ "$1" ]; then
+    local fstab entries entry dev pv tmp_mount mp vol sv
+    fstab=$1
+    tmpdir=$(mktemp -d /tmp/btrfs.XXXXX)
+
+    # Read the lines from fstab
+    while read -r line; do
+      if [[ "$line" =~ btrfs\.[0-9A-Za-z]+ ]]; then
+        dev=$(echo "$line" | awk '{print $2}')
+        pv="${BASH_REMATCH[0]}"
+        tmp_mount="$tmpdir/$pv"
+        if [ -b "$dev" ]; then
+          debug "# formatting $dev with btrfs"
+          wipefs -af "$dev" |& debugoutput
+          mkfs -t btrfs "$dev" |& debugoutput
+        else
+          return 1
+        fi
+        mkdir -p "$tmp_mount"
+        mount "$dev" "$tmp_mount"
+        for ((i=1; i<=BTRFS_SV_COUNT; i++)); do
+          entry=''
+          vol="${BTRFS_SV_VOL[$i]}"
+          sv="${BTRFS_SV_NAME[$i]}"
+          mp="${BTRFS_SV_MOUNT[$i]}"
+          if [ "$pv" == "$vol" ]; then
+            debug "creating btrfs subvolume $vol/$sv at $mp on $dev"
+            btrfs subvolume create "$tmp_mount/$sv" |& debugoutput
+            entry="$dev $mp btrfs defaults,subvol=$sv 0 0\n"
+            entries="$entries$entry"
+          fi
+        done
+        umount "$tmp_mount"
+      fi
+    done < "$fstab"
+    rm -rf "$tmpdir"
+
+    #Add entries to fstab
+    echo -e "$entries" >> "$fstab"
+    return 0
+  else
+    return 1
+  fi
+}
+
 mount_partitions() {
-  if [ "$1" -a "$2" ]; then
+  if [ "$1" ] && [ "$2" ]; then
     local fstab="$1"
     local basedir="$2"
     #extra variables if /boot/efi is set
     local efipart=0
     local efipartdevice=""
+    local mount_opts
+    local fs
+    local sv
 
-    ROOTDEVICE="$(grep " / " $fstab | cut -d " " -f 1)"
+    ROOTDEVICE=$(grep ' / ' "$fstab" | awk '{print $1}')
     SYSTEMROOTDEVICE="$ROOTDEVICE"
     SYSTEMBOOTDEVICE="$SYSTEMROOTDEVICE"
 
-    mount "$ROOTDEVICE" "$basedir" 2>&1 | debugoutput ; EXITCODE=$?
+    if [ "$BTRFS" -eq 1 ]; then
+      sv=$(grep ' / ' "$fstab" | grep -o -P 'subvol=[@/\w]+')
+      [ -n "$sv" ] && mount_opts+="$sv"
+    fi
+
+    # mount device with root file system
+    if [ -n "$mount_opts" ]; then
+      mount -o "$mount_opts" "$ROOTDEVICE" "$basedir" |& debugoutput ; EXITCODE=$?
+    else
+      mount "$ROOTDEVICE" "$basedir" |& debugoutput ; EXITCODE=$?
+    fi
     [ "$EXITCODE" -ne "0" ] && return 1
 
-    cat $fstab | grep -v " / \|swap" | grep "^/dev/" > $fstab.tmp
+    cat "$fstab" | grep -v " / \|swap" | grep "^/dev/" > $fstab.tmp
 
-    while read line ; do
-      DEVICE="$(echo $line | cut -d " " -f 1)"
-      MOUNTPOINT="$(echo $line | cut -d " " -f 2)"
+    while read -r line ; do
+      sv=''
+      mount_opts=''
+      DEVICE="$(echo $line | awk '{print $1}')"
+      MOUNTPOINT="$(echo $line | awk '{print $2}')"
+      fs="$(echo $line | awk '{print $3}')"
       if [ "$MOUNTPOINT" = "none" ]; then
         continue
       fi
@@ -2324,6 +2513,11 @@ mount_partitions() {
         efipart=1
         efipartdevice=$DEVICE
         continue
+      fi
+
+      if [ "$fs" == 'btrfs' ]; then
+        sv=$(echo "$line" | grep -o -P 'subvol=[@/\w]+')
+        [ -n "$sv" ] && mount_opts+="$sv"
       fi
 
       mkdir -p "$basedir$MOUNTPOINT" 2>&1 | debugoutput
@@ -2336,7 +2530,11 @@ mount_partitions() {
       fi
 
       # mount it
-      mount "$DEVICE" "$basedir$MOUNTPOINT" 2>&1 | debugoutput
+      if [ -n "$mount_opts" ]; then
+        mount -o "$mount_opts" "$DEVICE" "$basedir$MOUNTPOINT" |& debugoutput
+      else
+        mount "$DEVICE" "$basedir$MOUNTPOINT" |& debugoutput
+      fi
       if [ $? -ne 0 ]; then
         return 1
       fi
@@ -2505,6 +2703,11 @@ extract_image() {
       *)return 1;;
     esac
 
+    # While btrfs/xfs may not support all flags stored by bsdtar, we actually
+    # only need to restore selinux attributes and capabilities.  GNUtar could
+    # save&restore these using the following options, but not if archive was
+    # created by bsdtar
+    # --xattrs --xattrs-include=security.capability --xattrs-include=security.selinux
     local tar_options=(-x --anchored --numeric-owner --exclude 'sys' --exclude 'proc' --exclude 'dev')
     local bsdtar_options=(-x --numeric-owner --exclude '^sys' --exclude '^proc' --exclude '^dev')
 

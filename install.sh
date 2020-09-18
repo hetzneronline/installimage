@@ -112,6 +112,7 @@ test "$LVM" = "1" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$OPT_INSTALL" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$IMAGE_PATH_TYPE" = "http" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$CRYPT" = "1" && TOTALSTEPS=$(($TOTALSTEPS +1))
+[ "$BTRFS" -eq 1 ] && TOTALSTEPS=$((TOTALSTEPS + 1))
 
 #
 # Remove partitions
@@ -236,6 +237,12 @@ while read line ; do
   status_donefailed $?
 done < /tmp/fstab.tmp
 
+if [ "$BTRFS" -eq 1 ]; then
+  inc_step
+  status_busy "Creating btrfs subvolumes"
+  create_btrfs_subvolumes "$FOLD/fstab"
+  status_done
+fi
 
 #
 # Mount filesystems
