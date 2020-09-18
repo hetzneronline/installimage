@@ -3,77 +3,97 @@
 #
 # archlinux functions
 #
-# (c) 2013-2018, Hetzner Online GmbH
+# (c) 2013-2020, Hetzner Online GmbH
 #
 
 validate_image() { return 2; }
 
 extract_image() {
+  # only extract images with content, pacstrap otherwise
   if [[ -s "$EXTRACTFROM" ]]; then
-    $(source "$FUNCTIONSFILE"; extract_image "$@")
+    (source "$FUNCTIONSFILE"; extract_image "$@")
     return $?
   fi
 
-  local archlinux_bootstrap_archive="$SCRIPTPATH/../archlinux/archlinux-bootstrap-latest-x86_64.tar.gz"
-  local hdd_dir="$FOLD/hdd"
+  debug '# empty image provided. run pacstrap install'
 
+  # symlink to latest archlinux-bootstrap
+  local archlinux_bootstrap_archive="$SCRIPTPATH/../archlinux/archlinux-bootstrap-latest-x86_64.tar.gz"
+  local archlinux_mirror='https://mirror.hetzner.de/archlinux'
+  local archlinux_packages='base btrfs-progs cronie cryptsetup gptfdisk grub haveged linux linux-firmware lvm2 mdadm net-tools openssh python rsync vim wget xfsprogs'
+
+  # dont extract archlinux-bootstrap to system memory but the target disk
+  local hdd_dir="$FOLD/hdd"
+  debug '# extract archlinux-bootstrap to disk'
   debug "# run tar xzf $archlinux_bootstrap_archive -C $hdd_dir"
   tar xzf "$archlinux_bootstrap_archive" -C "$hdd_dir" |& debugoutput || return 1
 
+  # pacman CheckSpace requires a mount to verify free space
   local chroot_dir="$hdd_dir/root.x86_64"
+  debug '# bindmount bootstrap dir for pacman CheckSpace'
   debug "# mount --bind $chroot_dir $chroot_dir"
   mount --bind "$chroot_dir" "$chroot_dir" |& debugoutput || return 1
+
+  # init pacman
+  debug '# archlinux-bootstrap: init pacman'
   local arch_chroot_script="$chroot_dir/usr/bin/arch-chroot"
-  "$arch_chroot_script" "$chroot_dir" pacman-key --init |& debugoutput || return 1
-  # without v6 connectivity --refresh-keys fails
-  echo 'disable-ipv6' > "$chroot_dir/etc/pacman.d/gnupg/dirmngr.conf"
-  # $ dig hkps.pool.sks-keyservers.net | grep status
-  # ;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 17975
-  local keyserver='pool.sks-keyservers.net'
-  for opt in '--populate archlinux' "--refresh-keys --keyserver=$keyserver"; do
-    debug "# run $arch_chroot_script $chroot_dir pacman-key $opt"
+  for opt in --init '--populate archlinux'; do
+    debug "# archlinux-bootstrap: run $arch_chroot_script $chroot_dir pacman-key $opt"
     "$arch_chroot_script" "$chroot_dir" pacman-key $opt |& debugoutput || return 1
   done
-
   local mirrorlist="$chroot_dir/etc/pacman.d/mirrorlist"
-  local archlinux_mirror_uri='https://mirror.hetzner.de/archlinux'
-  debug "# update $mirrorlist"
-  echo "Server=$archlinux_mirror_uri/\$repo/os/\$arch" > "$mirrorlist" || return 1
+  debug "# archlinux-bootstrap: add hetzner mirror to /etc/pacman.d/mirrorlist"
+  echo "Server=$archlinux_mirror/\$repo/os/\$arch" > "$mirrorlist" || return 1
   for opt in -Syy '--noconfirm -S archlinux-keyring'; do
-    debug "# run $arch_chroot_script $chroot_dir pacman $opt"
+    debug "# archlinux-bootstrap: run $arch_chroot_script $chroot_dir pacman $opt"
     "$arch_chroot_script" "$chroot_dir" pacman $opt |& debugoutput || return 1
   done
 
-  local newroot_dir='/mnt'
-  local archlinux_packages='base btrfs-progs cronie gptfdisk grub haveged net-tools openssh rsync vim wget python cryptsetup linux mdadm lvm2 xfsprogs'
-  debug "# run $arch_chroot_script $chroot_dir pacstrap -d -G -M $newroot_dir $archlinux_packages"
-  "$arch_chroot_script" "$chroot_dir" pacstrap -d -G -M "$newroot_dir" $archlinux_packages |& debugoutput || return 1
-  debug "# umount $chroot_dir"
-  umount "$chroot_dir" |& debugoutput || return 1
-  debug "# run rsync -a --remove-source-files $chroot_dir/$newroot_dir/ $hdd_dir/"
-  rsync -a --remove-source-files "$chroot_dir/$newroot_dir/" "$hdd_dir/" |& debugoutput || return 1
+  # pacstrap
+  local newroot='/mnt'
+  debug "# archlinux-bootstrap: run $arch_chroot_script $chroot_dir pacstrap -d -G -M $newroot $archlinux_packages"
+  "$arch_chroot_script" "$chroot_dir" pacstrap -d -G -M "$newroot" $archlinux_packages |& debugoutput || return 1
 
+  # move newroot
+  debug '# move /mnt to /'
+  umount "$chroot_dir" |& debugoutput || return 1
+  debug "# run rsync -a --remove-source-files $chroot_dir/$newroot/ $hdd_dir/"
+  rsync -a --remove-source-files "$chroot_dir/$newroot/" "$hdd_dir/" |& debugoutput || return 1
+
+  # genfstab
+  debug '# setup /etc/fstab'
   local fstab="$hdd_dir/etc/fstab"
-  debug "# update $fstab"
+  local fstab_bak="$fstab.bak"
+  cp "$fstab" "$fstab_bak"
   {
     echo
     # "$chroot_dir/usr/bin/genfstab" -U "$hdd_dir"
     cat "$FOLD/fstab"
   } >> "$fstab" || return 1
-  debug "# run rm -fr $chroot_dir"
+  diff -Naur "$fstab_bak" "$fstab" | debugoutput
+
+  # remove archlinux-bootstrap
+  debug '# remove archlinux-bootstrap'
   rm -fr "$chroot_dir" |& debugoutput || return 1
 
+  # setup locale
+  debug "# setup /etc/locale.gen"
   local locale_gen_file="$hdd_dir/etc/locale.gen"
-  debug "# update $locale_gen_file"
+  local locale_gen_file_bak="$locale_gen_file.bak"
+  cp "$locale_gen_file" "$locale_gen_file_bak"
   sed -i 's/#en_US\.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' "$locale_gen_file" |& debugoutput || return 1
+  diff -Naur "$locale_gen_file_bak" "$locale_gen_file" | debugoutput
   execute_chroot_command locale-gen || return 1
-
+  debug "# create /etc/locale.conf"
   local locale_conf="$hdd_dir/etc/locale.conf"
-  debug "# create $locale_conf"
   echo 'LANG=en_US.UTF-8' > "$locale_conf" || return 1
+  diff -Naur /dev/null "$locale_conf" | debugoutput
 
+  # setup bash_profile
   local bash_profile_file="$hdd_dir/root/.bash_profile"
-  debug "# create $bash_profile_file"
+  # do not overwrite, fail if bash_profile exists
+  [[ -e "$bash_profile_file" ]] && return 1
+  debug "# create /root/.bash_profile"
   {
     echo "### $COMPANY installimage"
     echo
@@ -84,48 +104,64 @@ extract_image() {
     echo 'HISTFILESIZE=-1'
     echo 'HISTSIZE=-1'
   } > "$bash_profile_file" || return 1
+  diff -Naur /dev/null "$bash_profile_file" | debugoutput
 
+  # setup inputrc
+  debug "# setup $inputrc"
   local inputrc="$hdd_dir/etc/inputrc"
-  debug "# update $inputrc"
+  local inputrc_bak="$inputrc.bak"
+  cp "$inputrc" "$inputrc.bak"
   sed -i 's/"\\\e\[5~": beginning-of-history/#"\e[5~": beginning-of-history\n"\e[5~": history-search-backward/' "$inputrc" |& debugoutput || return 1
   sed -i 's/"\\\e\[6~": end-of-history/#"\e[6~": end-of-history\n"\e[6~": history-search-forward/' "$inputrc" |& debugoutput || return 1
+  diff -Naur "$inputrc_bak" "$inputrc" | debugoutput
 
+  # setup localtime
   local localtime_file="$hdd_dir/etc/localtime"
-  debug "# link $localtime_file"
+  debug "# point /etc/localtime to /usr/share/zoneinfo/Europe/Berlin"
   ln -f -s /usr/share/zoneinfo/Europe/Berlin "$localtime_file" |& debugoutput || return 1
+  ls -la "$localtime_file" | debugoutput
 
+  # setup mirrorlist
+  debug '# enable all mirrors in /etc/pacman.d/mirrorlist'
   local mirrorlist="$hdd_dir/etc/pacman.d/mirrorlist"
+  sed -i s/^#Server/Server/g "$mirrorlist"
+  debug "# add hetzner mirror to /etc/pacman.d/mirrorlist"
   local mirrorlist_bak="$mirrorlist.bak"
-  debug "# update $mirrorlist"
-  mv "$mirrorlist" "$mirrorlist_bak" |& debugoutput || return 1
+  cp "$mirrorlist" "$mirrorlist_bak" |& debugoutput || return 1
   {
     echo "### $COMPANY installimage"
     echo
     echo "## $COMPANY"
-    echo "Server=$archlinux_mirror_uri/\$repo/os/\$arch"
+    echo "Server=$archlinux_mirror/\$repo/os/\$arch"
     echo
-    sed s/^#Server/Server/g "$mirrorlist_bak"
+    cat "$mirrorlist_bak"
   } > "$mirrorlist" || return 1
+  diff -Naur "$mirrorlist_bak" "$mirrorlist" | debugoutput
 
+  # setup resolv.conf
   local resolv_conf="$hdd_dir/etc/resolv.conf"
-  debug "# update $resolv_conf"
+  debug "# create /etc/resolv.conf"
   {
     for ip in $(shuf -e "${NAMESERVER[@]}") $(shuf -e "${DNSRESOLVER_V6[@]}"); do
       echo "nameserver $ip"
     done
   } > "$resolv_conf" || return 1
+  diff -Naur /dev/null "$resolv_conf" | debugoutput
 
+  # setup vconsole.conf
+  debug "# create /etc/vconsole.conf"
   local vconsole_conf="$hdd_dir/etc/vconsole.conf"
-  debug "# create $vconsole_conf"
   echo 'KEYMAP=de-latin1-nodeadkeys' > "$vconsole_conf" || return 1
-  execute_chroot_command 'pacman-key --init'
-  # without v6 connectivity --refresh-keys fails
-  echo 'disable-ipv6' > "$hdd_dir/etc/pacman.d/gnupg/dirmngr.conf"
-  for opt in '--populate archlinux' "--refresh-keys --keyserver=$keyserver"; do
-    execute_chroot_command "pacman-key $opt" || return 1
-  done
-  rm "$hdd_dir/etc/pacman.d/gnupg/dirmngr.conf" || return 1
-  for opt in cronie haveged systemd-timesyncd; do
+  diff -Naur /dev/null "$vconsole_conf" | debugoutput
+
+  # init pacman
+  debug '# init pacman'
+  execute_chroot_command 'pacman-key --init' || return 1
+  execute_chroot_command "pacman-key --populate archlinux" || return 1
+
+  # enable services
+  debug '# enable services'
+  for opt in cronie haveged sshd systemd-timesyncd; do
     execute_chroot_command "systemctl enable $opt" || return 1
   done
 
@@ -145,19 +181,22 @@ extract_image() {
 
 generate_config_mdadm() {
   [[ -z "$1" ]] && return
+  debug "# setup /etc/mdadm.conf"
   local hdd_dir="$FOLD/hdd"
   local mdadm_conf='/etc/mdadm.conf'
-  debug "# update $hdd_dir/$mdadm_conf"
+  local mdadm_conf_bak="$hdd_dir/$mdadm_conf.bak"
+  cp "$hdd_dir/$mdadm_conf" "$mdadm_conf_bak"
   sed -i 's/^#MAILADDR root@mydomain.tld$/MAILADDR root/g' "$hdd_dir/$mdadm_conf" |& debugoutput || return 1
   echo >> "$hdd_dir/$mdadm_conf" || return 1
   execute_chroot_command "mdadm --examine --scan >> $mdadm_conf"
+  diff -Naur "$mdadm_conf_bak" "$hdd_dir/$mdadm_conf" | debugoutput || :
 }
 
 generate_new_ramdisk() {
   [[ -z "$1" ]] && return
+  debug "# create /etc/modprobe.d/blacklist.conf"
   local hdd_dir="$FOLD/hdd"
   local blacklist_conf="$hdd_dir/etc/modprobe.d/blacklist.conf"
-  debug "# create $blacklist_conf"
   {
     echo "### $COMPANY installimage"
     echo
@@ -165,8 +204,11 @@ generate_new_ramdisk() {
       echo "blacklist $module"
     done
   } > "$blacklist_conf" || return 1
+  diff -Naur /dev/null "$blacklist_conf" | debugoutput
+  debug "# setup /etc/mkinitcpio.conf"
   local mkinitcpio_conf="$hdd_dir/etc/mkinitcpio.conf"
-  debug "# update $mkinitcpio_conf"
+  local mkinitcpio_conf_bak="$mkinitcpio_conf.bak"
+  cp "$mkinitcpio_conf" "$mkinitcpio_conf_bak"
   local hooks=()
   for hook in $(source "$mkinitcpio_conf"; echo "${HOOKS[@]}"); do
     hooks+=("$hook")
@@ -177,25 +219,24 @@ generate_new_ramdisk() {
     fi
   done
   sed -i "s/^HOOKS=.*/HOOKS=(${hooks[*]})/" "$mkinitcpio_conf" |& debugoutput || return 1
+  diff -Naur "$mkinitcpio_conf_bak" "$mkinitcpio_conf" | debugoutput
   execute_chroot_command 'mkinitcpio -p linux'
 }
 
 setup_cpufreq() { return; }
 
 generate_config_grub() {
+  debug "# setup /etc/default/grub"
   local grub_file="$FOLD/hdd/etc/default/grub"
-  debug "# update $grub_file"
+  local grub_file_bak="$grub_file.bak"
+  cp "$grub_file" "$grub_file_bak"
   local grub_linux_default="consoleblank=0 nomodeset"
-
-  if has_threadripper_cpu; then
-    grub_linux_default+=' pci=nommconf'
-  fi
-
-  if is_dell_r6415; then
-    grub_linux_default=${grub_linux_default/nomodeset }
-  fi
-
+  has_threadripper_cpu && grub_linux_default+=' pci=nommconf'
+  is_dell_r6415 && grub_linux_default=${grub_linux_default/nomodeset }
   sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/g" "$grub_file" |& debugoutput || return 1
+  diff -Naur "$grub_file_bak" "$grub_file" | debugoutput
+
+  debug '# install grub'
   if [ "$UEFI" -eq 1 ]; then
     local efi_target="x86_64-efi"
     local efi_dir="/boot/efi"
@@ -220,7 +261,7 @@ generate_config_grub() {
 }
 
 run_os_specific_functions() {
-  execute_chroot_command 'systemctl enable sshd'
+  :
 }
 
 # vim: ai:ts=2:sw=2:et
