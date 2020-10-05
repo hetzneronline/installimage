@@ -646,7 +646,7 @@ if [ -n "$1" ]; then
   # special hidden configure option: configure layout for RAID5, 6 and 10
   RAID_LAYOUT="$(grep -m1 -e ^RAID_LAYOUT "$1" |awk '{print $2}')"
   export RAID_LAYOUT
-
+  
   # special hidden configure option: GPT usage
   # if set to 1, use GPT even on disks smaller than 2TiB
   # if set to 2, always use GPT, even if the OS does not support it
@@ -2169,6 +2169,7 @@ make_swraid() {
         local array_raidlevel="$SWRAIDLEVEL"
         local can_assume_clean=''
         local array_layout=''
+        local array_chunksize=''
 
         # GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
         if [ "$(echo "$line" | grep "/boot ")" ]; then
@@ -2195,7 +2196,21 @@ make_swraid() {
         fi
         debug "Array RAID Level is: '$array_raidlevel' - $can_assume_clean - $array_layout"
         debug "Array metadata is: '$array_metadata'"
-
+        
+          if [ "$array_raidlevel" = "5" ] || [ "$array_raidlevel" = "6" ] || [ "$array_raidlevel" = "10" ]; then
+            if [ -n "$array_chunksize" ]; then
+              if [ "$array_chunksize" = "8" ] || [ "$array_chunksize" = "16" ] || [ "$array_chunksize" = "32" ] || [ "$array_chunksize" = "64" ] || [ "$array_chunksize" = "128" ] || [ "$array_chunksize" = "256" ] || [ "$array_chunksize" = "512" ]; then
+                 yes | mdadm -q -C $raid_device -l$array_raidlevel $array_chunksize -n$n $array_metadata $array_layout $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
+                  else
+                  # Default
+                  array_chunksize="64"
+                  debug "Array Chunk Size is: '$array_chunksize'"
+                  yes | mdadm -q -C $raid_device -l$array_raidlevel $array_chunksize -n$n $array_metadata $array_layout $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
+               fi               
+             fi
+           fi              
+        fi
+        
         yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $array_layout $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
 
         count="$[$count+1]"
