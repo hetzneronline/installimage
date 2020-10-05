@@ -3898,14 +3898,14 @@ function getHDDsNotInToleranceRange() {
   local smallest_hdd; smallest_hdd="$(smallest_hd)"
   local smallest_hdd_size; smallest_hdd_size="$(blockdev --getsize64 "$smallest_hdd")"
   local max_size=$(( smallest_hdd_size * RANGE / 100 ))
-  debug "checking if hdd sizes are within tolerance. min: $smallest_hdd_size / max: $max_size"
+  debug "checking if hdd sizes are within tolerance. min: $smallest_hdd_size Bytes / max: $max_size Bytes"
   for i in $(seq 1 $COUNT_DRIVES); do
     if [ "$(blockdev --getsize64 "$(eval echo "\$DRIVE$i")")" -gt "$max_size" ]; then
       eval echo "\$DRIVE$i"
       debug "DRIVE$i not in range"
     else
       debug "DRIVE$i in range"
-      blockdev --getsize64 "$(eval echo "\$DRIVE$i")" | debugoutput
+      blockdev --getsize64 "$(eval echo "\$DRIVE$i" Bytes)" | debugoutput
     fi
   done
 
