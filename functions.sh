@@ -1048,7 +1048,7 @@ validate_vars() {
     # when drives of different sizes are in a system
     SMALLEST_HDD_SIZE=$DRIVE_SUM_SIZE
     SMALLEST_HDD_SIZE=$((SMALLEST_HDD_SIZE / 1024 / 1024))
-    echo "Size of smallest drive is $DRIVE_SUM_SIZE" | debugoutput
+    echo "Size of smallest drive is $DRIVE_SUM_SIZE Bytes" | debugoutput
     if [ "$SWRAIDLEVEL" = "0" ]; then
       DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE * COUNT_DRIVES))
     elif [ "$SWRAIDLEVEL" = "5" ]; then
@@ -1058,7 +1058,7 @@ validate_vars() {
     elif [ "$SWRAIDLEVEL" = "10" ]; then
       DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE * (COUNT_DRIVES / 2) ))
     fi
-    debug "Calculated size of array is: $DRIVE_SUM_SIZE"
+    debug "Calculated size of array is: $DRIVE_SUM_SIZE Bytes"
   fi
 
   DRIVE_SUM_SIZE=$((DRIVE_SUM_SIZE / 1024 / 1024))
