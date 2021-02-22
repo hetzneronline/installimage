@@ -4396,7 +4396,7 @@ EOF
   execute_command "apt-get --assume-yes update" || return 1
   execute_command "apt-get --assume-yes --ignore-missing install dropbear-initramfs cryptsetup-initramfs" || return 1
   # Configure dropbear.
-  sed -i '/^#DROPBEAR_OPTIONS=/a DROPBEAR_OPTIONS="-s -j -k -I 60 -p $CRYPTDROPBEARPORT"' "$FOLD/hdd/etc/dropbear-initramfs/config" || return 1
+  sed -i "/^#DROPBEAR_OPTIONS=/a DROPBEAR_OPTIONS=\"-s -j -k -I 60 -p ${CRYPTDROPBEARPORT}\"" "$FOLD/hdd/etc/dropbear-initramfs/config" || return 1
 }
 
 # vim: ai:ts=2:sw=2:et
