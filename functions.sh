@@ -749,7 +749,9 @@ if [ -n "$1" ]; then
   CRYPTDROPBEAR="$(grep -m1 -e ^CRYPTDROPBEAR "$1" |awk '{print $2}')"
   export CRYPTDROPBEAR
   CRYPTDROPBEARPORT="$(grep -m1 -e ^CRYPTDROPBEARPORT "$1" |awk '{print $2}')"
-  [ "$CRYPTDROPBEARPORT" = "" ] && CRYPTDROPBEARPORT="22"
+  if [ "$CRYPTDROPBEARPORT" = "" ]; then
+    CRYPTDROPBEARPORT="22"
+  fi
   export CRYPTDROPBEARPORT
 
   # get LVM volume group config
