@@ -390,4 +390,8 @@ ubuntu_grub_fix() {
   rm "$tempfile"
 }
 
+install_crypt_dropbear() {
+  debian_install_crypt_dropbear
+}
+
 # vim: ai:ts=2:sw=2:et

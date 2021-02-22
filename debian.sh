@@ -312,4 +312,8 @@ debian_udev_finish_service_fix() {
   } > "${override_file}"
 }
 
+install_crypt_dropbear() {
+  debian_install_crypt_dropbear
+}
+
 # vim: ai:ts=2:sw=2:et

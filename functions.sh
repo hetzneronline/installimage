@@ -31,6 +31,8 @@ BOOTLOADER=""
 GOVERNOR=""
 CRYPT=""
 CRYPTPASSWORD=""
+CRYPTDROPBEAR=""
+CRYPTDROPBEARPORT=""
 declare -i BTRFS_VOL_COUNT=0
 declare -a BTRFS_VOL_NAME
 declare -a BTRFS_VOL_SIZE
@@ -743,6 +745,13 @@ if [ -n "$1" ]; then
   # get encryption password
   CRYPTPASSWORD="$(grep -e '^CRYPTPASSWORD ' "$1")"
 
+  # get encryption dropbear config
+  CRYPTDROPBEAR="$(grep -m1 -e ^CRYPTDROPBEAR "$1" |awk '{print $2}')"
+  export CRYPTDROPBEAR
+  CRYPTDROPBEARPORT="$(grep -m1 -e ^CRYPTDROPBEARPORT "$1" |awk '{print $2}')"
+  [ "$CRYPTDROPBEARPORT" = "" ] && CRYPTDROPBEARPORT="22"
+  export CRYPTDROPBEARPORT
+
   # get LVM volume group config
   LVM_VG_COUNT="$(egrep -c '^PART *lvm ' "$1")"
   LVM_VG_ALL="$(egrep '^PART *lvm ' "$1")"
@@ -909,6 +918,11 @@ validate_vars() {
 
   if [ "$CRYPT" = "1" ] && [ -z "$CRYPTPASSWORD" ]; then
     graph_error "ERROR: Value for CRYPTPASSWORD is not defined"
+    return 1
+  fi
+
+  if [ "$CRYPTDROPBEAR" = "1" ] && [ -z "$CRYPT" ]; then
+    graph_error "ERROR: Encryption must be enabled to use dropbear!"
     return 1
   fi
 
@@ -4331,6 +4345,56 @@ is_usb_disk() {
   echo "$udevadm_info" | grep --quiet 'DEVTYPE=disk' || return 1
   echo "$udevadm_info" | grep --quiet 'ID_BUS=usb' || return 1
   echo "$udevadm_info" | grep --quiet 'ID_USB_DRIVER=usb-storage'
+}
+
+install_crypt_dropbear() {
+  return 1
+}
+
+debian_install_crypt_dropbear() {
+  # Hetzner Cloud fix for network routes.
+  cat << EOF > "$FOLD/hdd/etc/initramfs-tools/scripts/init-premount/zz-hetzner-cloud-fix-routes"
+#!/bin/sh
+# Hetzner fix DHCP script
+# Fixes network routes for initramfs in Hetzner Cloud.
+PREREQ="dropbear"
+prereqs()
+{
+  echo "$PREREQ"
+}
+case $1 in
+prereqs)
+  prereqs
+  exit 0
+  ;;
+esac
+. /scripts/functions
+log_begin_msg "Fixing network configuration"
+configure_networking
+# Loop through all network configs.
+for conf in /run/net-${DEVICE}.conf /run/net-*.conf; do
+  if [ -e "${conf}" ]; then
+    # source specific bootdevice
+    . ${conf}
+    ip route add ${IPV4GATEWAY}/${IPV4NETMASK} dev ${DEVICE}
+    ip route add default via ${IPV4GATEWAY} dev ${DEVICE}
+    break
+  fi
+done
+log_end_msg
+exit 0
+EOF
+  # Make executable Hetzner Cloud fix for network routes.
+  chmod +x "$FOLD/hdd/etc/initramfs-tools/scripts/init-premount/zz-hetzner-cloud-fix-routes" || return 1
+  # Install ssh keys for dropbear.
+  mkdir -p "$FOLD/hdd/etc/dropbear-initramfs/" || return 1
+  # Add your authorized_keys to dropbear.
+  cat "$FOLD/authorized_keys" >> "$FOLD/hdd/etc/dropbear-initramfs/authorized_keys" || return 1
+  # Install packages.
+  execute_command "apt-get --assume-yes update" || return 1
+  execute_command "apt-get --assume-yes --ignore-missing install dropbear-initramfs cryptsetup-initramfs" || return 1
+  # Configure dropbear.
+  sed -i '/^#DROPBEAR_OPTIONS=/a DROPBEAR_OPTIONS="-s -j -k -I 60 -p $CRYPTDROPBEARPORT"' "$FOLD/hdd/etc/dropbear-initramfs/config" || return 1
 }
 
 # vim: ai:ts=2:sw=2:et

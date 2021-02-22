@@ -392,16 +392,10 @@ if [ "$SWRAID" = "1" ]; then
   status_done
 fi
 
-status_busy_nostep "  Generating ramdisk"
-debug "# Generating ramdisk"
-generate_new_ramdisk "NIL" || status_failed
-status_done
-
 status_busy_nostep "  Generating ntp config"
 debug "# Generating ntp config"
 generate_ntp_config "NIL" || status_failed
 status_done
-
 
 
 #
@@ -414,7 +408,6 @@ setup_cpufreq "$GOVERNOR" || {
 #  exit 1
 }
 #status_donefailed $?
-
 
 
 #
@@ -469,6 +462,24 @@ if [ "$OPT_USE_SSHKEYS" = "1" ] ; then
     copy_ssh_keys
     status_donefailed $?
 fi
+
+#
+# Install Dropbear for encrypted setups.
+#
+if [ "$CRYPTDROPBEAR" = "1" ]; then
+    status_busy_nostep "  Installing dropbear-initramfs"
+    debug "# Installing dropbear-initramfs"
+    install_crypt_dropbear
+    status_donefailed $?
+fi
+
+#
+# Generate ramdisk. Do this after dropbear as it also must update initramfs anyway.
+#
+status_busy_nostep "  Generating ramdisk"
+debug "# Generating ramdisk"
+generate_new_ramdisk "NIL" || status_failed
+status_done
 
 #
 # Write Bootloader

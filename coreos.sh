@@ -368,4 +368,12 @@ run_os_specific_functions() {
   return 0
 }
 
+#
+# Stub for crypt dropbear support.
+# See debian_install_crypt_dropbear() in functions.sh
+#
+install_crypt_dropbear() {
+  return 1
+}
+
 # vim: ai:ts=2:sw=2:et
