@@ -190,6 +190,7 @@ wait_for_udev
 if [ "$SWRAID" = "1" ]; then
   inc_step
   status_busy "Creating software RAID level $SWRAIDLEVEL"
+  set_raid0_default_layout
   make_swraid "$FOLD/fstab"
   suspend_swraid_resync
   status_donefailed $?

@@ -249,7 +249,7 @@ gen_ifcfg_script_centos() {
     if [[ -n "$gateway" ]]; then
       # pointtopoint
       # only for centos < 8
-      if ! ipv4_addr_is_private "$gateway" && ! isVServer && ( ((IMG_VERSION < 80)) || ((IMG_VERSION == 610)) ); then
+      if ! ipv4_addr_is_private "$gateway" && ! isVServer && ( ((IMG_VERSION < 80)) || ((IMG_VERSION == 610)) || is_cpanel_install ); then
         local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
 
         echo "configuring host route $network via $gateway" >&2
@@ -281,7 +281,7 @@ gen_ifcfg_script_centos() {
   echo 'IPV6_DEFROUTE=yes'
 
   # Without NetworkManager IPV6_DEFAULTDEV is required
-  [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)) && return
+  [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)) && ! is_cpanel_install && return
   echo "IPV6_DEFAULTDEV=$predicted_network_interface_name"
 }
 
@@ -322,7 +322,7 @@ setup_etc_sysconfig_network_scripts_centos() {
     fi
 
     # dont create route script for centos 8
-    ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)) && return
+    ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)) && ! is_cpanel_install && return
 
     local route_script="/etc/sysconfig/network-scripts/route-$predicted_network_interface_name"
     debug "# setting up $route_script"

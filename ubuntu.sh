@@ -189,14 +189,18 @@ generate_new_ramdisk() {
 
     # just make sure that we do not accidentally try to install a bootloader
     # when we haven't configured grub yet
-    sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
+    if [[ -e "$FOLD/hdd/etc/kernel-img.conf" ]]; then
+      sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
+    fi
 
     # well, we might just as well update all initramfs and stop findling around
     # to find out which kernel version is the latest
     execute_chroot_command "update-initramfs -u -k $kvers"; EXITCODE=$?
 
     # re-enable updates to grub
-    sed -i "s/do_bootloader = no/do_bootloader = yes/" "$FOLD/hdd/etc/kernel-img.conf"
+    if [[ -e "$FOLD/hdd/etc/kernel-img.conf" ]]; then
+      sed -i "s/do_bootloader = no/do_bootloader = yes/" "$FOLD/hdd/etc/kernel-img.conf"
+    fi
 
     return $EXITCODE
   fi
