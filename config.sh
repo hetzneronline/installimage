@@ -38,7 +38,7 @@ export LOCKFILE='/run/lock/installimage'
 export SYSTEMD_NSPAWN_TMP_DIR="$FOLD/systemd_nspawn"
 
 export MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
-export STATSSERVER="213.133.99.103"
+export STATSSERVER="88.198.31.148"
 export HDDMINSIZE="7000000"
 
 export NAMESERVER=("213.133.98.98" "213.133.99.99" "213.133.100.100")
@@ -80,13 +80,13 @@ export OSMENULIST=(
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
-export PROXMOX6_BASE_IMAGE="Debian-105-buster-64-minimal"
+export PROXMOX6_BASE_IMAGE="Debian-107-buster-64-minimal"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.de/plesk
-export PLESK_STD_VERSION=PLESK_18_0_29
+export PLESK_STD_VERSION=PLESK_18_0_33
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats
