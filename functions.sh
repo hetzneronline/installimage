@@ -727,6 +727,9 @@ if [ -n "$1" ]; then
           PART_SIZE[$i]=$((${PART_SIZE[$i]}/(COUNT_DRIVES/2)))
         fi
       fi
+      if [[ "${PART_MOUNT["$i"]}" == swap ]] && ((SWRAIDLEVEL == 0)); then
+        PART_SIZE["$i"]="$((${PART_SIZE["$i"]}/COUNT_DRIVES))"
+      fi
     fi
     echo "${PART_MOUNT[$i]} : ${PART_SIZE[$i]}" | debugoutput
     if [ "${PART_SIZE[$i]}" != "all" ]; then
@@ -3510,15 +3513,55 @@ copy_ssh_keys() {
 set_ssh_rootlogin() {
   if [ "$1" ]; then
      local permit="$1"
+     local mod_count=0
      case $permit in
        yes|no|without-password|forced-commands-only)
-         sed -i "$FOLD/hdd/etc/ssh/sshd_config" -e "s/^\(#\)\?PermitRootLogin.*/PermitRootLogin $1/"
+         while IFS= read -r line; do
+           # line must include PermitRootLogin
+           if ! echo "$line" | grep -q 'PermitRootLogin'; then
+             echo "$line" >> "$FOLD/sshd_config"
+             continue
+           fi
+
+           # line must not be indented
+           local indentation
+           if echo "$line" | grep -q '#'; then
+             indentation="$(echo "$line" | cut -d '#' -f 1 | tr -d "\n" | wc -m)"
+           else
+             indentation="$(echo "$line" | cut -d 'P' -f 1 | tr -d "\n" | wc -m)"
+           fi
+           if ((indentation != 0)); then
+             echo "$line" >> "$FOLD/sshd_config"
+             continue
+           fi
+
+           # line must not be a comment
+           local word_count
+           word_count="$(echo "$line" | cut -d '#' -f 2- | wc -w)"
+           if ((word_count != 2)); then
+             echo "$line" >> "$FOLD/sshd_config"
+             continue
+           fi
+
+           echo "PermitRootLogin $1" >> "$FOLD/sshd_config"
+         done < "$FOLD/hdd/etc/ssh/sshd_config"
+
+         debug '# set SSH PermitRootLogin'
+         diff -Naur "$FOLD/hdd/etc/ssh/sshd_config" "$FOLD/sshd_config" | debugoutput
+
+         cp "$FOLD/sshd_config" "$FOLD/hdd/etc/ssh/sshd_config"
        ;;
        *)
          debug "invalid option for PermitRootLogin"
          return 1
        ;;
      esac
+     # fail on multiple entries
+     if ((mod_count > 1)); then
+       debug "sshd_config: PermitRootLogin specified more than once"
+       # only abort on nfs image install
+       [[ "$(readlink -f "$IMAGE_PATH")" == '/root/.oldroot/nfs/images' ]] && return 1
+     fi
   else
      return 1
   fi
@@ -3786,34 +3829,6 @@ install_robot_report_script() {
   return 1
 }
 
-report_config() {
-  local config_file="$FOLD/install.conf"
-  # use rz-admin IP (not DNS, might break) to report the install.conf
-  local report_ip="$STATSSERVER"
-  local report_status=""
-
-  report_status="$(curl -m 10 -s -k -X POST --data-urlencode "config@$config_file" --data-urlencode "mac=$HWADDR" "https://${report_ip}/api/v1/installimage/installations")"
-  echo "report install.conf to rz-admin: ${report_status}" | debugoutput
-
-  echo "${report_status}"
-}
-
-report_debuglog() {
-  local log_id="$1"
-  if [ -z "$log_id" ] ; then
-    echo "report_debuglog: no log_id given" | debugoutput
-    return 1
-  fi
-  # use rz-admin IP (not DNS, might break) to report the install.conf
-  local report_ip="$STATSSERVER"
-  local report_status=""
-
-  report_status="$(curl -m 10 -s -k -X POST -T "$DEBUGFILE" -H 'Content-Type: text/plain' "https://${report_ip}/api/v1/installimage/installations/${log_id}/logs")"
-  echo "report debug.txt to rz-admin: ${report_status}" | debugoutput
-
-  return 0
-}
-
 #
 # cleanup
 #
@@ -3854,8 +3869,7 @@ exit_function() {
   echo "  https://robot.your-server.de"
   echo
 
-  report_id="$(report_config)"
-  report_debuglog "$report_id"
+  report_install
 }
 
 #function to check if it is a intel or amd cpu

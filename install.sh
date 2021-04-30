@@ -568,11 +568,9 @@ if [ -n "$OPT_SSHKEYS_URL" ] ; then
 fi
 
 #
-# Report install.conf to rz-admin
-# Report debug.txt to rz-admin
+# Report install.conf and debug.txt to $STATSSERVER
 #
-report_id="$(report_config)"
-report_debuglog $report_id
+report_install
 
 #
 # Save installimage configuration and debug file on the new system

@@ -8,10 +8,10 @@ SWRAIDLEVEL 1
 
 BOOTLOADER grub
 
-HOSTNAME Debian-107-buster-64-minimal
+HOSTNAME Debian-109-buster-64-minimal
 
 PART swap swap 8G
 PART /boot ext3 512M
 PART /    ext4 all
 
-IMAGE /root/images/Debian-107-buster-64-minimal.tar.gz
+IMAGE /root/images/Debian-109-buster-64-minimal.tar.gz
