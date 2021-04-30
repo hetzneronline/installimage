@@ -60,6 +60,7 @@ systemd_nspawn_wo_debug() {
       --bind-ro=/etc/resolv.conf:/run/systemd/resolve/stub-resolv.conf \
       -D "$FOLD/hdd" \
       '--property=DeviceAllow=block-* rwm' \
+      '--property=DeviceAllow=/dev/mapper/control rwm' \
       -q /usr/bin/env bash -c "$*"
     r=$?
     if [[ -e "$FOLD/hdd/etc/resolv.conf.bak" ]]; then
