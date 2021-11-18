@@ -18,4 +18,9 @@ installed_os_uses_systemd() {
   installed_os_systemd_version &> /dev/null
 }
 
+# get rescue systemd version
+rescue_systemd_version() {
+  [[ "$(systemctl --version)" =~ systemd\ ([0-9]+) ]] && echo "${BASH_REMATCH[1]}"
+}
+
 # vim: ai:ts=2:sw=2:et

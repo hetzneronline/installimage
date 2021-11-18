@@ -3,7 +3,7 @@
 #
 # install - installation commands
 #
-# (c) 2007-2018, Hetzner Online GmbH
+# (c) 2007-2021, Hetzner Online GmbH
 #
 
 
@@ -71,13 +71,6 @@ echo
 echo_bold "                $COMPANY - installimage\n"
 echo_bold "  Your server will be installed now, this will take some minutes"
 echo_bold "             You can abort at any time with CTRL+C ...\n"
-
-#
-# get active nic and gather network information
-#
-get_active_eth_dev
-gather_network_information
-
 
 #
 # Read configuration
@@ -322,46 +315,23 @@ status_busy "Extracting image ($IMAGE_PATH_TYPE)"
 extract_image "$IMAGE_PATH_TYPE" "$IMAGE_FILE_TYPE"
 status_donefailed $?
 
+# Verify that systemd-nspawn works
+if installed_os_uses_systemd; then
+  debug '# verify that systemd-nspawn works'
+  if ! systemd_nspawn_wo_debug '/usr/bin/env true' |& debugoutput; then
+    exit_function
+    exit 1
+  fi
+fi
+
 #
 # Setup network
 #
 inc_step
-if [[ "$IAM" == 'centos' ]] || [[ "$IAM" == 'debian' ]] || [[ "$IAM" == 'archlinux' ]]; then
-  status_busy "Setting up network config"
-  setup_network_config_new
-  status_donefailed $?
-elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION == 1404)); then
-  status_busy "Setting up network config"
-  setup_network_config_new
-  status_donefailed $?
-elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1604)); then
-  status_busy "Setting up network config"
-  setup_network_config_new
-  status_donefailed $?
-elif [[ "$IAM" == 'suse' ]] && ((IMG_VERSION >= 422)); then
-  status_busy "Setting up network config"
-  setup_network_config_new
-  status_donefailed $?
-else
-  status_busy "Setting up network for $ETHDEV"
-  setup_network_config "$ETHDEV" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
-  status_donefailed $?
-fi
-
-if [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 70)) && ((IMG_VERSION != 610)); then
-  :
-elif [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 710)) && ((IMG_VERSION != 711)); then
-  :
-elif [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1604)); then
-  :
-elif [[ "$IAM" == 'suse' ]] && ((IMG_VERSION >= 422)); then
-  :
-else
-  #
-  # Set udev rules
-  #
-  set_udev_rules
-fi
+status_busy "Setting up network config"
+((IPV4_ONLY == 1)) && debug '# IPV4_ONLY flag set. ignoring IPv6'
+setup_network_config
+status_donefailed $?
 
 #
 # chroot commands
@@ -373,8 +343,9 @@ copy_mtab "NIL"
 
 status_busy_nostep "  Setting hostname"
 debug "# Setting hostname"
-#set_hostname "$NEWHOSTNAME" || status_failed
-set_hostname "$NEWHOSTNAME" "$IPADDR" "$IP6ADDR" || status_failed
+v4_main_ip="$(v4_main_ip)"
+v6_main_ip="$(v6_main_ip)"
+set_hostname "$NEWHOSTNAME" "$(ip_addr_without_suffix "$v4_main_ip")" "$(ip_addr_without_suffix "$v6_main_ip")" || status_failed
 status_done
 
 if [[ "$GENERATE_NEW_SSH_HOST_KEYS" == no ]]; then
@@ -416,8 +387,6 @@ setup_cpufreq "$GOVERNOR" || {
 }
 #status_donefailed $?
 
-
-
 #
 # Set up misc files
 #
@@ -428,8 +397,6 @@ if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1804)); then
 else
   generate_resolvconf || status_failed
 fi
-# already done in set_hostname
-#generate_hosts "$IPADDR" "$IP6ADDR" || status_failed
 generate_sysctlconf || status_failed
 status_done
 

@@ -31,6 +31,7 @@ BOOTLOADER=""
 GOVERNOR=""
 CRYPT=""
 CRYPTPASSWORD=""
+IPV4_ONLY=0
 declare -i BTRFS_VOL_COUNT=0
 declare -a BTRFS_VOL_NAME
 declare -a BTRFS_VOL_SIZE
@@ -52,18 +53,6 @@ SYSTEMROOTDEVICE=""
 SYSTEMBOOTDEVICE=""
 SYSTEMREALBOOTDEVICE=""
 EXTRACTFROM=""
-
-export ETHDEV=""
-export HWADDR=""
-export IPADDR=""
-export CIDR=""
-export BROADCAST=""
-export SUBNETMASK=""
-export GATEWAY=""
-export NETWORK=""
-export IP6ADDR=""
-export IP6PREFLEN=""
-export IP6GATEWAY=""
 
 ROOTHASH=""
 
@@ -126,6 +115,10 @@ generate_menu() {
   if [ "$(uname -m)" != "x86_64" ]; then
     RAWLIST="$(echo "$RAWLIST" |tr ' ' '\n' |grep -v "\-64\-[a-zA-Z]")"
   fi
+
+  # order by image version desc
+  RAWLIST="$(sort -k 1,1 -k 2,2hr -t '-' <<< "$RAWLIST")"
+
   # generate formatted list for usage with "dialog"
   for i in $RAWLIST; do
     TEMPVAR="$i"
@@ -322,8 +315,6 @@ create_config() {
     fi
 
     # hostname
-    get_active_eth_dev
-    gather_network_information
     {
       echo ""
       echo "## =========="
@@ -346,6 +337,17 @@ create_config() {
     [ "$OPT_HOSTNAME" ] && DEFAULT_HOSTNAME="$OPT_HOSTNAME"
     echo "HOSTNAME $DEFAULT_HOSTNAME" >> "$CNF"
     echo "" >> "$CNF"
+
+    # network config
+    {
+      echo
+      echo "## ================"
+      echo "##  NETWORK CONFIG:"
+      echo "## ================"
+      echo
+      echo "# IPV4_ONLY no"
+      echo
+    } >> "$CNF"
 
     ## Calculate how much hardisk space at raid level 0,1,5,6,10
     RAID0=0
@@ -544,11 +546,6 @@ create_config() {
     # use /var instead of /home for all partition when installing plesk
     is_plesk_install && DEFAULTPARTS_BIG="${DEFAULTPARTS_BIG//home/var}"
 
-    if [ "$IAM" = "coreos" ]; then
-      echo "## NOTICE: This image does not support custom partition sizes." >> "$CNF"
-      echo "## NOTICE: Please keep the following lines unchanged. They are just placeholders." >> "$CNF"
-    fi
-
     if [ "$DRIVE_SIZE" -gt "$LIMIT" ]; then
       if [ "$DRIVE_SIZE" -gt "$THREE_TB" ]; then
         [ "$OPT_PARTS" ] && echo -e "$OPT_PARTS" >> "$CNF" || echo -e "$DEFAULTPARTS_LARGE" >> "$CNF"
@@ -601,6 +598,7 @@ create_config() {
         echo "IMAGE $FINALIMAGEPATH$1.$IMAGESEXT" >> "$CNF"
       fi
     fi
+
     echo "" >> "$CNF"
 
   fi
@@ -880,6 +878,11 @@ if [ -n "$1" ]; then
     export OPT_SSHKEYS_URL='/root/.ssh/robot_user_keys'
     export OPT_USE_SSHKEYS=1
   fi
+
+  # IPV4_ONLY setting (y/n)
+  if [[ "$(tac "$1" | grep -m1 ^IPV4_ONLY | awk '{print $2}')" =~ ^y ]]; then
+    export IPV4_ONLY=1
+  fi
 fi
 }
 
@@ -900,8 +903,12 @@ validate_vars() {
   # test if PATHTYPE is a supported type
   CHECK="$(echo $IMAGE_PATH_TYPE |grep -i -e "^http$\|^nfs$\|^local$")"
   if [ -z "$CHECK" ]; then
-   graph_error "ERROR: No valid PATHTYPE"
-   return 1
+    if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
+      echo "ERROR: $IMAGE_PATH_TYPE is no valid PATHTYPE for images" | debugoutput
+    else
+      graph_error "ERROR: $IMAGE_PATH_TYPE is no valid PATHTYPE for images"
+    fi
+    return 1
   fi
 
   # test if IMAGEFILE is given
@@ -925,8 +932,12 @@ validate_vars() {
   # test if FILETYPE is a supported type
   CHECK="$(echo $IMAGE_FILE_TYPE |grep -i -e "^tar$\|^tgz$\|^tbz$\|^txz$\|^bin$\|^bbz$")"
   if [ -z "$CHECK" ]; then
-   graph_error "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images"
-   return 1
+    if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
+      echo "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images" | debugoutput
+    else
+      graph_error "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images"
+    fi
+    return 1
   fi
 
   whoami "$IMAGE_FILE"
@@ -1170,7 +1181,7 @@ validate_vars() {
             return 1
           fi
           if [ "${PART_SIZE[$i]}" -lt "256" ]; then
-            graph_error "ERROR: Your /boot/efi partition has to be at least 256M (current size: ${PART_SIZE[$i]})"
+            graph_error "ERROR: EFI System Partition (ESP) partition has to be at least 256M (current size: ${PART_SIZE[$i]})"
             return 1
           fi
         fi
@@ -1225,34 +1236,15 @@ validate_vars() {
         fi
       fi
 
-      if [ "$BOOTLOADER" = "grub" ]; then
-        if [ "${PART_MOUNT[$i]}" = "/boot" -a "${PART_FS[$i]}" = "xfs" ]; then
-          graph_error "ERROR: /boot partition will not work properly with xfs"
-          return 1
-        fi
-
-        if [ "${PART_MOUNT[$i]}" = "/" -a "${PART_FS[$i]}" = "xfs" ]; then
-          TMPCHECK="0"
-          if [ "$IAM" = "centos"  -a "$IMG_ARCH" = "32" ]; then
-            graph_error "ERROR: CentOS 32bit doesn't support xfs on partition /"
-            return 1
-          fi
-          for ((j=1; j<=PART_COUNT; j++)); do
-            if [ "${PART_MOUNT[$j]}" = "/boot" ]; then
-              TMPCHECK="1"
-            fi
-          done
-          if [ "$TMPCHECK" = "0" ]; then
-            graph_error "ERROR: / partition will not work properly with xfs with no /boot partition"
-            return 1
-          fi
-        fi
-      fi
-
     done
 
     if [ "$UEFI" -eq 1 ] && [ "$espcount" -ne 1 ]; then
-      graph_error "ERROR: ESP missing or multiple ESP found"
+      if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
+        echo "ERROR: ESP missing or multiple ESP found" | debugoutput
+        return 1
+      else
+        graph_error "ERROR: ESP missing or multiple ESP found"
+      fi
     fi
 
   else
@@ -1302,15 +1294,15 @@ validate_vars() {
     lv_vg="${LVM_LV_VG[$lv_id]}"
 
 
-    # test if the mountpoint is valid (start with / or swap)
-    CHECK="$(echo "$lv_mountp" | grep -e "^/\|^swap$")"
+    # test if the mountpoint is valid (start with /, swap or none)
+    CHECK="$(echo "$lv_mountp" | grep -e "^/\|^swap$\|^none$")"
     if [ -z "$CHECK" ]; then
       graph_error "ERROR: Mountpoint for LV '${LVM_LV_NAME[$lv_id]}' is not correct"
       return 1
     fi
 
     # test if the filesystem is one of our supportet types (ext2/ext3/reiserfs/xfs/swap)
-    CHECK="$(echo "$lv_fs" |grep -e "^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$")"
+    CHECK="$(echo "$lv_fs" |grep -e "^btrfs$\|^ext2$\|^ext3$\|^ext4$\|^reiserfs$\|^xfs$\|^swap$\|^none$")"
     if [ -z "$CHECK" ]; then
       graph_error "ERROR: Filesystem for LV '${LVM_LV_NAME[$lv_id]}' is not correct"
       return 1
@@ -1461,7 +1453,9 @@ validate_vars() {
 
   # append all logical volume mountpoints to $mounts_as_string
   for ((i=1; i<=LVM_LV_COUNT; i++)); do
-      mounts_as_string="$mounts_as_string${LVM_LV_MOUNT[$i]}\n"
+      if [ "${LVM_LV_MOUNT[$i]}" != "none" ]; then
+          mounts_as_string="$mounts_as_string${LVM_LV_MOUNT[$i]}\n"
+      fi
   done
 
   # append all btrfs subvolme mountpoints to $mounts_as_string
@@ -1563,23 +1557,6 @@ validate_vars() {
   fi
   # TODO: add check for valid hostname (e.g. no underscores)
 
-  if [ "$MBTYPE" = "D3401-H1" ] || [ "$MBTYPE" = "D3417-B1" ]; then
-    if [ "$IAM" = "debian" ] && [ "$IMG_VERSION" -lt 82 -o "$IMG_VERSION" = '710' -o "$IMG_VERSION" = '711' ]; then
-      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
-        echo "WARNING: Debian versions older than Debian 8.2 have no support for the Intel i219 NIC of this board." | debugoutput
-      else
-        graph_notice "WARNING: Debian versions older than Debian 8.2 have no support for the Intel i219 NIC of this board."
-      fi
-    fi
-    if [ "$IAM" = "centos" ] && [ "$IMG_VERSION" -ge 70 ] && [ "$IMG_VERSION" -lt 72 ]; then
-      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
-        echo "WARNING: CentOS 7.0 and 7.1 have no support for the Intel i219 NIC of this board." | debugoutput
-      else
-        graph_notice "WARNING: CentOS 7.0 and 7.1 have no support for the Intel i219 NIC of this board."
-      fi
-    fi
-  fi
-
   fi
   return 0
 }
@@ -1632,11 +1609,6 @@ whoami() {
     *CentOS*|*centos*|*Centos*)IAM="centos";;
     *Ubuntu*|*ubuntu*)IAM="ubuntu";;
     Arch*|arch*)IAM="archlinux";;
-    CoreOS*|coreos*)
-      IAM="coreos"
-      CLOUDINIT="$FOLD/cloud-config"
-      echo -e "#cloud-config\n" > "$CLOUDINIT"
-    ;;
   esac
  fi
 
@@ -1743,7 +1715,7 @@ function get_end_of_extended() {
   local limit=2199023255040
   # get sector limit
   local sectorlimit=$(( (limit / sectorsize) - 1))
-  local startsec; startsec=$(sgdisk --first-aligned-in-largest "$1" | tail -n1)
+  local startsec; startsec=$(sgdisk --first-aligned-in-largest "$1" 2>/dev/null | tail -n1)
 
   for ((i=1; i<=3; i++)); do
     sum=$((sum + ${PART_SIZE[$i]}))
@@ -1821,8 +1793,13 @@ create_partitions() {
   local sectorsize; sectorsize=$(blockdev --getss $1)
   local crypt_part is_crypted
 
-  # write standard entries to fstab
-  echo "proc /proc proc defaults 0 0" > "$FOLD/fstab"
+  # write standard entries to fstab + all ESPs if multiple are supported by grub-efi-amd64
+  if [ -f "$FOLD/fstab" ] && [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -ge 2004 ] && [ "$UEFI" -eq 1 ]; then
+    echo "$(grep "/boot/efi" "$FOLD/fstab")" > "$FOLD/fstab"
+    echo "proc /proc proc defaults 0 0" >> "$FOLD/fstab"
+  else
+    echo "proc /proc proc defaults 0 0" > "$FOLD/fstab"
+  fi
   # add fstab entries for devpts, sys and shm in CentOS as they are not
   # automatically mounted by init skripts like in Debian/Ubuntu and OpenSUSE
   if [ "$IAM" = "centos" ]; then
@@ -1894,7 +1871,9 @@ create_partitions() {
      # start at 2MiB so we have 1 MiB left for BIOS Boot Partition
      START=$((2097152 / sectorsize))
      if [ $i -gt 1 ]; then
-       START=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
+       SGDISK_RAW_OUTPUT=$(sgdisk --first-aligned-in-largest $1 2>/dev/null)
+       START="$(echo "${SGDISK_RAW_OUTPUT}" | tail -n1)"
+       echo "${SGDISK_RAW_OUTPUT}" | debugoutput
      fi
      END=$(sgdisk --end-of-largest $1 | tail -n 1)
      local gpt_part_size=''
@@ -1927,7 +1906,9 @@ create_partitions() {
      PCOUNT="$i"
 
      if [ "$i" -gt "1" ]; then
-       START=$(sgdisk --first-aligned-in-largest $1 | tail -n1)
+       SGDISK_RAW_OUTPUT=$(sgdisk --first-aligned-in-largest $1 2>/dev/null)
+       START="$(echo "${SGDISK_RAW_OUTPUT}" | tail -n1)"
+       echo "${SGDISK_RAW_OUTPUT}" | debugoutput
      fi
 
      # determine the end sector of the partition
@@ -2109,8 +2090,10 @@ make_swraid() {
 
     dmsetup remove_all
 
+    md_count=0
     count=0
     PARTNUM=0
+    EFIPART=0
     LASTDRIVE="$(eval echo \$DRIVE${COUNT_DRIVES})"
     SEDHDD="$(echo $LASTDRIVE | sed 's/\//\\\//g')"
 
@@ -2148,18 +2131,28 @@ make_swraid() {
     while read line ; do
       PARTNUM="$(next_partnum $count)"
       echo "Line is: \"$line\"" | debugoutput
-      if [ -n "$(echo "$line" | grep "/boot")" -a  "$metadata_boot" == "--metadata=0.90" ] || [ "$metadata" == "--metadata=0.90" ]; then
+      # If multiple ESPs are supported by grub-efi-amd64, a workaround for the fstab is necessary in order to create the RAID array correctly
+      if [ -n "$(echo "$line" | grep "/boot/efi")" ] && [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -ge 2004 ] && [ "$UEFI" -eq 1 ]; then
+        if [ "$EFIPART" -eq 0 ] && [ -n "$(echo $line | grep $LASTDRIVE)" ]; then
+          EFIPART="$[$EFIPART+1]"
+          count="$[$count+1]"
+          echo $line >> $fstab
+        else
+          echo $line >> $fstab
+        fi
+        continue
+      elif [ -n "$(echo "$line" | grep "/boot")" -a  "$metadata_boot" == "--metadata=0.90" ] || [ "$metadata" == "--metadata=0.90" ]; then
         # update fstab - replace /dev/sdaX with /dev/mdY
-        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md$count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md$md_count/g" >> $fstab
       else
         # update fstab - replace /dev/sdaX with /dev/md/Y
-        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md\/$count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md\/$md_count/g" >> $fstab
       fi
 
       # create raid array
       if echo $line | grep $LASTDRIVE >/dev/null ; then
 
-        local raid_device="/dev/md/$count"
+        local raid_device="/dev/md/$md_count"
         local components=""
         local n=0
         for n in $(seq 1 $COUNT_DRIVES) ; do
@@ -2203,6 +2196,7 @@ make_swraid() {
         yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $array_layout $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
 
         count="$[$count+1]"
+        md_count="$[$md_count+1]"
        fi
 
     done < $fstab.tmp
@@ -2329,9 +2323,11 @@ make_lvm() {
 
     # create fstab-entries
     for i in $(seq 1 $LVM_LV_COUNT) ; do
-      echo -n "/dev/${LVM_LV_VG[$i]}/${LVM_LV_NAME[$i]}  " >>$fstab
-      echo -n "${LVM_LV_MOUNT[$i]}  ${LVM_LV_FS[$i]}  " >>$fstab
-      echo    "defaults 0 0" >>$fstab
+      if [ "${LVM_LV_MOUNT[$i]}" != "none" ]; then
+        echo -n "/dev/${LVM_LV_VG[$i]}/${LVM_LV_NAME[$i]}  " >>$fstab
+        echo -n "${LVM_LV_MOUNT[$i]}  ${LVM_LV_FS[$i]}  " >>$fstab
+        echo    "defaults 0 0" >>$fstab
+      fi
     done
 
   else
@@ -2358,7 +2354,7 @@ format_partitions() {
       local xfs_force_v4=0
       if [[ "$FS" == 'xfs' ]]; then
         if [[ "$IAM" == 'centos' ]]; then
-          if ((IMG_VERSION < 70)) || ((IMG_VERSION == 610)); then
+          if ((IMG_VERSION <= 79)) || ((IMG_VERSION == 610)); then
             xfs_force_v4=1
           fi
         elif [[ "$IAM" == 'debian' ]]; then
@@ -2374,6 +2370,8 @@ format_partitions() {
         dd if=/dev/zero of=$DEV bs=256 count=8 &> /dev/null
         # then write swap information
         mkswap $DEV 2>&1 | debugoutput ; EXITCODE=$?
+      elif [ "$FS" = "none" ]; then
+       :
       elif [ "$FS" = "ext2" -o "$FS" = "ext3" -o "$FS" = "ext4" ]; then
         if [[ "$FS" == 'ext4' ]] && [[ "$IAM" == 'centos' ]]; then
           if ((IMG_VERSION < 70)) || ((IMG_VERSION == 610)); then
@@ -2576,6 +2574,7 @@ get_image_info() {
       nfs)
         mount -t "nfs" "$1" "$FOLD/nfs" 2>&1 | debugoutput ; EXITCODE=$?
         if [ "$EXITCODE" -ne "0" -o ! -e "$FOLD/nfs/$3" ]; then
+          debug "Error: Image not found!"
           return 1
         else
           EXTRACTFROM="$FOLD/nfs/$3"
@@ -2611,6 +2610,7 @@ get_image_info() {
             IMAGE_PUBKEY="${1}public-key.asc"
           fi
         else
+          debug "Error: Image not found!"
           return 1
         fi
        ;;
@@ -2638,6 +2638,7 @@ get_image_url() {
     fi
     return 0
   else
+    debug "Error: Image not found!"
     return 1
   fi
 }
@@ -2717,8 +2718,7 @@ extract_image() {
     # only need to restore selinux attributes and capabilities.  GNUtar could
     # save&restore these using the following options, but not if archive was
     # created by bsdtar
-    # --xattrs --xattrs-include=security.capability --xattrs-include=security.selinux
-    local tar_options=(-x --anchored --numeric-owner --exclude 'sys' --exclude 'proc' --exclude 'dev')
+    local tar_options=(-x --anchored --numeric-owner --xattrs --xattrs-include=security.capability --xattrs-include=security.selinux --exclude 'sys' --exclude 'proc' --exclude 'dev')
     local bsdtar_options=(-x --numeric-owner --exclude '^sys' --exclude '^proc' --exclude '^dev')
 
     # extract ESP content first, so we can still use bsdtar later
@@ -2751,199 +2751,11 @@ extract_image() {
   fi
 }
 
-function get_active_eth_dev() {
-  local nic=""
-  for nic in /sys/class/net/eth*; do
-    # remove path from ethX so we only have "ethX"
-    nic=${nic##*/}
-    #test if the interface has a ipv4 adress
-    iptest=$(ip addr show dev "$nic" | grep "$nic"$ | awk '{print $2}')
-    if [ -n "$iptest" ]; then
-      ETHDEV="$nic"
-      break
-    fi
-  done
-}
-
-# gather_network_information
-gather_network_information_old() {
-  HWADDR="$(ifconfig $ETHDEV |grep HWaddr |tr -s ' ' |cut -d " " -f5 |tr [:upper:] [:lower:])"
-  IPADDR="$(ifconfig $ETHDEV |grep "inet addr" |tr -s ' ' |cut -d " " -f3 |cut -d ":" -f2)"
-  BROADCAST="$(ifconfig $ETHDEV |grep "inet addr" |tr -s ' ' |cut -d " " -f4 |cut -d ":" -f2)"
-  SUBNETMASK="$(ifconfig $ETHDEV |grep "inet addr" |tr -s ' ' |cut -d " " -f5 |cut -d ":" -f2)"
-  GATEWAY="$(route -n |tr -s ' ' |grep " UG .*. $ETHDEV" |cut -d " " -f2 | head -n1)"
-  NETWORK="$(route -n |tr -s ' ' |grep "$SUBNETMASK U .*. $ETHDEV" |cut -d " " -f1)"
-}
-
-# gather_network_information "$ETH"
-gather_network_information() {
-  # requires ipcalc from centos/rhel
-  HWADDR=$(ip link show dev $ETHDEV | grep 'link/ether' |  awk '{print $2}' | tr [:upper:] [:lower:])
-  INETADDR=$(ip addr show dev $ETHDEV | grep "inet\ " | awk '{print $2}' )
-#  IPADDR=$(ip addr show dev $ETHDEV | grep "inet\ " | awk '{print $2}' | cut -d"/" -f1)
-  # check for a RFC6598 address, and don't set the v4 vars if we have one
-  local FIRST=$(echo $INETADDR | cut -d "/" -f 1 | cut -d "." -f 1)
-  if [ $FIRST = "100" ]; then
-    debug "not configuring RFC6598 address"
-    V6ONLY=1
-  else
-    IPADDR=$(echo $INETADDR | cut -d "/" -f1)
-    CIDR=$(echo $INETADDR | cut -d "/" -f2)
-    # subnetmask calculation for rhel ipcalc
-    SUBNETMASK=$(ipcalc -m $INETADDR | cut -d "=" -f 2)
-#    BROADCAST=$(ip addr show dev $ETHDEV | grep "inet\ " | awk '{print $4}')
-    BROADCAST=$(ipcalc -b $INETADDR | cut -d "=" -f 2)
-    GATEWAY=$(ip route | grep "default\ via" |  awk '{print $3}')
-    NETWORK=$(ipcalc -n $INETADDR | cut -d"=" -f2)
-  fi
-
-  # ipv6
-  # check for non-link-local ipv6
-  DOIPV6=$(ip -6 addr show dev $ETHDEV | grep -v fe80 | grep -m1 'inet6')
-  if [ -n "$DOIPV6" ]; then
-    local INET6ADDR=$(ip -6 addr show dev $ETHDEV | grep -v fe80 | grep -m1 'inet6' | awk '{print $2}')
-    IP6ADDR=$(echo $INET6ADDR | cut -d"/" -f1)
-    IP6PREFLEN=$(echo $INET6ADDR | cut -d'/' -f2)
-    # we can get default route from here, but we could also assume fe80::1 for now
-    IP6GATEWAY=$(ip -6 route show default |  awk '{print $3}')
-  else
-    if [ "$V6ONLY" -eq 1 ]; then
-      debug "no valid IPv6 adress, but v6 only because of RFC6598 IPv4 address"
-      # we need to do this more graceful
-      exit 1
-    fi
-  fi
-}
-
-# setup_network_config "ETH" "HWADDR" "IPADDR" "BROADCAST" "SUBNETMASK" "GATEWAY" "NETWORK"
-setup_network_config() {
-  if [ "$1" ] && [ "$2" ] && [ "$3" ] && [ "$4" ] && [ "$5" ] && [ "$6" ] && [ "$7" ]; then
-    return 1
-  fi
-}
-
-# setup_network_config_template "ETH" "HWADDR" "IPADDR" "BROADCAST" "SUBNETMASK" "GATEWAY" "NETWORK" "IPADDR6" "NETMASK6" "GATEWAY6"
-setup_network_config_template() {
-  local eth="$1"
-  local hwaddr="$2"
-
-  local ipaddr="$3"
-  local broadcast="$4"
-  local netmask="$5"
-  local gateway="$6"
-  local network="$7"
-
-  local ipaddr6="$8"
-  local netmask6="$9"
-  local gateway6="${10}"
-
-  # copy network template of distro to $FOLD
-  local tpl_net_load="$SCRIPTPATH/templates/network/$IAM.tpl"
-  local tpl_net="$FOLD/network"
-  cp $tpl_net_load $tpl_net
-
-  # copy udev template of distro to $FOLD
-  local tpl_udev_load="$SCRIPTPATH/templates/network/udev.tpl"
-  local tpl_udev="$FOLD/udev"
-  cp $tpl_udev_load $tpl_udev
-
-  # replace necessary network information
-  if [ -n "$eth" -a -n "$hwaddr" ] ; then
-    # replace network information in udev template
-    template_replace "ETH" "$eth" $tpl_udev
-    template_replace "HWADDR" "$hwaddr" $tpl_udev
-
-    # replace network information in network template
-    if [ -n "$ipaddr" -a -n "$broadcast" -a -n "$netmask" -a -n "$gateway" -a -n "$network" ] ; then
-      template_replace "ETH" "$eth" $tpl_net
-      template_replace "HWADDR" "$hwaddr" $tpl_net
-      template_replace "IPADDR" "$ipaddr" $tpl_net
-      template_replace "BROADCAST" "$broadcast" $tpl_net
-      template_replace "NETMASK" "$netmask" $tpl_net
-      template_replace "GATEWAY" "$gateway" $tpl_net
-      template_replace "NETWORK" "$network" $tpl_net
-
-      template_replace "GROUP_IP4" $tpl_net
-    else
-      template_replace "GROUP_IP4" $tpl_net "yes"
-    fi
-
-    # replace ipv6 information in network template if given
-    if [ -n "$ipaddr6" -a -n "$netmask6" -a -n "$gateway6" ] ; then
-      template_replace "IPADDR6" "$ipaddr6" $tpl_net
-      template_replace "NETMASK6" "$netmask6" $tpl_net
-      template_replace "GATEWAY6" "$gateway6" $tpl_net
-
-      template_replace "GROUP_IP6" $tpl_net
-    else
-      template_replace "GROUP_IP6" $tpl_net "yes"
-    fi
-  fi
-
-  # replace duplex settings in network template if given
-  if ! isNegotiated && ! isVServer; then
-    template_replace "GROUP_DUPLEX" $tpl_net
-  else
-    template_replace "GROUP_DUPLEX" $tpl_net "yes"
-  fi
-
-  # get specified extra files from template
-  local tpl_files=$(grep -e "%%% FILE_.*_START %%%" $tpl_net | sed 's/%%% FILE_\(.*\)_START %%%/\1/g')
-  for file in $tpl_files ; do
-    local filename="$FOLD/network_$(echo "$file" | tr [[:upper:]] [[:lower:]])"
-    # get content of extra file
-    local content="$(sed -n "/%%% FILE_${file}_START %%%/,/%%% FILE_${file}_END %%%/p" $tpl_net)"
-
-    # create extra file
-    echo "$content" > $filename
-    # remove extra file from template
-    template_replace "FILE_${file}" $tpl_net "yes"
-    # remove file patterns from extra file
-    template_replace "FILE_${file}" $filename
-  done
-
-  return 0
-}
-
-# template_replace
-# variant 1: template_replace "SEARCH" "FILE"
-#             - this remove lines with SEARCH
-#             - also removes both GROUP lines if specified
-# variant 2: template_replace "SEARCH" "REPLACE" "FILE"
-#             - replace SEARCH with REPLACE
-# variant 3: template_replace "SEARCH" "FILE" "yes"
-#             - replace whole block specified
-function template_replace() {
-  local search="$1"
-  if [ $# -eq 2 ] ; then
-    # if just 2 params set, remove lines
-    local file="$2"
-    if [ -n "$(echo "$search" | egrep "GROUP|FILE")" ] ; then
-      # if search contains GROUP or FILE, remove both group lines
-      search="${search}_\(START\|\END\)"
-    fi
-    sed -i "/%%% $search %%%/d" $file
-  elif [ $# -eq 3 ] ; then
-    if [ "$3" = "yes" ] ; then
-      # if 3rd param set yes, remove group including content
-      local file="$2"
-      sed -i "/%%% ${search}_START %%%/,/%%% ${search}_END %%%/d" $file
-    else
-      # replace pattern with content
-      local replace="$2"
-      local file="$3"
-      sed -i "s/%%% $search %%%/$replace/g" $file
-    fi
-  fi
-
-  return 0
-}
-
 #
 # generate_resolvconf
 #
 # Generate /etc/resolv.conf by adding the nameservers defined in the array
-# $NAMESERVER in a random order.
+# $DNSRESOLVER in a random order.
 #
 generate_resolvconf() {
   if [ "$IAM" = "suse" ] && [ "$IMG_VERSION" -ge 122 ]; then
@@ -2951,56 +2763,32 @@ generate_resolvconf() {
     sed -i -e \
       "s/^NETCONFIG_DNS_POLICY=\".*\"/NETCONFIG_DNS_POLICY=\"\"/" \
       "$FOLD/hdd/etc/sysconfig/network/config"
-
-#    if [ "$V6ONLY" -eq 1 ]; then
-#      debug "# skipping IPv4 DNS resolvers"
-#    else
-#      nameservers=$(echo ${NAMESERVER[@]} | sed -e "s/\./\\\./g")
-#    fi
-#    if [ -n "$DOIPV6" ]; then
-#      # a bit pointless as netconfig will only add the first three DNS resolvers
-#      nameservers=$(echo -n "$nameservers "; echo ${DNSRESOLVER_V6[@]})
-#    fi
-#
-#    debug "#DNS $nameservers"
-#    sed -i -e \
-#      "s/^NETCONFIG_DNS_STATIC_SERVERS=\".*\"/NETCONFIG_DNS_STATIC_SERVERS=\"$nameservers\"/" \
-#      $FOLD/hdd/etc/sysconfig/network/config
-#    execute_chroot_command "netconfig update -f"
   fi
-#  else
-    if [[ -L "$FOLD/hdd/etc/resolv.conf" ]]; then
-      NAMESERVERFILE="$FOLD/hdd/etc/resolvconf/resolv.conf.d/base"
-    else
-      NAMESERVERFILE="$FOLD/hdd/etc/resolv.conf"
-    fi
-    echo -e "### $COMPANY installimage" > $NAMESERVERFILE
-    echo -e "# nameserver config" >> $NAMESERVERFILE
 
-    # IPV4
-    if [ "$V6ONLY" -eq 1 ]; then
-      debug "# skipping IPv4 DNS resolvers"
-    else
-      for index in $(shuf --input-range=0-$(( ${#NAMESERVER[*]} - 1 )) | tr '\n' ' ') ; do
-        echo "nameserver ${NAMESERVER[$index]}" >> $NAMESERVERFILE
-      done
-    fi
+  if [[ -L "$FOLD/hdd/etc/resolv.conf" ]]; then
+    DNSRESOLVERFILE="$FOLD/hdd/etc/resolvconf/resolv.conf.d/base"
+  else
+    DNSRESOLVERFILE="$FOLD/hdd/etc/resolv.conf"
+  fi
 
-    # IPv6
-    if [ -n "$DOIPV6" ]; then
-      for index in $(shuf --input-range=0-$(( ${#DNSRESOLVER_V6[*]} - 1 )) | tr '\n' ' ') ; do
-        echo "nameserver ${DNSRESOLVER_V6[$index]}" >> $NAMESERVERFILE
-      done
-    fi
-#  fi
+  echo -e "### $COMPANY installimage" > $DNSRESOLVERFILE
+  echo -e "# nameserver config" >> $DNSRESOLVERFILE
+  while read nsaddr; do
+    echo "nameserver $nsaddr" >> "$DNSRESOLVERFILE"
+  done < <(randomized_nsaddrs)
+
+  diff -Naur /dev/null "$FOLD/hdd/etc/resolv.conf" | debugoutput
 
   return 0
 }
 
 # set_hostname "HOSTNAME"
 set_hostname() {
-  if [ "$1" -a "$2" ]; then
-    local sethostname="$1"
+  local hostname="$1"
+  local ip4="$2"
+  local ip6="$3"
+  if [[ -n "$hostname" && ( -n "$ip4" || -n "$ip6" ) ]]; then
+    local sethostname="$hostname"
 
     local mailname="$sethostname"
     local hostnamefile="$FOLD/hdd/etc/hostname"
@@ -3042,12 +2830,16 @@ set_hostname() {
     fi
 
     check_fqdn "$mailname"
-    [ $? -eq 1 ] && mailname="$(create_hostname $IPADDR)"
-    if [ -f $mailnamefile ]; then
-      echo "$mailname" > $mailnamefile
-      debug "# set new mailname '$mailname' in $mailnamefile"
+    if (( $? == 1 )) && [[ -f "$mailnamefile" ]]; then
+      local v4_main_ip
+      v4_main_ip="$(v4_main_ip)"
+      if [[ -n "$v4_main_ip" ]]; then
+        if mailname="$(create_hostname "$(ip_addr_without_suffix "$v4_main_ip")")"; then
+          echo "$mailname" > $mailnamefile
+          debug "# set new mailname '$mailname' in $mailnamefile"
+        fi
+      fi
     fi
-
 
     if [ -f $machinefile ]; then
       # clear machine-id from image
@@ -3079,20 +2871,18 @@ set_hostname() {
     fi
 
     echo "### $COMPANY installimage" > $hostsfile
-    echo "# nameserver config" >> $hostsfile
-    echo "# IPv4" >> $hostsfile
     echo "127.0.0.1 localhost.localdomain localhost" >> $hostsfile
-    echo "$2 $fqdn_name $shortname" >> $hostsfile
-    echo "#" >> $hostsfile
-    echo "# IPv6" >> $hostsfile
+    if [[ -n "$ip4" ]]; then
+      echo "$ip4 $fqdn_name $shortname" | xargs >> $hostsfile
+    fi
     echo "::1     ip6-localhost ip6-loopback" >> $hostsfile
     echo "fe00::0 ip6-localnet" >> $hostsfile
     echo "ff00::0 ip6-mcastprefix" >> $hostsfile
     echo "ff02::1 ip6-allnodes" >> $hostsfile
     echo "ff02::2 ip6-allrouters" >> $hostsfile
     echo "ff02::3 ip6-allhosts" >> $hostsfile
-    if [ "$3" ]; then
-      echo "$3 $fqdn_name $shortname" >> $hostsfile
+    if [ "$ip6" ]; then
+      echo "$ip6 $fqdn_name $shortname" | xargs >> $hostsfile
     fi
 
     return 0
@@ -3607,14 +3397,8 @@ generate_ntp_config() {
       debug "# using systemd-timesyncd"
       local cfgdir="$FOLD/hdd/$CFGTIMESYNCD.d"
       local cfgparam='NTP'
-      # jessie systemd does not recognize drop-ins for systemd-timesyncd
-      if [ "$IAM" = "debian" ] && [ "$debian_version" -eq 8 ]; then
-        cfgparam='Servers'
-        CFG="$FOLD/hdd/$CFGTIMESYNCD"
-      else
-        mkdir -p "$cfgdir"
-        CFG="$cfgdir/$C_SHORT.conf"
-      fi
+      mkdir -p "$cfgdir"
+      CFG="$cfgdir/$C_SHORT.conf"
       {
         echo "[Time]"
         echo -n "$cfgparam="
@@ -3765,6 +3549,8 @@ install_robot_report_script() {
       local link_service=1
     elif debian_buster_image; then
       local link_service=1
+    elif debian_bullseye_image; then
+      local link_service=1
     else
       local link_service=0
     fi
@@ -3783,6 +3569,7 @@ install_robot_report_script() {
       echo 'Description=Report installation to Robot'
       echo '[Service]'
       echo "ExecStart=$robot_report_script"
+      # TODO: KillMode=none is deprecated
       echo 'KillMode=none'
       echo 'Type=forking'
     } > "$FOLD/hdd/$robot_report_service"
@@ -3836,15 +3623,24 @@ install_robot_report_script() {
 #
 cleanup() {
   debug 'cleaning up'
+
   unset_raid0_default_layout
-  mysql_running && stop_mysql
-  systemd_nspawn_booted && poweroff_systemd_nspawn
+
+  if systemd_nspawn_booted; then
+    # mysql cant be running without nspawn
+    mysql_running && stop_mysql
+    poweroff_systemd_nspawn
+  fi
+
+  # try umount -R
+  umount -R "${FOLD}/hdd" |& debugoutput
   while read entry; do
     while read subentry; do
       umount --lazy --verbose "$(echo "${subentry}" | awk '{print $2}')" &> /dev/null # |& debugoutput
     done < <(echo "${entry}" | grep "${FOLD}/hdd")
   done < <(tac /proc/mounts)
   rm --force --recursive --verbose "${FOLD}" &> /dev/null # |& debugoutput
+
   resume_swraid_resync
 }
 
@@ -3947,9 +3743,14 @@ uuid_bugfix() {
     sed -n 's|^/dev/\(md\/[0-9]\+\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
     while read LINE; do
       UUID="$(blkid -o value -s UUID "/dev/$LINE")"
+      local fstype="$(blkid -o value -s TYPE "/dev/$LINE")"
       # not quite perfect. We need to match /dev/sda1 but not /dev/sda10.
       # device name may not always be followed by whitespace
+      # skip duplicate partitions with the same UUID (Multi-ESP) except for btrfs
+      [ -n "$(grep -e "$UUID" "$FOLD/hdd/etc/fstab")" ] && [ "$fstype" != 'btrfs' ] && sed -i "0,/$UUID/d" "$FOLD/hdd/etc/fstab"
       [ -e "$FOLD/hdd/etc/fstab" ] && sed -i "s|^/dev/${LINE} |# /dev/${LINE}\nUUID=${UUID} |" "$FOLD/hdd/etc/fstab"
+      # if multiple ESPs are supported by grub-efi-amd64, adjust the fstab entry, as all ESP partitions have the same UUID
+      [ ${#UUID} -eq 9 ] && [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -ge 2004 ] && [ "$UEFI" -eq 1 ] && sed -i "s=#\s/dev/$LINE=#\ efi-boot-partiton=g" "$FOLD/hdd/etc/fstab"
       [ -e "$FOLD/hdd/boot/grub/grub.cfg" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.cfg"
       [ -e "$FOLD/hdd/boot/grub/grub.conf" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/grub.conf"
       [ -e "$FOLD/hdd/boot/grub/menu.lst" ] && sed -i "s|/dev/${LINE} |UUID=${UUID} |" "$FOLD/hdd/boot/grub/menu.lst"
@@ -3994,22 +3795,6 @@ function hdinfo() {
       echo "# unkown"
       ;;
   esac
-}
-
-# function to check if we got autonegotiated speed with NIC or if the rescue system set speed to fix 100MBit FD
-# returns 0 if we are auto negotiated and 1 if not
-function isNegotiated() {
-# search for first NIC which has an IP
-for i in $(ifconfig -a | grep eth | cut -d " " -f 1); do
-  if ip a show "$i" | grep -q "inet [1-9]"; then
-    #check if we got autonegotiated
-    if echo $(mii-tool 2>/dev/null) | grep -q "negotiated"; then
-      return 0
-    else
-      return 1
-    fi
-  fi
-done
 }
 
 # function to check if we are in a kvm-qemu vServer environment
@@ -4176,74 +3961,6 @@ function check_dos_partitions() {
     fi
   done
   [ "$output" != "no_output" ] && echo $result
-}
-
-#
-# Set udev rules
-#
-set_udev_rules() {
-  # at this point we have configured networking for one and only one
-  # active interface and written a udev rule for this device.
-  # Normally, we could just rename that single interface.
-  # But when the system boots, the other interface are found and numbered.
-  # The system then tries to rename the interface to match the udev rules.
-  # Under certain situations with more than two NICs, this may not end as
-  # expected leaving some interfaces half-renamed (e.g. eth3-eth0)
-  # So we copy the already generated udev rules from the rescue system in order
-  # to have rules for all devices, no matter in which order they are found
-  # during boot.
-  local udevpath udevsrcfile udevtgtfile
-  udevpath="/etc/udev/rules.d"
-  udevsrcfile="$udevpath/70-persistent-net.rules"
-  if [ -f "$FOLD/hdd$udevsrcfile" ]; then
-    udevtgtfile="$udevsrcfile"
-  elif [ -f "$FOLD/hdd$udevpath/80-net-setup-link.rules" ]; then
-    udevtgtfile="$udevpath/80-net-setup-link.rules"
-  else
-    udevtgtfile=""
-  fi
-
-  local ethcount; ethcount="$(find /sys/class/net/ -name eth* | wc -l)"
-  if [ "$ethcount" -gt 1 ]; then
-    # virtual servers with multiple nics may not have a net.rules files
-    if [ -n "$udevtgtfile" ] && [ -f "$udevsrcfile" ]; then
-      cp "$udevsrcfile" "$FOLD/hdd$udevtgtfile"
-      #Testeinbau
-      if [ "$IAM" = "centos" ]; then
-        # need to remove these parts of the rule for centos,
-        # otherwise we get new rules with the old interface name again
-        # plus a new  ifcfg- for the new rule, which duplicates
-        # the config but does not match the MAC of the interface
-        # after renaming. Terrible mess.
-        sed -i 's/ ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL==\"eth\*\"//g' "$FOLD/hdd$udevtgtfile"
-      fi
-    fi
-    for nic in /sys/class/net/*; do
-     local interface; interface=${nic##*/}
-     #test if the interface has a ipv4 adress
-     iptest=$(ip addr show dev "$interface" | grep "$interface"$ | awk '{print $2}' | cut -d "." -f 1,2)
-     #iptest=$(ifconfig $INTERFACE | grep "inet addr" | cut -d ":" -f2 | cut -d " " -f1 | cut -d "." -f1,2)
-     #Separate udev-rules for openSUSE 12.3 in function "suse_fix" below !!!
-
-     # skip eth0, lo and 192.168.x
-     [[ "${interface}" == "eth0" ]] && continue
-     [[ "${interface}" == "idrac" ]] && continue
-     [[ "${interface}" == "lo" ]] && continue
-     [[ -n "${iptest}" ]] || continue
-     [[ "${iptest}" == "192.168" ]] && continue
-     # skip IPMI NICs
-     udev_info="$(udevadm info --path "/sys/class/net/${interface}")"
-     echo "${udev_info}" | grep --quiet 'ID_MODEL=iDRAC_Virtual_NIC_USB_Device' && continue
-
-     debug "# renaming active $interface to eth0 via udev in installed system"
-     sed -i  "s/$interface/dummy/" "$FOLD/hdd$udevtgtfile"
-     sed -i  "s/eth0/$interface/" "$FOLD/hdd$udevtgtfile"
-     sed -i  "s/dummy/eth0/" "$FOLD/hdd$udevtgtfile"
-     fix_eth_naming "$interface"
-    done
-    [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
-    [ "$suse_version" == "123" ] && suse_netdev_fix
-  fi
 }
 
 # Rename eth device (ethX to eth0)

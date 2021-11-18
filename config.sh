@@ -38,11 +38,12 @@ export LOCKFILE='/run/lock/installimage'
 export SYSTEMD_NSPAWN_TMP_DIR="$FOLD/systemd_nspawn"
 
 export MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
-export STATSSERVER="88.198.31.148"
+export STATSSERVER4="88.198.31.148"
+export STATSSERVER6="[2a01:4f8:0:a0a1::bad:1]"
 export HDDMINSIZE="7000000"
 
-export NAMESERVER=("213.133.98.98" "213.133.99.99" "213.133.100.100")
-export DNSRESOLVER_V6=("2a01:4f8:0:1::add:9898" "2a01:4f8:0:1::add:9999" "2a01:4f8:0:1::add:1010")
+export DNSRESOLVER=("185.12.64.1" "185.12.64.2")
+export DNSRESOLVER_V6=("2a01:4ff:ff00::add:1" "2a01:4ff:ff00::add:2")
 export NTPSERVERS=("ntp1.hetzner.de" "ntp2.hetzner.com" "ntp3.hetzner.net")
 export AUTH_DNS1="ns1.first-ns.de"
 export AUTH_DNS2="robotns2.second-ns.de"
@@ -61,8 +62,6 @@ export DEFAULTLVM="0"
 export DEFAULTLOADER="grub"
 export DEFAULTGOVERNOR="ondemand"
 
-export V6ONLY="0"
-
 export UEFI="0"
 declare -x -i BTRFS=0
 
@@ -80,12 +79,12 @@ export OSMENULIST=(
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
-export PROXMOX6_BASE_IMAGE="Debian-107-buster-64-minimal"
+export PROXMOX6_BASE_IMAGE="Debian-1010-buster-64-minimal"
 
-export CPANEL_INSTALLER_SRC=http://mirror.hetzner.de/tools/cpanelinc/cpanel
+export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 
-export PLESK_INSTALLER_SRC=http://mirror.hetzner.de/tools/parallels/plesk
-export PLESK_MIRROR=http://mirror.hetzner.de/plesk
+export PLESK_INSTALLER_SRC=http://mirror.hetzner.com/tools/parallels/plesk
+export PLESK_MIRROR=http://mirror.hetzner.com/plesk
 export PLESK_STD_VERSION=PLESK_18_0_33
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(

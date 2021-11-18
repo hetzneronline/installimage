@@ -13,6 +13,7 @@ suspend_swraid_resync() {
 
 set_raid0_default_layout() {
   modprobe raid0
+  [[ -e /sys/module/raid0/parameters/default_layout ]] || return
   (($(< /sys/module/raid0/parameters/default_layout) == 0)) || return
   echo 2 > /sys/module/raid0/parameters/default_layout
 }

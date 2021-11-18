@@ -3,7 +3,7 @@
 #
 # network config functions
 #
-# (c) 2017-2018, Hetzner Online GmbH
+# (c) 2017-2021, Hetzner Online GmbH
 #
 
 # setup /etc/sysconfig/network
@@ -101,6 +101,12 @@ ipv4_addr_is_shared_addr() {
   network_contains_ipv4_addr 100.64.0.0/10 "$ipv4_addr"
 }
 
+# check if ipv4 addr is reserved for future use
+ipv4_addr_is_reserved_for_future_use() {
+  local ipv4_addr="$1"
+  network_contains_ipv4_addr 240.0.0.0/4 "$ipv4_addr"
+}
+
 # get network interface ipv4 addrs
 # $1 <network_interface>
 network_interface_ipv4_addrs() {
@@ -110,6 +116,8 @@ network_interface_ipv4_addrs() {
     local ipv4_addr="${BASH_REMATCH[1]}"
     # ignore shared addrs
     ipv4_addr_is_shared_addr "$ipv4_addr" && continue
+    # ignore addrs reserved for future use
+    ipv4_addr_is_reserved_for_future_use "$ipv4_addr" && continue
     echo "$ipv4_addr"
   done < <(ip -4 a s "$network_interface")
 }
@@ -124,6 +132,9 @@ ipv6_addr_is_link_local_unicast_addr() {
 # get network interface ipv6 addrs
 # $1 <network_interface>
 network_interface_ipv6_addrs() {
+  # "hide" v6 if IPV4_ONLY set
+  ((IPV4_ONLY == 1)) && return
+
   local network_interface="$1"
   while read line; do
     [[ "$line" =~ ^\ *inet6\ ([^\ ]+) ]] || continue
@@ -136,10 +147,9 @@ network_interface_ipv6_addrs() {
 
 # check whether to use predictable network interface names
 use_predictable_network_interface_names() {
-  [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 73)) && ((IMG_VERSION != 610)) && return
-  [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 90)) && ((IMG_VERSION <= 700)) && return
-  [[ "$IAM" == 'debian' ]] && ((IMG_VERSION >= 900)) && return
-  [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION >= 1710)) && return
+  [[ "$IAM" == 'centos' ]] && return
+  [[ "$IAM" == 'debian' ]] && return
+  [[ "$IAM" == 'ubuntu' ]] && return
   [[ "$IAM" == 'archlinux' ]] && return
   return 1
 }
@@ -233,31 +243,33 @@ gen_ifcfg_script_centos() {
   fi
 
   # static config
-  if ! ipv4_addr_is_private "$gateway" || ! isVServer; then
-    local address="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
-    # ! pointtopoint
-    if ipv4_addr_is_private "$gateway" || isVServer; then
-      local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
-    # pointtopoint
-    else
-      local netmask='32'
-    fi
-
-    echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
-    echo "IPADDR=$address"
-    echo "PREFIX=$netmask"
-    if [[ -n "$gateway" ]]; then
-      # pointtopoint
-      # only for centos < 8
-      if ! ipv4_addr_is_private "$gateway" && ! isVServer && ( ((IMG_VERSION < 80)) || ((IMG_VERSION == 610)) || is_cpanel_install ); then
-        local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
-
-        echo "configuring host route $network via $gateway" >&2
-        echo "SCOPE=\"peer $gateway\""
+  if ((${#ipv4_addrs[@]} > 0)); then
+    if ! ipv4_addr_is_private "$gateway" || ! isVServer; then
+      local address="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
       # ! pointtopoint
+      if ipv4_addr_is_private "$gateway" || isVServer; then
+        local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
+      # pointtopoint
       else
-        echo "configuring ipv4 gateway $gateway for $predicted_network_interface_name" >&2
-        echo "GATEWAY=$gateway"
+        local netmask='32'
+      fi
+
+      echo "configuring ipv4 addr ${ipv4_addrs[0]} for $predicted_network_interface_name" >&2
+      echo "IPADDR=$address"
+      echo "PREFIX=$netmask"
+      if [[ -n "$gateway" ]]; then
+        # pointtopoint
+        # only for centos < 8
+        if ! ipv4_addr_is_private "$gateway" && ! isVServer && ( ((IMG_VERSION < 80)) || ((IMG_VERSION == 610)) || is_cpanel_install ); then
+          local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
+
+          echo "configuring host route $network via $gateway" >&2
+          echo "SCOPE=\"peer $gateway\""
+        # ! pointtopoint
+        else
+          echo "configuring ipv4 gateway $gateway for $predicted_network_interface_name" >&2
+          echo "GATEWAY=$gateway"
+        fi
       fi
     fi
   fi
@@ -348,23 +360,25 @@ gen_ifcfg_script_suse() {
     echo 'DHCLIENT_SET_HOSTNAME="no"'
   # static config
   else
-    local ipaddr="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
-    # ! pointtopoint
-    if ipv4_addr_is_private "$gateway" || isVServer; then
-      local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
-    # pointtopoint
-    else
-      local netmask='32'
-    fi
-    echo "configuring ipv4 addr $ipaddr/$netmask for $predicted_network_interface_name" >&2
-    echo "IPADDR=\"$ipaddr/$netmask\""
+    if ((${#ipv4_addrs[@]} > 0)); then
+      local ipaddr="$(ip_addr_without_suffix "${ipv4_addrs[0]}")"
+      # ! pointtopoint
+      if ipv4_addr_is_private "$gateway" || isVServer; then
+        local netmask="$(ip_addr_suffix "${ipv4_addrs[0]}")"
+      # pointtopoint
+      else
+        local netmask='32'
+      fi
+      echo "configuring ipv4 addr $ipaddr/$netmask for $predicted_network_interface_name" >&2
+      echo "IPADDR=\"$ipaddr/$netmask\""
 
-    # pointtopoint
-    if [[ -n "$gateway" ]] && ! ipv4_addr_is_private "$gateway" && ! isVServer; then
-      local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
+      # pointtopoint
+      if [[ -n "$gateway" ]] && ! ipv4_addr_is_private "$gateway" && ! isVServer; then
+        local network="$(ipv4_addr_network "${ipv4_addrs[0]}")"
 
-      echo "configuring host route $network via $gateway" >&2
-      echo "REMOTE_IPADDR=\"$gateway\""
+        echo "configuring host route $network via $gateway" >&2
+        echo "REMOTE_IPADDR=\"$gateway\""
+      fi
     fi
   fi
 
@@ -616,7 +630,7 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
   esac
   [[ "$dhcp4" == true ]] && echo '      dhcp4: true'
   # ! pointtopoint
-  if [[ "$gateway4" != false ]]; then
+  if [[ -n "$gateway4" ]] && [[ "$gateway4" != false ]]; then
     if ipv4_addr_is_private "$gateway4" || isVServer; then
       echo "      gateway4: $gateway4"
     else
@@ -634,20 +648,9 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
   if [[ "$gateway4" != false ]]; then
     echo '      nameservers:'
     echo '        addresses:'
-    # IPV4
-    if [ "$V6ONLY" -eq 1 ]; then
-      debug "# skipping IPv4 DNS resolvers"
-    else
-      for index in $(shuf --input-range=0-$(( ${#NAMESERVER[*]} - 1 )) | tr '\n' ' ') ; do
-        echo "          - ${NAMESERVER[$index]}"
-      done
-    fi
-    # IPv6
-    if [ -n "$DOIPV6" ]; then
-      for index in $(shuf --input-range=0-$(( ${#DNSRESOLVER_V6[*]} - 1 )) | tr '\n' ' ') ; do
-        echo "          - ${DNSRESOLVER_V6[$index]}"
-      done
-    fi
+    while read nsaddr; do
+      echo "          - $nsaddr"
+    done < <(randomized_nsaddrs)
   fi
 }
 
@@ -727,7 +730,7 @@ setup_etc_systemd_network_files() {
 }
 
 # setup network config
-setup_network_config_new() {
+setup_network_config() {
   debug '# setup network config'
 
   case "$IAM" in
@@ -757,6 +760,194 @@ setup_network_config_new() {
     # disable_predictable_network_interface_names
     setup_persistent_net_rules
   fi
+}
+
+# get BOOTIF mac from kernel cmdline
+bootif_mac() {
+  xargs -a /proc/cmdline -n 1 | grep ^BOOTIF= | cut -d '-' -f 2- | tr '-' ':'
+}
+
+# get bootif via kernel commandline BOOTIF mac
+bootif() {
+  local bootif_mac
+  bootif_mac="$(bootif_mac)"
+  while read network_interface; do
+    [[ "$(network_interface_mac "$network_interface")" == "$bootif_mac" ]] || continue
+
+    echo "$network_interface"
+    break
+  done < <(physical_network_interfaces)
+}
+
+# get v4 main network interface
+v4_main_network_interface() {
+  # prefer bootif
+  local bootif
+  bootif="$(bootif)"
+  if [[ -n "$bootif" ]]; then
+    echo "$bootif"
+    return
+  fi
+
+  # legacy behaviour. use first netif with an IPv4
+  local ipv4_addrs
+  while read network_interface; do
+    ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
+    ((${#ipv4_addrs[@]} == 0)) && continue
+
+    debug "v4 main netif lookup: using v4 main netif $network_interface found via legacy lookup loop"
+    echo "$network_interface"
+    break
+  done < <(physical_network_interfaces)
+}
+
+# get v6 main network interface
+v6_main_network_interface() {
+  # prefer bootif
+  local bootif
+  bootif="$(bootif)"
+  if [[ -n "$bootif" ]]; then
+    echo "$bootif"
+    return
+  fi
+
+  # legacy behaviour. use first netif with an IPv6
+  local ipv6_addrs
+  while read network_interface; do
+    ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
+    ((${#ipv6_addrs[@]} == 0)) && continue
+
+    debug "v6 main netif lookup: using v6 main netif $network_interface found via legacy lookup loop"
+    echo "$network_interface"
+    break
+  done < <(physical_network_interfaces)
+}
+
+# get main mac from either v4 main netif or v6 main netif
+main_mac() {
+  local v4_main_network_interface
+  v4_main_network_interface="$(v4_main_network_interface)"
+  local mac="$(network_interface_mac "$v4_main_network_interface")"
+  if [[ -n "$mac" ]]; then
+    echo "$mac"
+    return
+  fi
+
+  local v6_main_network_interface
+  v6_main_network_interface="$(v6_main_network_interface)"
+  local mac="$(network_interface_mac "$v6_main_network_interface")"
+  if [[ -n "$mac" ]]; then
+    echo "$mac"
+    return
+  fi
+
+  debug "fatal: dont know main MAC"
+  return 1
+}
+
+# first ipv4 of main v4 netif
+v4_main_ip() {
+  local v4_main_network_interface
+  v4_main_network_interface="$(v4_main_network_interface)"
+  local ipv4_addrs
+  ipv4_addrs=($(network_interface_ipv4_addrs "$v4_main_network_interface"))
+  echo "${ipv4_addrs[0]}"
+}
+
+# first ipv6 of main v6 netif
+v6_main_ip() {
+  local v6_main_network_interface
+  v6_main_network_interface="$(v6_main_network_interface)"
+  local ipv6_addrs
+  ipv6_addrs=($(network_interface_ipv6_addrs "$v6_main_network_interface"))
+  echo "${ipv6_addrs[0]}"
+}
+
+has_no_public_ip() {
+  local ipv6_addrs
+  while read network_interface; do
+    ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
+    ((${#ipv6_addrs[@]} > 1)) && return 1
+
+    while read ip; do
+      ipv4_addr_is_private "$ip" || return 1
+    done < <(network_interface_ipv4_addrs "$network_interface")
+  done < <(physical_network_interfaces)
+
+  return 0
+}
+
+has_no_ipv6() {
+  local ipv6_addrs
+  while read network_interface; do
+    ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
+    ((${#ipv6_addrs[@]} > 0)) && return 1
+  done < <(physical_network_interfaces)
+
+  return 0
+}
+
+has_no_ipv4() {
+  local ipv4_addrs
+  while read network_interface; do
+    ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
+    ((${#ipv4_addrs[@]} > 0)) && return 1
+  done < <(physical_network_interfaces)
+
+  return 0
+}
+
+has_dualstack() {
+  !has_no_ipv6 && !has_no_ipv4
+}
+
+v6_first() {
+  # force v4 first
+  ((IPV4_ONLY == 1)) && return 1
+
+  # dont use v6 first for dualstack yet
+  has_no_ipv4 # || has_dualstack
+}
+
+v4_first() {
+  # force v4 first
+  ((IPV4_ONLY == 1)) && return 0
+
+  has_no_public_ip || has_no_ipv6
+}
+
+randomized_nsaddrs() {
+  local v6_nsaddrs=($(shuf -e "${DNSRESOLVER_V6[@]}"))
+  local v4_nsaddrs=($(shuf -e "${DNSRESOLVER[@]}"))
+
+  if v6_first; then
+    first_pool=("${v6_nsaddrs[@]}")
+    second_pool=("${v4_nsaddrs[@]}")
+  else
+    first_pool=("${v4_nsaddrs[@]}")
+    second_pool=("${v6_nsaddrs[@]}")
+  fi
+
+  local nsaddrs=()
+  local maxns=4
+  local i=-1
+  local nsaddr
+  until (( ${#nsaddrs[@]} == $maxns || (${#first_pool[@]} == 0 && ${#second_pool[@]} == 0) )); do
+    i=$((i + 1))
+
+    nsaddr="${first_pool[$i]}"
+    if [[ -n "$nsaddr" ]]; then
+      nsaddrs+=("$nsaddr")
+      first_pool=("${first_pool[@]:$i}")
+    fi
+
+    nsaddr="${second_pool[$i]}"
+    if [[ -z "$nsaddr" ]] || (( ${#nsaddrs[@]} == $maxns )); then continue; fi
+    nsaddrs+=("$nsaddr")
+    second_pool=("${second_pool[@]:$i}")
+  done
+
+  for nsaddr in "${nsaddrs[@]}"; do echo "$nsaddr"; done
 }
 
 # vim: ai:ts=2:sw=2:et

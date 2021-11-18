@@ -3,84 +3,9 @@
 #
 # Debian specific functions
 #
-# (c) 2008-2018, Hetzner Online GmbH
+# (c) 2008-2021, Hetzner Online GmbH
 #
 
-
-# setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
-setup_network_config() {
-  if [ -n "$1" ] && [ -n "$2" ]; then
-
-    #
-    # good we have a device and a MAC
-    #
-    CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
-    if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
-      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
-    else
-      UDEVFILE="/dev/null"
-    fi
-    {
-      echo "### $COMPANY - installimage"
-      echo "# device: $1"
-      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
-    } > "$UDEVFILE"
-
-    {
-      echo "### $COMPANY - installimage"
-      echo "# Loopback device:"
-      echo "auto lo"
-      echo "iface lo inet loopback"
-      echo "iface lo inet6 loopback"
-      echo ""
-    } > "$CONFIGFILE"
-
-    if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-      echo "# device: $1" >> "$CONFIGFILE"
-      if is_private_ip "$6" && isVServer; then
-        {
-          echo "auto  $1"
-          echo "iface $1 inet dhcp"
-        } >> "$CONFIGFILE"
-      else
-        {
-          echo "auto  $1"
-          echo "iface $1 inet static"
-          echo "  address   $3"
-          echo "  netmask   $5"
-          echo "  gateway   $6"
-          if ! is_private_ip "$3" || ! isVServer; then
-            echo "  # default route to access subnet"
-            echo "  up route add -net $7 netmask $5 gw $6 $1"
-          fi
-        } >> "$CONFIGFILE"
-      fi
-    fi
-
-    if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
-      debug "setting up ipv6 networking $8/$9 via ${10}"
-      {
-        echo ""
-        echo "iface $1 inet6 static"
-        echo "  address $8"
-        echo "  netmask $9"
-        echo "  gateway ${10}"
-      } >> "$CONFIGFILE"
-    fi
-
-    #
-    # set duplex speed
-    #
-    if ! isNegotiated && ! isVServer; then
-      {
-        echo "  # force full-duplex for ports without auto-neg"
-        echo "  post-up mii-tool -F 100baseTx-FD $1"
-      } >> "$CONFIGFILE"
-    fi
-
-    return 0
-  fi
-}
 
 # generate_config_mdadm "NIL"
 generate_config_mdadm() {
@@ -132,7 +57,7 @@ generate_new_ramdisk() {
     # apparently sometimes the mdadm assembly bugfix introduced with the recent mdadm release does not work
     # however, the problem is limited to H8SGL boards
     # see https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=784070
-    if [ "$IMG_VERSION" -ge 80 ] && [ "$IMG_VERSION" != 710 ] && [ "$IMG_VERSION" != 711 ] && [ "$MBTYPE" = 'H8SGL' ]; then
+    if [ "$MBTYPE" = 'H8SGL' ]; then
       local script="$FOLD/hdd/usr/share/initramfs-tools/scripts/local-block/mdadmpatch"
       cp "$SCRIPTPATH/h8sgl-deb8-md.sh" "$script"
       chmod a+x "$script"
@@ -203,8 +128,8 @@ generate_config_grub() {
   rm "$FOLD/hdd/boot/grub/grub.cfg"
 
   if [ "$UEFI" -eq 1 ]; then
-    execute_chroot_command "echo 'set grub2/update_nvram false' | debconf-communicate"
-    execute_chroot_command "echo 'set grub2/force_efi_extra_removable true' | debconf-communicate"
+    execute_chroot_command "echo 'set grub2/update_nvram false' | debconf-communicate -f noninteractive"
+    execute_chroot_command "echo 'set grub2/force_efi_extra_removable true' | debconf-communicate -f noninteractive"
   fi
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
@@ -256,8 +181,6 @@ run_os_specific_functions() {
     setup_hetzner_lamp || return 1
   fi
 
-  (( "${IMG_VERSION}" >= 80 )) && (( "${IMG_VERSION}" != 710 )) && (( "${IMG_VERSION}" != 711 )) && debian_udev_finish_service_fix
-
   [[ -e "$FOLD/hdd/var/spool/exim4/input" ]] && find "$FOLD/hdd/var/spool/exim4/input" -type f -delete
 
   disable_resume
@@ -293,23 +216,6 @@ debian_grub_fix() {
     cp -R "$FOLD/hdd/dev/$dmdevice" "$mapper/$volgroup"
   done
   rm "$tempfile"
-}
-
-debian_udev_finish_service_fix() {
-  local unit_file="${FOLD}/hdd/lib/systemd/system/udev-finish.service"
-  local override_dir="${FOLD}/hdd/etc/systemd/system/udev-finish.service.d"
-  local override_file="${override_dir}/override.conf"
-  if ! [[ -f "${unit_file}" ]]; then
-    debug '# udev-finish.service not found. not installing override'
-    return
-  fi
-  debug '# install udev-finish.service override'
-  mkdir "${override_dir}"
-  {
-    echo "### ${COMPANY} - installimage"
-    echo '[Unit]'
-    echo 'After=basic.target'
-  } > "${override_file}"
 }
 
 # vim: ai:ts=2:sw=2:et

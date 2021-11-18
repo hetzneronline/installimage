@@ -3,131 +3,8 @@
 #
 # Ubuntu specific functions
 #
-# (c) 2007-2018, Hetzner Online GmbH
+# (c) 2007-2021, Hetzner Online GmbH
 #
-
-# setup_network_config "$ETH" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK"
-setup_network_config() {
-  if [ -n "$1" ] && [ -n "$2" ]; then
-    if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
-      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
-    elif [ -f "$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules" ]; then
-      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/80-net-setup-link.rules"
-    else
-      UDEVFILE="/dev/null"
-    fi
-    {
-      echo "### $COMPANY - installimage"
-      echo "# device: $1"
-      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
-    } > "$UDEVFILE"
-
-    [ -d "$FOLD/hdd/etc/systemd/network" ] && rm -f "$FOLD"/hdd/etc/systemd/network/*
-
-    if [ "$IMG_VERSION" -ne 1510 ]; then
-      CONFIGFILE="$FOLD/hdd/etc/network/interfaces"
-
-      {
-        echo "### $COMPANY - installimage"
-        echo "# Loopback device:"
-        echo "auto lo"
-        echo "iface lo inet loopback"
-        echo "iface lo inet6 loopback"
-        echo ""
-      } > "$CONFIGFILE"
-      if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-        echo "# device: $1" >> "$CONFIGFILE"
-        if is_private_ip "$6" && isVServer; then
-          {
-            echo "auto  $1"
-            echo "iface $1 inet dhcp"
-          } >> "$CONFIGFILE"
-        else
-          {
-            echo "auto  $1"
-            echo "iface $1 inet static"
-            echo "  address   $3"
-            echo "  netmask   $5"
-            echo "  gateway   $6"
-            if ! is_private_ip "$3" || ! isVServer; then
-              echo "  # default route to access subnet"
-              echo "  up route add -net $7 netmask $5 gw $6 $1"
-            fi
-          } >> "$CONFIGFILE"
-        fi
-      fi
-
-      if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
-        debug "setting up ipv6 networking $8/$9 via ${10}"
-        {
-          echo ""
-          echo "iface $1 inet6 static"
-          echo "  address $8"
-          echo "  netmask $9"
-          echo "  gateway ${10}"
-        } >> "$CONFIGFILE"
-      fi
-
-      #
-      # set duplex speed
-      #
-      if ! isNegotiated && ! isVServer; then
-        {
-          echo "  # force full-duplex for ports without auto-neg"
-          echo "  post-up mii-tool -F 100baseTx-FD $1"
-        } >> "$CONFIGFILE"
-      fi
-
-      return 0
-    else
-      CONFIGFILE="$FOLD/hdd/etc/systemd/network/50-$C_SHORT.network"
-
-      {
-        echo "### $COMPANY - installimage"
-        echo "# device: $1"
-        echo "[Match]"
-        echo "MACAddress=$2"
-        echo ""
-      } > "$CONFIGFILE"
-
-      echo "[Network]" >> "$CONFIGFILE"
-      if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
-        debug "setting up ipv6 networking $8/$9 via ${10}"
-        {
-          echo "Address=$8/$9"
-          echo "Gateway=${10}"
-          echo ""
-        } >> "$CONFIGFILE"
-      fi
-
-      if [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-        debug "setting up ipv4 networking $3/$5 via $6"
-        if is_private_ip "$6" && isVServer; then
-          {
-            echo "DHCP=ipv4"
-          } >> "$CONFIGFILE"
-        else
-          {
-            echo "Address=$3/$CIDR"
-            echo "Gateway=$6"
-            echo ""
-          } >> "$CONFIGFILE"
-          if ! is_private_ip "$3" || ! isVServer; then
-            {
-              echo "[Route]"
-              echo "Destination=$7/$CIDR"
-              echo "Gateway=$6"
-            } >> "$CONFIGFILE"
-          fi
-        fi
-      fi
-
-      execute_chroot_command "systemctl enable systemd-networkd.service"
-
-      return 0
-    fi
-  fi
-}
 
 # generate_config_mdadm "NIL"
 generate_config_mdadm() {
@@ -294,7 +171,7 @@ generate_config_grub() {
   if [ "$UEFI" -eq 1 ]; then
     # ubuntu always installs to removable path as well (which is what we want)
     # unless grub2/no_efi_extra_removable is set to true
-    execute_chroot_command "echo 'set grub2/update_nvram false' | debconf-communicate"
+    execute_chroot_command "echo 'set grub2/update_nvram false' | debconf-communicate -f noninteractive"
   fi
 
   # create /run/lock if it didn't exist because it is needed by grub-mkconfig

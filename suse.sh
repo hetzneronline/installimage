@@ -3,94 +3,9 @@
 #
 # OpenSUSE specific functions
 #
-# (c) 2007-2018, Hetzner Online GmbH
+# (c) 2007-2021, Hetzner Online GmbH
 #
 
-
-# setup_network_config "$device" "$HWADDR" "$IPADDR" "$BROADCAST" "$SUBNETMASK" "$GATEWAY" "$NETWORK" "$IP6ADDR" "$IP6PREFLEN" "$IP6GATEWAY"
-setup_network_config() {
-  if [ -n "$1" ] && [ -n "$2" ]; then
-    # good we have a device and a MAC
-
-    ROUTEFILE="$FOLD/hdd/etc/sysconfig/network/routes"
-    if [ -f "$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules" ]; then
-      UDEVFILE="$FOLD/hdd/etc/udev/rules.d/70-persistent-net.rules"
-    else
-      UDEVFILE="/dev/null"
-    fi
-    # Delete network udev rules
-#    rm "$FOLD"/hdd/etc/udev/rules.d/*-persistent-net.rules 2>&1 | debugoutput
-
-    {
-      echo "### $COMPANY - installimage"
-      echo "# device: $1"
-      printf 'SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="%s", KERNEL=="eth*", NAME="%s"\n' "$2" "$1"
-    } > "$UDEVFILE"
-
-    # remove any other existing config files
-    find "$FOLD/hdd/etc/sysconfig/network/" -name "*-eth*" -delete
-
-    CONFIGFILE="$FOLD/hdd/etc/sysconfig/network/ifcfg-$1"
-
-    {
-      echo "### $COMPANY - installimage"
-      echo "# device: $1"
-      echo "MTU=''"
-      echo "STARTMODE='auto'"
-      echo "UNIQUE=''"
-      echo "USERCONTROL='no'"
-    } > "$CONFIGFILE"
-
-    if [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] && [ -n "$4" ] && [ -n "$5" ] && [ -n "$6" ] && [ -n "$7" ]; then
-      if is_private_ip "$6" && isVServer; then
-        {
-          echo "BOOTPROTO=dhcp"
-          echo "DHCLIENT_SET_HOSTNAME='no'"
-        } >> "$CONFIGFILE"
-      else
-        {
-          echo "BOOTPROTO='static'"
-          echo "BROADCAST='$4'"
-          echo "IPADDR='$3'"
-        } >> "$CONFIGFILE"
-        if is_private_ip "$3" || isVServer; then
-          {
-            echo "NETMASK='$5'"
-          } >> "$CONFIGFILE"
-        else
-          {
-            echo "NETMASK=255.255.255.255"
-            echo "REMOTE_IPADDR='$6'"
-          } >> "$CONFIGFILE"
-        fi 
-        {
-          echo "### $COMPANY - installimage"
-          echo "# routing for eth0"
-#          echo "$7 $6 $5 $1"
-#          echo "$6 - 255.255.255.255 $1"
-          echo "default $6 - -"
-        } > "$ROUTEFILE"
-      fi
-    fi
-
-    if [ -n "$8" ] && [ -n "$9" ] && [ -n "${10}" ]; then
-      debug "setting up ipv6 networking $8/$9 via ${10}"
-      if [ -n "$3" ]; then
-        # add v6 addr as an alias, if we have a v4 addr
-        echo "IPADDR_0='$8/$9'" >> "$CONFIGFILE"
-      else
-        echo "IPADDR='$8/$9'" >> "$CONFIGFILE"
-      fi
-      echo "default ${10} - $1" >> "$ROUTEFILE"
-    fi
-
-    if ! isNegotiated && ! isVServer; then
-      echo 'ETHTOOL_OPTIONS="speed 100 duplex full autoneg off"' >> "$CONFIGFILE"
-    fi
-
-    return 0
-  fi
-}
 
 # generate_mdadmconf "NIL"
 generate_config_mdadm() {

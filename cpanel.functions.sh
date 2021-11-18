@@ -16,16 +16,31 @@ is_cpanel_install() {
 cpanel_setup_mainip() {
   local mainip_file=/var/cpanel/mainip
 
-  debug "# setting up ${mainip_file}"
-  echo -n "${IPADDR}" > "${FOLD}/hdd/${mainip_file}"
-  debug "set up ${mainip_file}"
+  local v4_main_ip
+  v4_main_ip="$(v4_main_ip)"
+  if [[ -n "$v4_main_ip" ]]; then
+    debug "# setting up ${mainip_file}"
+    echo -n "$(ip_addr_without_suffix "$v4_main_ip")" > "${FOLD}/hdd/${mainip_file}"
+    return
+  fi
+
+  debug "fatal: no IPv4 main IP: not setting up $mainip_file"
+  return 1
 }
 
 # cpanel_setup_wwwacct_conf()
 cpanel_setup_wwwacct_conf() {
   local wwwacct_conf; wwwacct_conf=/etc/wwwacct.conf
 
+  local v4_main_ip
+  v4_main_ip="$(v4_main_ip)"
+  if [[ -z "$v4_main_ip" ]]; then
+    debug "fatal: no IPv4 main IP: can not set up $wwwacct_conf"
+    return 1
+  fi
+
   debug "# setting up ${wwwacct_conf}"
+
   sed --expression='/^ADDR\s/d' \
     --expression='/^HOST\s/d' \
     --expression='/^NS[[:digit:]]*\s/d' \
@@ -33,14 +48,13 @@ cpanel_setup_wwwacct_conf() {
   {
     echo
     echo "### ${COMPANY} installimage"
-    echo "ADDR ${IPADDR}"
+    echo "ADDR $(ip_addr_without_suffix "$v4_main_ip")"
     echo "HOST ${NEWHOSTNAME}"
     echo "NS ${AUTH_DNS1}"
     echo "NS2 ${AUTH_DNS2}"
     echo "NS3 ${AUTH_DNS3}"
     echo 'NS4'
   } >> "${FOLD}/hdd/${wwwacct_conf}"
-  debug "set up ${wwwacct_conf}"
 }
 
 # randomize_cpanel_passwords()
@@ -87,7 +101,7 @@ randomize_cpanel_passwords() {
 setup_cpanel() {
   debug '# setting up cpanel'
   cpanel_setup_mainip
-  cpanel_setup_wwwacct_conf
+  cpanel_setup_wwwacct_conf || return 1
   randomize_cpanel_passwords || return 1
   debug 'set up cpanel'
 }
@@ -127,7 +141,7 @@ install_cpanel() {
   fi
 
   debug '# setting up cpanel'
-  cpanel_setup_wwwacct_conf
+  cpanel_setup_wwwacct_conf || return 1
   debug 'set up cpanel'
   debug 'installed cpanel'
 }

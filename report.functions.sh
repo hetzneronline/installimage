@@ -17,13 +17,20 @@ filter_install_conf() {
 
 report_install() {
   filter_install_conf < "$FOLD/install.conf" > "$FOLD/install.conf.filtered"
+  local main_mac
+  main_mac="$(main_mac)" || return 1
+  if has_no_ipv4; then
+    local statsserver="$STATSSERVER6"
+  else
+    local statsserver="$STATSSERVER4"
+  fi
   curl --data-urlencode "config@$FOLD/install.conf.filtered" \
-    --data-urlencode "mac=$HWADDR" \
+    --data-urlencode "mac=$main_mac" \
     -k \
     -m 10 \
     -s \
     -D "$FOLD/install_report.headers" \
-    "https://$STATSSERVER/api/v1/installimage/installations" > "$FOLD/install_report.response"
+    "https://$statsserver/api/v1/installimage/installations" > "$FOLD/install_report.response"
   debug "Sent install.conf to statsserver: $(head -n 1 "$FOLD/install_report.headers")"
 
   local image_id="$(cat "$FOLD/install_report.response")"
@@ -36,7 +43,7 @@ report_install() {
     -T "$FOLD/debug.txt.filtered" \
     -D "$FOLD/install_report.headers" \
     -X POST \
-    "https://$STATSSERVER/api/v1/installimage/installations/$image_id/logs" > /dev/null
+    "https://$statsserver/api/v1/installimage/installations/$image_id/logs" > /dev/null
   debug "Sent debug.txt to statsserver: $(head -n 1 "$FOLD/install_report.headers")"
 }
 

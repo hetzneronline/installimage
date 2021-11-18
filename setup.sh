@@ -48,7 +48,10 @@ if [ "$OPT_AUTOMODE" ] ; then
       VALIDATED="true"
     else
       debug "=> FAILED"
-      mcedit "$FOLD/install.conf"
+      # dont show editor in automode. print to stdout
+      echo "Abort: invalid config or parameters. See $DEBUGFILE for details"
+      # mcedit "$FOLD/install.conf"
+      exit 1
     fi
   done
 

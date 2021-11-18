@@ -19,8 +19,8 @@ extract_image() {
 
   # symlink to latest archlinux-bootstrap
   local archlinux_bootstrap_archive="$SCRIPTPATH/../archlinux/archlinux-bootstrap-latest-x86_64.tar.gz"
-  local archlinux_mirror='https://mirror.hetzner.de/archlinux'
-  local archlinux_packages='base btrfs-progs cronie cryptsetup gptfdisk grub haveged linux linux-firmware lvm2 mdadm net-tools openssh python rsync vim wget xfsprogs'
+  local archlinux_mirror='https://mirror.hetzner.com/archlinux'
+  local archlinux_packages='base btrfs-progs cronie cryptsetup gptfdisk grub haveged linux linux-firmware lvm2 mdadm net-tools openssh python rsync vim wget xfsprogs inetutils'
 
   # dont extract archlinux-bootstrap to system memory but the target disk
   local hdd_dir="$FOLD/hdd"
@@ -142,9 +142,11 @@ extract_image() {
   local resolv_conf="$hdd_dir/etc/resolv.conf"
   debug "# create /etc/resolv.conf"
   {
-    for ip in $(shuf -e "${NAMESERVER[@]}") $(shuf -e "${DNSRESOLVER_V6[@]}"); do
-      echo "nameserver $ip"
-    done
+    echo "### $COMPANY installimage"
+    echo '# nameserver config'
+    while read nsaddr; do
+      echo "nameserver $nsaddr"
+    done < <(randomized_nsaddrs)
   } > "$resolv_conf" || return 1
   diff -Naur /dev/null "$resolv_conf" | debugoutput
 
