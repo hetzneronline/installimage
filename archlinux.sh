@@ -3,7 +3,7 @@
 #
 # archlinux functions
 #
-# (c) 2013-2020, Hetzner Online GmbH
+# (c) 2013-2021, Hetzner Online GmbH
 #
 
 validate_image() { return 2; }
@@ -224,8 +224,6 @@ generate_new_ramdisk() {
   diff -Naur "$mkinitcpio_conf_bak" "$mkinitcpio_conf" | debugoutput
   execute_chroot_command 'mkinitcpio -p linux'
 }
-
-setup_cpufreq() { return; }
 
 generate_config_grub() {
   debug "# setup /etc/default/grub"

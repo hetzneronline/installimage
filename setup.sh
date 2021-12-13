@@ -152,6 +152,11 @@ else
       [ $EXITCODE != 0 ] && debug "=> FAILED"
       debug "# validating vars..."
       validate_vars "$FOLD/install.conf"; EXITCODE=$?
+      if [ "$CANCELLED" = "true" ]; then
+        clear
+        echo "Cancelled."
+        exit 1
+      fi
       if [ $EXITCODE = 0 ]; then
         VALIDATED="true"
       else

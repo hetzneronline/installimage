@@ -4,7 +4,7 @@
 # starts installimage in a new screen session
 # and reboots the system on success
 #
-# (c) 2007-2016, Hetzner Online AG
+# (c) 2007-2016, Hetzner Online GmbH
 #
 
 

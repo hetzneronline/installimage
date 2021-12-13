@@ -3,7 +3,7 @@
 #
 # functions
 #
-# (c) 2007-2018, Hetzner Online GmbH
+# (c) 2007-2021, Hetzner Online GmbH
 #
 
 
@@ -61,6 +61,8 @@ FINALIMAGEPATH=""
 
 SYSMFC=$(dmidecode -s system-manufacturer 2>/dev/null | tail -n1)
 SYSTYPE=$(dmidecode -s system-product-name 2>/dev/null | tail -n1)
+debug "# SYSTYPE: $SYSTYPE"
+debug "# SYSMFC:  $SYSMFC"
 MBTYPE=$(dmidecode -s baseboard-product-name 2>/dev/null | tail -n1)
 SYSARCH=$(uname -m)
 
@@ -91,33 +93,53 @@ generate_menu() {
   PROXMOX=false
   # find image-files and generate raw list
   FINALIMAGEPATH="$IMAGESPATH"
-# don't go looking for old_openSUSE or suse images. That was a long time ago
-#  if [ "$1" = "openSUSE" ]; then
-#    RAWLIST=$(ls -1 "$IMAGESPATH" | grep -i -e "^$1\|^old_$1\|^suse\|^old_suse")
   if [ "$1" = "Other" ]; then
     RAWLIST=""
-    RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'|sort)
+    RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n')
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Stretch"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Buster"
-    RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*-beta.*' -a -not -name '*.sig' -printf '%f\n' | sort)"
+    RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*beta*' -a -not -name '*.sig' -printf '%f\n')"
   elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
-    RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n'|sort)
+    RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n')
     FINALIMAGEPATH="$OLDIMAGESPATH"
   elif [[ "$1" == 'Arch Linux' ]]; then
     RAWLIST="$IMAGESPATH/archlinux-latest-64-minimal.tar.gz"
+  elif [[ "$1" == 'CentOS Stream' ]]; then
+    RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -iname '*centos*stream*' -not -regex '.*\.sig$' -printf '%f\n')
+  elif [[ "$1" == 'AlmaLinux' ]]; then
+    RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -iname '*alma*' -not -regex '.*\.sig$' -printf '%f\n')
+  elif [[ "$1" == 'Rocky Linux' ]]; then
+    RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -iname '*rocky*' -not -regex '.*\.sig$' -printf '%f\n')
   else
     # skip CPANEL images and signatures files from list
-    RAWLIST=$(find "$IMAGESPATH"/* -maxdepth 1 -type f -not -name "*cpanel*" -a -regextype sed -regex ".*/\(old_\)\?$1.*" -a -not -regex '.*\.sig$' -a -not -iname '*-beta.*' -printf '%f\n'|sort)
-  fi
-  # check if 32-bit rescue is activated and disable 64-bit images then
-  if [ "$(uname -m)" != "x86_64" ]; then
-    RAWLIST="$(echo "$RAWLIST" |tr ' ' '\n' |grep -v "\-64\-[a-zA-Z]")"
+    RAWLIST=$(find "$IMAGESPATH"/ \
+      -maxdepth 1 \
+      -type f \
+      -not -name "*cpanel*" \
+      -a -regextype sed -regex ".*/\(old_\)\?$1.*" \
+      -a -not -regex '.*\.sig$' \
+      -a -not -iname '*-beta.*' \
+      -a -not -iname '*centos*stream*' \
+      -printf '%f\n')
   fi
 
-  # order by image version desc
-  RAWLIST="$(sort -k 1,1 -k 2,2hr -t '-' <<< "$RAWLIST")"
+  # ensure rawlist is newline separated
+  RAWLIST="$(echo "$RAWLIST" | xargs | tr ' ' "\n")"
+
+  # check if 32-bit rescue is activated and disable 64-bit images then
+  if [ "$(uname -m)" != "x86_64" ]; then
+    RAWLIST="$(echo "$RAWLIST" | grep -v "\-64\-[a-zA-Z]")"
+    RAWLIST="$(echo "$RAWLIST" | grep -v "\-amd64\-[a-zA-Z]")"
+  fi
+
+  case "${1,,}" in
+    *)
+      # order by image version desc
+      RAWLIST="$(sort -k 1,1 -k 2,2hr -t '-' <<< "$RAWLIST")"
+    ;;
+  esac
 
   # generate formatted list for usage with "dialog"
   for i in $RAWLIST; do
@@ -535,7 +557,7 @@ create_config() {
     fi
 
     # use ext3 for vservers, because ext4 is too trigger happy of device timeouts
-    if isVServer; then
+    if is_virtual_machine; then
       if [ "$SYSTYPE" = "vServer" ]; then
         DEFAULTPARTS=$DEFAULTPARTS_CLOUDSERVER
       else
@@ -942,6 +964,17 @@ validate_vars() {
 
   whoami "$IMAGE_FILE"
 
+  # validate image supported
+  if [[ "$IAM" == centos ]] && (((IMG_VERSION >= 60 && IMG_VERSION < 70)) || ((IMG_VERSION == 610))); then
+    local e="ERROR: CentOS 6 is EOL since Nov 2020 and installimage does not support CentOS 6 anymore"
+    if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
+      debug "$e"
+    else
+      graph_error "$e"
+    fi
+    return 1
+  fi
+
   # test if $DRIVE1 is a valid block device and is able to create partitions
   CHECK="$(test -b "$DRIVE1" && sfdisk -l "$DRIVE1" 2>>/dev/null)"
   if [ -z "$CHECK" ]; then
@@ -1165,7 +1198,7 @@ validate_vars() {
       fi
 
       if [ "${PART_FS[$i]}" = "reiserfs" -a "$IAM" = "centos" ]; then
-        graph_error "ERROR: centos doesn't support reiserfs"
+        graph_error "ERROR: reiserfs is not supported for CentOS"
         return 1
       fi
 
@@ -1205,6 +1238,14 @@ validate_vars() {
           graph_error "ERROR: CentOS 8 doesn't support btrfs"
           return 1
         fi
+      fi
+      if [ "${PART_FS[$i]}" = "btrfs" -a "$IAM" = "rockylinux" ]; then
+        graph_error "ERROR: Rocky Linux doesn't support btrfs"
+        return 1
+      fi
+      if [ "${PART_FS[$i]}" = "btrfs" -a "$IAM" = "almalinux" ]; then
+        graph_error "ERROR: AlmaLinux doesn't support btrfs"
+        return 1
       fi
 
       # test if "all" is at the last partition entry
@@ -1317,7 +1358,7 @@ validate_vars() {
     fi
 
     if [ "$lv_fs" = "reiserfs" -a "$IAM" = "centos" ]; then
-      graph_error "ERROR: centos doesn't support reiserfs"
+      graph_error "ERROR: reiserfs is not supported for CentOS"
       return 1
     fi
 
@@ -1514,14 +1555,14 @@ validate_vars() {
   fi
 
   if is_cpanel_install; then
-    if [ "$IAM" != "centos" ]; then
+    if [ "$IAM" != "centos" -a "$IAM" != "almalinux" ]; then
       graph_error "ERROR: CPANEL is not available for this image"
       return 1
     fi
   fi
 
   if is_plesk_install; then
-    if [ "$IAM" != "centos" -a "$IAM" != "debian" -a "$IAM" != "ubuntu" ]; then
+    if [ "$IAM" != "centos" -a "$IAM" != "debian" -a "$IAM" != "ubuntu" -a "$IAM" != "almalinux" ]; then
       graph_error "ERROR: PLESK is not available for this image"
       return 1
     fi
@@ -1604,16 +1645,18 @@ whoami() {
  IAM="debian"
 
  if [ "$1" ]; then
-  case "$1" in
-    *SuSE*|*suse*|*Suse*|*SUSE*)IAM="suse";;
-    *CentOS*|*centos*|*Centos*)IAM="centos";;
-    *Ubuntu*|*ubuntu*)IAM="ubuntu";;
-    Arch*|arch*)IAM="archlinux";;
+  case "${1,,}" in
+    *suse*)IAM="suse";;
+    *centos*)IAM="centos";;
+    *ubuntu*)IAM="ubuntu";;
+    *arch*)IAM="archlinux";;
+    *rocky*)IAM="rockylinux";;
+    *alma*)IAM="almalinux";;
   esac
  fi
 
  IMG_VERSION="$(echo "$1" | cut -d "-" -f 2)"
- [ -z "$IMG_VERSION" -o "$IMG_VERSION" = "" -o "$IMG_VERSION" = "h.net.tar.gz" -o "$IMG_VERSION" = 'latest' ]  && IMG_VERSION="0"
+ [ -z "$IMG_VERSION" -o "$IMG_VERSION" = "" -o "$IMG_VERSION" = "h.net.tar.gz" -o "$IMG_VERSION" = 'latest' ] && IMG_VERSION="0"
  IMG_ARCH="$(echo "$1" | sed 's/.*-\(32\|64\)-.*/\1/')"
 
  IMG_FULLNAME="$(find "$IMAGESPATH" -maxdepth 1 -type f -name "$1*" -a -not -regex '.*\.sig$' -printf '%f\n')"
@@ -1683,20 +1726,20 @@ stop_lvm_raid() {
 delete_partitions() {
  if [ "$1" ]; then
   # clean RAID information for every partition not only for the blockdevice
-  for raidmember in $(sfdisk -l "$1" 2>/dev/null | grep -o "${1}p\?[0-9]\+"); do
-    mdadm --zero-superblock $raidmember 2> /dev/null
+  for raidmember in $(sfdisk -l "$1" | grep -o "${1}p\?[0-9]\+"); do
+    mdadm -q --zero-superblock "$raidmember" |& debugoutput
   done
   # clean RAID information in superblock of blockdevice
-  mdadm --zero-superblock "$1" 2> /dev/null
+  mdadm -q --zero-superblock "$1" |& debugoutput
 
-  #delete GPT and MBR
-  sgdisk -Z "$1" 1>/dev/null 2>/dev/null
+  # delete GPT and MBR
+  sgdisk -Z "$1" |& debugoutput
 
   # clean mbr boot code
-  dd if=/dev/zero of="$1" bs=512 count=1 >/dev/null 2>&1 ; EXITCODE=$?
+  dd if=/dev/zero of="$1" bs=512 count=1 status=none |& debugoutput; EXITCODE=$?
 
   # re-read partition table
-  partprobe 2>/dev/null
+  partprobe |& debugoutput
 
   return $EXITCODE
  fi
@@ -1802,7 +1845,7 @@ create_partitions() {
   fi
   # add fstab entries for devpts, sys and shm in CentOS as they are not
   # automatically mounted by init skripts like in Debian/Ubuntu and OpenSUSE
-  if [ "$IAM" = "centos" ]; then
+  if [[ "$IAM" == "centos" ]] && ((IMG_VERSION <= 79)) || ((IMG_VERSION == 610)); then
     {
       echo "devpts /dev/pts devpts gid=5,mode=620 0 0"
       echo "tmpfs /dev/shm tmpfs defaults 0 0"
@@ -1816,14 +1859,14 @@ create_partitions() {
   dmsetup remove_all 2>&1 | debugoutput
   dmraid -a no 2>&1 | debugoutput
 
-  dd if=/dev/zero of=$1 bs=1M count=10  1>/dev/null 2>&1
-  hdparm -z $1 >/dev/null 2>&1
+  dd if=/dev/zero of=$1 bs=1M count=10 status=none |& debugoutput
+  hdparm -z $1 |& debugoutput
 
   #create GPT
   if [ $GPT  -eq '1' ]; then
     #create GPT and randomize disk id (GUID)
-    sgdisk -o $1 1>/dev/null 2>/dev/null
-    sgdisk -G $1 1>/dev/null 2>/dev/null
+    sgdisk -o $1 |& debugoutput
+    sgdisk -G $1 |& debugoutput
 
     # set dummy partition active/bootable in protective MBR to give some too
     # smart BIOS the clue that this disk can be booted in legacy mode
@@ -2021,8 +2064,13 @@ create_partitions() {
 make_fstab_entry() {
  if [ "$1" -a "$2" -a "$3" -a "$4" ]; then
   ENTRY=""
-  local p="$(echo $1 | grep nvme)"
-  [ -n "$p" ] && p='p'
+  local p=''
+  if grep -q '^/dev/disk/by-' <<< "$1"; then
+    p='-part'
+  else
+    p="$(echo $1 | grep nvme)"
+    [ -n "$p" ] && p='p'
+  fi
 
   if [ "$4" = "swap" ] ; then
     ENTRY="$1$p$2 none swap sw 0 0"
@@ -2849,7 +2897,7 @@ set_hostname() {
         # if we have systemd, just generate one (works around odd behaviour
         # when machine-id is only temporarily generated upon first boot
         systemd-machine-id-setup --root "$FOLD/hdd" 2>/dev/null
-        cp $machinefile $dbusfile
+        [[ -d "${dbusfile%/*}" ]] && cp $machinefile $dbusfile
       else
         execute_chroot_command "dbus-uuidgen --ensure"
         cp $dbusfile $machinefile
@@ -2866,7 +2914,7 @@ set_hostname() {
     fi
 
     if [[ -f "$networkfile" ]]; then
-      debug "# set new hostname '$fqdn_name' in $networkfile"
+      debug "# set new hostname '${fqdn_name:-$shortname}' in $networkfile"
       echo "HOSTNAME=${fqdn_name:-$shortname}" >> "$networkfile"
     fi
 
@@ -3173,12 +3221,6 @@ generate_new_ramdisk() {
   fi
 }
 
-setup_cpufreq() {
-  if [ "$1" ]; then
-    return 1
-  fi
-}
-
 # clear_logs "NIL"
 clear_logs() {
   if [ "$1" ]; then
@@ -3226,7 +3268,7 @@ net.ipv6.conf.all.accept_redirects=0
 EOF
 
   # only swap to avoid a OOM condition on vps
-  if isVServer; then
+  if is_virtual_machine; then
    echo "vm.swappiness=0" >>$sysctl_conf
   fi
 
@@ -3530,13 +3572,13 @@ install_robot_report_script() {
     echo "### ${COMPANY} installimage"
     echo '# report installation to robot'
     echo "rm '$robot_report_script'"
-    echo '('
+    installed_os_uses_systemd || echo '('
     echo '  sleep 60'
     echo '  for i in {1..36}; do'
     echo "    wget --no-check-certificate -O /dev/null --timeout=10 '$ROBOTURL' &> /dev/null && break"
     echo '    sleep 5'
     echo '  done'
-    echo ') &'
+    installed_os_uses_systemd || echo ') &'
   } > "$FOLD/hdd/$robot_report_script"
   chmod +x "$FOLD/hdd/$robot_report_script"
 
@@ -3546,6 +3588,10 @@ install_robot_report_script() {
     elif [[ "$IAM" == 'archlinux' ]]; then
       local link_service=1
     elif [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)); then
+      local link_service=1
+    elif [[ "$IAM" == 'rockylinux' ]]; then
+      local link_service=1
+    elif [[ "$IAM" == 'almalinux' ]]; then
       local link_service=1
     elif debian_buster_image; then
       local link_service=1
@@ -3569,18 +3615,13 @@ install_robot_report_script() {
       echo 'Description=Report installation to Robot'
       echo '[Service]'
       echo "ExecStart=$robot_report_script"
-      # TODO: KillMode=none is deprecated
-      echo 'KillMode=none'
-      echo 'Type=forking'
     } > "$FOLD/hdd/$robot_report_service"
     ((link_service == 1)) && ln -s ../robot-report.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/robot-report.service"
     # extend robot report script
     {
-      echo '('
-      ((link_service == 1)) && echo '  unlink /etc/systemd/system/multi-user.target.wants/robot-report.service'
-      echo "  rm '$robot_report_service'"
-      echo '  systemctl daemon-reload'
-      echo ') &'
+      ((link_service == 1)) && echo 'unlink /etc/systemd/system/multi-user.target.wants/robot-report.service'
+      echo "rm '$robot_report_service'"
+      echo 'systemctl daemon-reload'
     } >> "$FOLD/hdd/$robot_report_script"
 
     return 0
@@ -3739,6 +3780,7 @@ uuid_bugfix() {
     sed -n 's|^/dev/\([hvs]d[a-z][1-9][0-9]\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" > "$TEMPFILE"
     sed -n 's|^/dev/\(x[hvs]d[a-z][1-9][0-9]\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
     sed -n 's|^/dev/\(nvme[0-9]*n[p0-9]*\?\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
+    sed -n 's|^/dev/\(disk/by-[a-z]*/[^ ]*\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
     # Also use UUID for md devices to prevent update-initramfs warnings
     sed -n 's|^/dev/\(md\/[0-9]\+\).*|\1|p' < "$FOLD/hdd/etc/fstab" >> "$TEMPFILE"
     while read LINE; do
@@ -3761,11 +3803,12 @@ uuid_bugfix() {
 
 # param 1: /dev/sda (e.g)
 function hdinfo() {
+  local dev="$(readlink -f "$1")"
   local withoutdev;
   local vendor;
   local name;
   local logical_nr;
-  withoutdev=${1##*/}
+  withoutdev=${dev##*/}
   if [ -e "/sys/block/$withoutdev/device/vendor" ]; then
     vendor="$(tr -d ' ' < "/sys/block/$withoutdev/device/vendor")"
   fi
@@ -3788,7 +3831,7 @@ function hdinfo() {
       echo "# 3ware RAID (LD $logical_nr)"
       ;;
     ATA)
-      name="$(hdparm -i "$1" | grep Model | sed 's/ Model=\(.*\), Fw.*/\1/g')"
+      name="$(hdparm -i "$dev" | grep Model | sed 's/ Model=\(.*\), Fw.*/\1/g')"
       echo "# Onboard: $name"
       ;;
     *)
@@ -3799,21 +3842,15 @@ function hdinfo() {
 
 # function to check if we are in a kvm-qemu vServer environment
 # returns 0 if we are in a vServer env otherwise 1
-function isVServer() {
-#  local model="$(cat /proc/cpuinfo | grep "^model name" | cut -d ":" -f2 | tr -d ' ')"
-#  if [ -n "$(echo "$model" | grep -i "QEMUVirtualCPU")" ] || [ -n "$(echo "$model" | grep -i "PentiumII(Klamath)")" ]; then
+function is_virtual_machine() {
    case "$SYSTYPE" in
     vServer|Bochs|Xen|KVM|VirtualBox|'VMware,Inc.')
-      debug "# Systype: $SYSTYPE"
       return 0;;
     *)
-      debug "# Systype: $SYSTYPE"
       case "$SYSMFC" in
       	QEMU)
-          debug "# Manufacturer: $SYSMFC"
           return 0;;
         *)
-          debug "# Manufacturer: $SYSMFC"
           return 1;;
       esac
       return 1;;
@@ -3961,106 +3998,6 @@ function check_dos_partitions() {
     fi
   done
   [ "$output" != "no_output" ] && echo $result
-}
-
-# Rename eth device (ethX to eth0)
-#
-fix_eth_naming() {
- if [ "$1" ]; then
-   debug "# fix eth naming"
-
-   # for Debian and Debian derivatives
-   if [ "$IAM" = "debian" ] || [ "$IAM" = "ubuntu" ]; then
-     FILE="etc/network/interfaces"
-     if [ -f "$FOLD/hdd/$FILE" ]; then
-       debug "# fix_eth_naming replaces $1/eth0"
-       execute_chroot_command "sed -i 's/$1/eth0/g' $FILE"
-     fi
-   fi
-
-   # CentOS
-   if [ "$IAM" = "centos" ]; then
-     FILE="/etc/sysconfig/network-scripts/ifcfg-$1"
-     NEWFILE="/etc/sysconfig/network-scripts/ifcfg-eth0"
-     ROUTE="/etc/sysconfig/network-scripts/route-$1"
-     NEWROUTE="/etc/sysconfig/network-scripts/route-eth0"
-     if [ -f "$FOLD/hdd/$FILE" ] && [ -f "$FOLD/hdd/$ROUTE" ]; then
-       debug "# fix_eth_naming replaces $1 with eth0"
-       execute_chroot_command "sed -i 's/$1/eth0/g' $FILE"
-       execute_chroot_command "mv $FILE $NEWFILE"
-       execute_chroot_command "mv $ROUTE $NEWROUTE"
-     fi
-   fi
-
-   # SUSE
-   if [ "$IAM" = "suse" ]; then
-     FILE="/etc/sysconfig/network/ifcfg-$1"
-     NEWFILE="/etc/sysconfig/network/ifcfg-eth0"
-     if [ -f "$FOLD/hdd/$FILE" ]; then
-       debug "# fix_eth_naming mv $FILE to $NEWFILE"
-       execute_chroot_command "mv $FILE $NEWFILE"
-     fi
-   fi
- fi
-
-}
-
-
-suse_netdev_fix() {
-# device naming in OpenSuSE 12.3 for multiple NICs is
-# currently broken. (kernel and systemd disagree with each other)
-# Workaround is to map the NICs to their own namespace (net0 instead of eth0)
-# until the fix is released
-# see https://bugzilla.novell.com/show_bug.cgi?id=809843
-
-    FILE_NET="/etc/sysconfig/network/ifcfg-eth0"
-    FILE_NET_NEW="/etc/sysconfig/network/ifcfg-net0"
-    execute_chroot_command "mv $FILE_NET $FILE_NET_NEW";
-    execute_chroot_command "sed -i  's/eth0/net0/g' $FILE_NET_NEW";
-    sed -i  's/eth\([0-9]\)/net\1/g' "$FOLD/hdd$UDEVPFAD/70-persistent-net.rules"
-}
-
-is_private_ip() {
- if [ -n "$1" ]; then
-   local first; first="$(echo "$1" | cut -d '.' -f 1)"
-   local second; second="$(echo "$1" | cut -d '.' -f 2)"
-
-   case "$first" in
-     10)
-       debug "detected private ip ($first.$second.x)"
-       return 0
-       ;;
-     100)
-       if [ "$second" -ge 64 -a "$second" -lt 128 ]; then
-         debug "detected private ip ($first.$second.x)"
-         return 0
-       else
-         return 1
-       fi
-       ;;
-     172)
-       if [ "$second" -ge 16 -a "$second" -lt 32 ]; then
-         debug "detected private ip ($first.$second.x)"
-         return 0
-       else
-         return 1
-       fi
-       ;;
-     192)
-       if [ "$second" -eq 168 ]; then
-         debug "detected private ip ($first.$second.x)"
-         return 0
-       else
-         return 1
-       fi
-       ;;
-     *)
-       return 1
-       ;;
-   esac
- else
-  return 1
- fi
 }
 
 wait_for_udev() {

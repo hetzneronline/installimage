@@ -33,7 +33,7 @@ install_plesk() {
   while read network_interface; do
     local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
     ((${#ipv4_addrs[@]} == 0)) && continue
-    if ! ipv4_addr_is_private "${ipv4_addrs[0]}" || ! isVServer; then
+    if ! ipv4_addr_is_private "${ipv4_addrs[0]}" || ! is_virtual_machine; then
       continue
     fi
     {

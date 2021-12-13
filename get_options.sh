@@ -54,7 +54,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:G:" OPTION ; do
       echo "                        - lvm setup example:   /boot:ext2:256M,lvm:vg0:all"
       echo "  -v <logical volumes>  define the logical VOLUMES you want to be created"
       echo "                        - example: vg0:root:/:ext3:20G,vg0:swap:swap:swap:4G"
-      echo "  -d <drives>           list of hardDRIVES to use, e.g.:  sda  or  sda,sdb"
+      echo "  -d <drives>           /dev names of DRIVES to use, e.g.: sda or sda,sdb"
       echo "  -f <yes|no>           FORMAT the second drive (if not used for raid)?"
       echo "  -s <de|en>            Language to use for different things (e.g.PLESK)"
       echo "  -z PLESK_<Version>    Install optional software like PLESK with version <Version>"

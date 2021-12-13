@@ -83,30 +83,6 @@ generate_new_ramdisk() {
   fi
 }
 
-setup_cpufreq() {
-  if [ -n "$1" ]; then
-    local loadcpufreqconf="$FOLD/hdd/etc/default/loadcpufreq"
-    local cpufreqconf="$FOLD/hdd/etc/default/cpufrequtils"
-    {
-      echo "### $COMPANY - installimage"
-      echo "# cpu frequency scaling"
-    } > "$cpufreqconf"
-    if isVServer; then
-      echo 'ENABLE="false"' > "$loadcpufreqconf"
-      echo 'ENABLE="false"' >> "$cpufreqconf"
-    else
-      {
-        echo 'ENABLE="true"'
-        echo "GOVERNOR=\"$1\""
-        echo 'MAX_SPEED="0"'
-        echo 'MIN_SPEED="0"'
-      } >> "$cpufreqconf"
-    fi
-
-    return 0
-  fi
-}
-
 #
 # generate_config_grub <version>
 #
@@ -124,7 +100,7 @@ generate_config_grub() {
 
   # set linux_default in grub
   local grub_linux_default="nomodeset consoleblank=0"
-  if isVServer; then
+  if is_virtual_machine; then
     grub_linux_default="${grub_linux_default} elevator=noop"
   else
     if [ "$IMG_VERSION" -eq 1404 ]; then
@@ -187,7 +163,9 @@ generate_config_grub() {
     declare -i EXITCODE=$?
     local shimdir="$FOLD/hdd/usr/lib/shim"
     if [ -d "$shimdir" ]; then
-      cp "$shimdir/*" "$FOLD/hdd/boot/efi/EFI/ubuntu/"
+      for b in "$shimdir/"*; do
+        [[ -e "$b" ]] && cp "$b" "$FOLD/hdd/boot/efi/EFI/ubuntu/"
+      done
     fi
   else
     # only install grub2 in mbr of all other drives if we use swraid

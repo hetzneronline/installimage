@@ -3,7 +3,7 @@
 #
 # nextcloud functions
 #
-# (c) 2017-2018, Hetzner Online GmbH
+# (c) 2017-2021, Hetzner Online GmbH
 #
 
 nextcloud_install() { [[ "${IMAGENAME,,}" =~ nextcloud$|nextcloud-beta$ ]]; }
@@ -33,7 +33,12 @@ update_nextcloud_datadirectory_timestamps() {
 
 get_nextcloud_config_parameter() {
   local config_parameter="$1"
-  occ config:system:get "$config_parameter"
+  local i="$2"
+  if [[ -n "$i" ]]; then
+    occ config:system:get "$config_parameter" "$i"
+  else
+    occ config:system:get "$config_parameter"
+  fi
 }
 
 randomize_nextcloud_mysql_password() {
@@ -61,9 +66,18 @@ generate_nextcloud_instanceid() { echo "oc$(generate_random_string 10)"; }
 
 set_nextcloud_config_parameter() {
   local config_parameter="$1"
-  local value="$2"
-  occ config:system:set "$config_parameter" --value "$value" &> /dev/null
-  [[ "$(get_nextcloud_config_parameter "$config_parameter")" == "$value" ]]
+  local i="$2"
+  local value="$3"
+  if [[ -z "$value" ]]; then
+    value="$i"
+    i=
+  fi
+  if [[ -n "$i" ]]; then
+    occ config:system:set "$config_parameter" "$i" --value "$value" &> /dev/null
+  else
+    occ config:system:set "$config_parameter" --value "$value" &> /dev/null
+  fi
+  [[ "$(get_nextcloud_config_parameter "$config_parameter" "$i")" == "$value" ]]
 }
 
 randomize_nextcloud_instanceid() {
@@ -90,6 +104,18 @@ randomize_nextcloud_secret() {
   set_nextcloud_config_parameter secret "$new_secret"
 }
 
+add_ips_to_trusted_domains() {
+  debug '# add ips to trusted domains'
+  i=0
+  while read d; do
+    ipv6_addr_is_link_local_unicast_addr "$d" && continue
+    [[ "$d" =~ : ]] && d="[$d]"
+    echo "add trusted_domain $d" | debugoutput
+    set_nextcloud_config_parameter trusted_domains "$i" "$d" < /dev/null || return 1
+    ((i+=1))
+  done < <(ip -j a s | jq -r '.[].addr_info[].local')
+}
+
 setup_nextcloud() {
   debug '# setup nextcloud'
   setup_lamp || return 1
@@ -99,8 +125,10 @@ setup_nextcloud() {
   randomize_nextcloud_root_password || return 1
   randomize_nextcloud_instanceid || return 1
   randomize_nextcloud_passwordsalt || return 1
-  randomize_nextcloud_secret
-  execute_command_wo_debug chown -R www-data:www-data /var/www/nextcloud
+  randomize_nextcloud_secret || return 1
+  execute_command_wo_debug chown -R www-data:www-data /var/www/nextcloud || return 1
+  # trusted_domains * does not match ipv6 addrs
+  add_ips_to_trusted_domains
 }
 
 # vim: ai:ts=2:sw=2:et

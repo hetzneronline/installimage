@@ -375,18 +375,6 @@ generate_ntp_config "NIL" || status_failed
 status_done
 
 
-
-#
-# Cool'n'Quiet
-#
-#inc_step
-#status_busy "Setting CPU frequency scaling to $GOVERNOR"
-setup_cpufreq "$GOVERNOR" || {
-  debug "=> FAILED"
-#  exit 1
-}
-#status_donefailed $?
-
 #
 # Set up misc files
 #

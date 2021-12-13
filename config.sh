@@ -3,7 +3,7 @@
 #
 # set all necessary vars and functions
 #
-# (c) 2007-2018, Hetzner Online GmbH
+# (c) 2007-2021, Hetzner Online GmbH
 #
 
 
@@ -68,13 +68,24 @@ declare -x -i BTRFS=0
 # dialog settings
 export DIATITLE="$COMPANY"
 export OSMENULIST=(
-  "Debian"       "(Official)"
-  "Ubuntu"       "(Official)"
-  "CentOS"       "(Official)"
-  "Arch Linux"   "(Official)"
-  "Other"        "(!!NO SUPPORT!!)"
-  "Old images"   "(!!NO SUPPORT!!)"
-  "Custom image" "(Blanco config for user images)"
+  "Debian"        "(Official)"
+  "Ubuntu"        "(Official)"
+  "CentOS"        "(Official)"
+  "Arch Linux"    "(Official)"
+)
+if (($(find "$IMAGESPATH" -type f -iname '*centos*stream*' -printf '.' | wc -c) > 0)); then
+  export OSMENULIST+=("CentOS Stream" "(!!BETA, NO SUPPORT!!)")
+fi
+if (($(find "$IMAGESPATH" -type f -iname '*alma*' -printf '.' | wc -c) > 0)); then
+  export OSMENULIST+=("AlmaLinux"     "(!!BETA, NO SUPPORT!!)")
+fi
+if (($(find "$IMAGESPATH" -type f -iname '*rocky*' -printf '.' | wc -c) > 0)); then
+ export OSMENULIST+=("Rocky Linux"   "(!!BETA, NO SUPPORT!!)")
+fi
+export OSMENULIST+=(
+  "Other"         "(!!NO SUPPORT!!)"
+  "Old images"    "(!!NO SUPPORT!!)"
+  "Custom image"  "(Blanco config for user images)"
 )
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
@@ -85,7 +96,7 @@ export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.com/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.com/plesk
-export PLESK_STD_VERSION=PLESK_18_0_33
+export PLESK_STD_VERSION=PLESK_18_0_40
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats

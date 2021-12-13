@@ -74,16 +74,6 @@ generate_new_ramdisk() {
   return $EXITCODE
 }
 
-setup_cpufreq() {
-  if [ -n "$1" ]; then
-     # openSuSE defaults to the ondemand governor, so we don't need to set this at all
-     # http://doc.opensuse.org/documentation/html/openSUSE/opensuse-tuning/cha.tuning.power.html
-     # check release notes of furture releases carefully, if this has changed!
-
-    return 0
-  fi
-}
-
 #
 # generate_config_grub
 #
@@ -107,7 +97,8 @@ generate_config_grub() {
     local disk; disk="$(eval echo "\$DRIVE$i")"
     echo "(hd$j) $disk" >> "$DMAPFILE"
   done
-  cat "$DMAPFILE" >> "$DEBUGFILE"
+  debug '# device map:'
+  cat "$DMAPFILE" | debugoutput
 
   local grub_linux_default="nomodeset consoleblank=0"
 
@@ -124,7 +115,7 @@ generate_config_grub() {
     grub_linux_default="${grub_linux_default} net.ifnames=0 quiet systemd.show_status=1"
   fi
   # set elevator to noop for vserver
-  if isVServer; then
+  if is_virtual_machine; then
     grub_linux_default="${grub_linux_default} elevater=noop"
   fi
   # H8SGL need workaround for iommu

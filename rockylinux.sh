@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #
-# CentOS specific functions
+# Rocky Linux specific functions
 #
-# (c) 2008-2021, Hetzner Online GmbH
+# (c) 2021, Hetzner Online GmbH
 #
 
 
@@ -102,7 +102,7 @@ generate_config_grub() {
 
   rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
   if [ "$UEFI" -eq 1 ]; then
-    execute_chroot_command "grub2-mkconfig -o /boot/efi/EFI/centos/grub.cfg 2>&1"; declare -i EXITCODE="$?"
+    execute_chroot_command "grub2-mkconfig -o /boot/efi/EFI/rocky/grub.cfg 2>&1"; declare -i EXITCODE="$?"
   else
     execute_chroot_command "grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1"; declare -i EXITCODE="$?"
   fi
@@ -116,7 +116,7 @@ write_grub() {
     # grubx64.efi (which looks for grub.cfg in ESP) with a new one, which
     # looks for in in /boot/grub2 (which may be more difficult to read)
     rm -f "$FOLD/hdd/boot/grub2/grubenv"
-    execute_chroot_command "ln -s /boot/efi/EFI/centos/grubenv /boot/grub2/grubenv"
+    execute_chroot_command "ln -s /boot/efi/EFI/rocky/grubenv /boot/grub2/grubenv"
     declare -i EXITCODE=$?
   else
     # only install grub2 in mbr of all other drives if we use swraid
@@ -137,31 +137,9 @@ write_grub() {
 # for purpose of e.g. debian-sys-maint mysql user password in debian/ubuntu LAMP
 #
 run_os_specific_functions() {
-
-  execute_chroot_command "chkconfig iptables off"
-  execute_chroot_command "chkconfig ip6tables off"
-  is_plesk_install || execute_chroot_command "chkconfig postfix off"
-
-  #
-  # setup env in cpanel image
-  #
-  debug "# Testing and setup of cpanel image"
-  if [ -f "$FOLD/hdd/etc/wwwacct.conf" ] && [ -f "$FOLD/hdd/etc/cpupdate.conf" ] ; then
-    grep -q -i cpanel <<< "$IMAGE_FILE" && {
-      setup_cpanel || return 1
-    }
-  fi
-
   # selinux autorelabel if enabled
   egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux" &&
     touch "$FOLD/hdd/.autorelabel"
-
-  ((IMG_VERSION >= 69)) && mkdir -p "$FOLD/hdd/var/run/netreport"
-
-  if ((IMG_VERSION >= 74)) && ((IMG_VERSION != 610)) && ((IMG_VERSION < 80)); then
-    execute_chroot_command 'yum check-update' # || return 1
-    execute_chroot_command 'yum -y install polkit' || return 1
-  fi
 
   return 0
 }
