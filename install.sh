@@ -406,7 +406,7 @@ if [ "$OPT_USE_SSHKEYS" = "1" -a -z "$FORCE_PASSWORD" ]; then
   status_busy_nostep "  Disabling root password"
   set_rootpassword "$FOLD/hdd/etc/shadow" "*"
   status_donefailed $?
-  status_busy_nostep "  Disabling SSH root login without password"
+  status_busy_nostep "  Disabling SSH root login with password"
   set_ssh_rootlogin "without-password"
   status_donefailed $?
 else
