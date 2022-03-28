@@ -59,12 +59,17 @@ ROOTHASH=""
 ERROREXIT="0"
 FINALIMAGEPATH=""
 
-SYSMFC=$(dmidecode -s system-manufacturer 2>/dev/null | tail -n1)
-SYSTYPE=$(dmidecode -s system-product-name 2>/dev/null | tail -n1)
+SYSMFC="$(dmidecode -s system-manufacturer 2>/dev/null | tail -n1)"
+SYSTYPE="$(dmidecode -s system-product-name 2>/dev/null | tail -n1)"
 debug "# SYSTYPE: $SYSTYPE"
 debug "# SYSMFC:  $SYSMFC"
-MBTYPE=$(dmidecode -s baseboard-product-name 2>/dev/null | tail -n1)
-SYSARCH=$(uname -m)
+MBTYPE="$(dmidecode -s baseboard-product-name 2>/dev/null | tail -n1)"
+
+SYSARCH="$(uname -m)"
+
+if [ "$SYSARCH" == "aarch64" ]; then
+  SYSARCH="arm64"
+fi
 
 if [ -d "/sys/firmware/efi" ]; then
   UEFI=1
@@ -96,9 +101,9 @@ generate_menu() {
   if [ "$1" = "Other" ]; then
     RAWLIST=""
     RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n')
-    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Jessie"
-    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Stretch"
+    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Bullseye"
     RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Buster"
+    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Stretch"
     RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*beta*' -a -not -name '*.sig' -printf '%f\n')"
   elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
@@ -128,11 +133,23 @@ generate_menu() {
   # ensure rawlist is newline separated
   RAWLIST="$(echo "$RAWLIST" | xargs | tr ' ' "\n")"
 
-  # check if 32-bit rescue is activated and disable 64-bit images then
-  if [ "$(uname -m)" != "x86_64" ]; then
-    RAWLIST="$(echo "$RAWLIST" | grep -v "\-64\-[a-zA-Z]")"
-    RAWLIST="$(echo "$RAWLIST" | grep -v "\-amd64\-[a-zA-Z]")"
-  fi
+  # filter images based on $SYSARCH
+  case "$SYSARCH" in
+    x86_64)
+      RAWLIST="$(echo "$RAWLIST" | grep -v -E "\-(32|i386)\-[a-zA-Z]")"
+      RAWLIST="$(echo "$RAWLIST" | grep -v -E "\-arm64\-[a-zA-Z]")"
+      ;;
+    i386)
+      RAWLIST="$(echo "$RAWLIST" | grep -E "\-(32|i386)\-[a-zA-Z]")"
+      ;;
+    arm64)
+      RAWLIST="$(echo "$RAWLIST" | grep "\-arm64\-[a-zA-Z]")"
+      ;;
+    *)
+      echo "unknown arch $SYSARCH - exiting"
+      exit 1
+      ;;
+  esac
 
   case "${1,,}" in
     *)
@@ -168,9 +185,9 @@ generate_menu() {
   case $IMAGENAME in
     Proxmox-Virtualization-Environment*)
       case "$IMAGENAME" in
-        Proxmox-Virtualization-Environment-on-Debian-Jessie) export PROXMOX_VERSION="4" ;;
-        Proxmox-Virtualization-Environment-on-Debian-Stretch) export PROXMOX_VERSION="5" ;;
+        Proxmox-Virtualization-Environment-on-Debian-Bullseye) export PROXMOX_VERSION="7" ;;
         Proxmox-Virtualization-Environment-on-Debian-Buster) export PROXMOX_VERSION="6" ;;
+        Proxmox-Virtualization-Environment-on-Debian-Stretch) export PROXMOX_VERSION="5" ;;
       esac
       cp "$SCRIPTPATH/post-install/proxmox$PROXMOX_VERSION" /post-install
       chmod 0755 /post-install
@@ -2772,7 +2789,13 @@ extract_image() {
 
     # extract ESP content first, so we can still use bsdtar later
     if [ "$UEFI" -eq 1 ]; then
-      tar "${tar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" boot/efi 2>&1 | debugoutput ; EXITCODE=$?
+      if tar -tvf "$EXTRACTFROM" boot &> /dev/null; then
+         local boot=boot
+      else
+        local boot=./boot
+      fi
+
+      tar "${tar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" "$boot/efi" 2>&1 | debugoutput ; EXITCODE=$?
       tar_options+=(--exclude 'boot/efi')
       bsdtar_options+=(--exclude '^boot/efi')
     fi

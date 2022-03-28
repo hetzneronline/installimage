@@ -45,8 +45,8 @@ generate_new_ramdisk() {
     local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
     {
       echo "### $COMPANY - installimage"
-      echo 'add_dracutmodules+="lvm mdraid"'
-      echo 'add_drivers+="raid0 raid1 raid10 raid456"'
+      echo 'add_dracutmodules+=" lvm mdraid "'
+      echo 'add_drivers+=" raid0 raid1 raid10 raid456 "'
       #echo 'early_microcode="no"'
       echo 'hostonly="no"'
       echo 'hostonly_cmdline="no"'
@@ -121,6 +121,10 @@ generate_config_grub() {
   # H8SGL need workaround for iommu
   if [ "$MBTYPE" = 'H8SGL' ] && [ "$IMG_VERSION" -ge 131 ] ; then
     grub_linux_default="${grub_linux_default} iommu=noaperture"
+  fi
+
+  if [ "$SYSARCH" == "arm64" ]; then
+    grub_linux_default+=' console=ttyAMA0 console=tty0'
   fi
 
   sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"

@@ -98,4 +98,30 @@ install_remove_password_txt_hint() {
   chmod 755 "$FOLD/hdd/usr/local/bin/remove_password_txt_hint"
 }
 
+randomize_mdadm_array_check_time() {
+  local mdcron; mdcron="$FOLD/hdd/etc/cron.d/mdadm"
+  local mdtimer; mdtimer="$FOLD/hdd/lib/systemd/system/mdcheck_start.timer"
+  declare -i hour minute day
+  hour=$(((RANDOM % 4) + 1))
+  minute=$(((RANDOM % 59) + 1))
+  day=$(((RANDOM % 28) + 1))
+  if [ -f "$mdcron" ] && grep -q checkarray "$mdcron"; then
+    debug "# Randomizing cronjob run time for mdadm checkarray: day $day @ $hour:$minute"
+    sed -i -e "s/^[* 0-9]*root/$minute $hour $day * * root/" -e "s/ &&.*]//" \
+      "$mdcron"
+  elif [ -f "$mdtimer" ]; then
+    debug "# Randomizing systemd timer for mdadm checkarray: day $day @ $hour:$minute"
+    local cfgdir; cfgdir="$FOLD/hdd/etc/systemd/system/mdcheck_start.timer.d"
+    mkdir -p "$cfgdir"
+    local cfg_override; cfg_override="$cfgdir/$C_SHORT.conf"
+    {
+      echo "[Timer]"
+      echo "OnCalendar="
+      printf "OnCalendar=*-*-%02d %02d:%02d:00" "$day" "$hour" "$minute"
+    } > "$cfg_override"
+  else
+    debug "# No /etc/cron.d/mdadm or /lib/systemd/system/mdcheck_start.timer found to randomize mdadm checkarray run time"
+  fi
+}
+
 # vim: ai:ts=2:sw=2:et

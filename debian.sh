@@ -99,6 +99,10 @@ generate_config_grub() {
     grub_linux_default=${grub_linux_default/nomodeset }
   fi
 
+  if [ "$SYSARCH" == "arm64" ]; then
+    grub_linux_default+=' console=ttyAMA0 console=tty0'
+  fi
+
   sed -i "$grubdefconf" -e "s/^GRUB_HIDDEN_TIMEOUT=.*/GRUB_HIDDEN_TIMEOUT=5/" -e "s/^GRUB_HIDDEN_TIMEOUT_QUIET=.*/GRUB_HIDDEN_TIMEOUT_QUIET=false/"
   sed -i "$grubdefconf" -e "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/"
 
@@ -111,7 +115,7 @@ generate_config_grub() {
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
   if [ "$UEFI" -eq 1 ]; then
-    local efi_target="x86_64-efi"
+    local efi_target="${SYSARCH}-efi"
     local efi_dir="/boot/efi"
     local efi_grub_options="--no-floppy --no-nvram --removable"
     execute_chroot_command "grub-install --target=${efi_target} --efi-directory=${efi_dir} ${efi_grub_options} 2>&1"
@@ -152,7 +156,7 @@ delete_grub_device_map() {
 # for purpose of e.g. debian-sys-maint mysql user password in debian/ubuntu LAMP
 #
 run_os_specific_functions() {
-  randomize_mdadm_checkarray_cronjob_time
+  randomize_mdadm_array_check_time
 
   if hetzner_lamp_install; then
     setup_hetzner_lamp || return 1
@@ -162,21 +166,6 @@ run_os_specific_functions() {
 
   disable_resume
   return 0
-}
-
-randomize_mdadm_checkarray_cronjob_time() {
-  local mdcron="$FOLD/hdd/etc/cron.d/mdadm"
-  if [ -f "$mdcron" ] && grep -q checkarray "$mdcron"; then
-    declare -i hour minute day
-    minute=$(((RANDOM % 59) + 1))
-    hour=$(((RANDOM % 4) + 1))
-    day=$(((RANDOM % 28) + 1))
-    debug "# Randomizing cronjob run time for mdadm checkarray: day $day @ $hour:$minute"
-
-    sed -i -e "s/^[* 0-9]*root/$minute $hour $day * * root/" -e "s/ &&.*]//" "$mdcron"
-  else
-    debug "# No /etc/cron.d/mdadm found to randomize cronjob run time"
-  fi
 }
 
 debian_grub_fix() {

@@ -49,9 +49,9 @@ export AUTH_DNS1="ns1.first-ns.de"
 export AUTH_DNS2="robotns2.second-ns.de"
 export AUTH_DNS3="robotns3.second-ns.com"
 
-export DEFAULTPARTS="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 all"
-export DEFAULTPARTS_BIG="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 1024G\nPART /home ext4 all"
-export DEFAULTPARTS_LARGE="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 512M\nPART / ext4 2014G\nPART /home ext4 all"
+export DEFAULTPARTS="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 all"
+export DEFAULTPARTS_BIG="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 1024G\nPART /home ext4 all"
+export DEFAULTPARTS_LARGE="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 2014G\nPART /home ext4 all"
 export DEFAULTPARTS_VSERVER="PART / ext3 all"
 export DEFAULTPARTS_CLOUDSERVER="PART / ext4 all"
 export DEFAULTSWRAID="1"
@@ -74,13 +74,13 @@ export OSMENULIST=(
   "Arch Linux"    "(Official)"
 )
 if (($(find "$IMAGESPATH" -type f -iname '*centos*stream*' -printf '.' | wc -c) > 0)); then
-  export OSMENULIST+=("CentOS Stream" "(!!BETA, NO SUPPORT!!)")
+  export OSMENULIST+=("CentOS Stream" "(Official)")
 fi
 if (($(find "$IMAGESPATH" -type f -iname '*alma*' -printf '.' | wc -c) > 0)); then
-  export OSMENULIST+=("AlmaLinux"     "(!!BETA, NO SUPPORT!!)")
+  export OSMENULIST+=("AlmaLinux"     "(Official)")
 fi
 if (($(find "$IMAGESPATH" -type f -iname '*rocky*' -printf '.' | wc -c) > 0)); then
- export OSMENULIST+=("Rocky Linux"   "(!!BETA, NO SUPPORT!!)")
+ export OSMENULIST+=("Rocky Linux"   "(Official)")
 fi
 export OSMENULIST+=(
   "Other"         "(!!NO SUPPORT!!)"
@@ -91,6 +91,7 @@ export OSMENULIST+=(
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
 export PROXMOX6_BASE_IMAGE="Debian-1010-buster-64-minimal"
+export PROXMOX7_BASE_IMAGE="Debian-1101-bullseye-amd64-base"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 

@@ -3,7 +3,7 @@
 #
 # mysql functions
 #
-# (c) 2016-2018, Hetzner Online GmbH
+# (c) 2016-2021, Hetzner Online GmbH
 #
 
 mysql_running() { execute_command_wo_debug mysqladmin ping &> /dev/null; }
@@ -52,7 +52,7 @@ set_mysql_password() {
   local user="$1"
   local password="$2"
   if mysql_version_ge 5.7.6; then
-    if ! [[ "$(query_mysql "SELECT plugin FROM mysql.user WHERE user = '${user//\'/\\\'}';")" =~ ^mysql_native_password$|^unix_socket$ ]]; then
+    if ! [[ "$(query_mysql "SELECT plugin FROM mysql.user WHERE user = '${user//\'/\\\'}';")" =~ ^mysql_native_password$|^unix_socket$|^auth_socket$ ]]; then
       local password_field='password'
     else
       local password_field='authentication_string'
@@ -77,7 +77,20 @@ reset_mysql_root_password() {
   stop_mysql || return 1
   execute_command_wo_debug mkdir -p /var/run/mysqld || return 1
   execute_command_wo_debug chown mysql:mysql /var/run/mysqld || return 1
+
+  # work around INSTALL PLUGIN ERROR 1030 (HY000) at line 1: Got error 1 from storage engine
   execute_command_wo_debug 'mysqld_safe --skip-grant-tables &> /dev/null &'
+  until mysql_running; do :; done
+  local add_args
+  if [[ "$(query_mysql "SELECT plugin FROM mysql.user WHERE user = 'root';")" =~ ^auth_socket$ ]]; then
+    if ! query_mysql 'SHOW PLUGINS' | grep -q '^auth_socket[[:space:]]'; then
+      add_args+=' --plugin-load-add=auth_socket.so'
+    fi
+  fi
+  execute_command_wo_debug mysqladmin shutdown &> /dev/null || return 1
+  while mysql_running; do :; done
+
+  execute_command_wo_debug "mysqld_safe --skip-grant-tables $add_args &> /dev/null &"
   until mysql_running; do :; done
   set_mysql_password root "$new_root_password" || return 1
   {

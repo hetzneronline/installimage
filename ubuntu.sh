@@ -125,6 +125,10 @@ generate_config_grub() {
     grub_linux_default=${grub_linux_default/nomodeset }
   fi
 
+  if [ "$SYSARCH" == "arm64" ]; then
+    grub_linux_default+=' console=ttyAMA0 console=tty0'
+  fi
+
   if [ -d "$grubconfdir" ]; then
     # this needs to end in .cfg, otherwise grub-mkconfig will not read it"
     grubdefconf="$grubconfdir/hetzner.cfg"
@@ -155,7 +159,7 @@ generate_config_grub() {
 
   execute_chroot_command "grub-mkconfig -o /boot/grub/grub.cfg 2>&1"
   if [ "$UEFI" -eq 1 ]; then
-    local efi_target="x86_64-efi"
+    local efi_target="${SYSARCH}-efi"
     local efi_dir="/boot/efi"
     local efi_grub_options="--no-floppy --no-nvram --removable --no-uefi-secure-boot"
     # if/after installing grub-efi-amd64-signed, this will always install the "static" grubx64.efi
@@ -208,7 +212,8 @@ disable_ttyvtdisallocate() {
 # for purpose of e.g. debian-sys-maint mysql user password in debian/ubuntu LAMP
 #
 run_os_specific_functions() {
-  randomize_mdadm_checkarray_cronjob_time
+  randomize_mdadm_array_check_time
+
   if nextcloud_install; then
     setup_nextcloud || return 1
   fi
@@ -216,21 +221,6 @@ run_os_specific_functions() {
 
   disable_resume
   return 0
-}
-
-randomize_mdadm_checkarray_cronjob_time() {
-  local mdcron; mdcron="$FOLD/hdd/etc/cron.d/mdadm"
-  if [ -f "$mdcron" ] && grep -q checkarray "$mdcron"; then
-    hour=$(((RANDOM % 4) + 1))
-    minute=$(((RANDOM % 59) + 1))
-    day=$(((RANDOM % 28) + 1))
-    debug "# Randomizing cronjob run time for mdadm checkarray: day $day @ $hour:$minute"
-
-    sed -i -e "s/^[* 0-9]*root/$minute $hour $day * * root/" -e "s/ &&.*]//" \
-      "$mdcron"
-  else
-    debug "# No /etc/cron.d/mdadm found to randomize cronjob run time"
-  fi
 }
 
 ubuntu_grub_fix() {

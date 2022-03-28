@@ -42,8 +42,8 @@ generate_new_ramdisk() {
     local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
     {
       echo "### $COMPANY - installimage"
-      echo 'add_dracutmodules+="lvm mdraid"'
-      echo 'add_drivers+="raid0 raid1 raid10 raid456"'
+      echo 'add_dracutmodules+=" lvm mdraid "'
+      echo 'add_drivers+=" raid0 raid1 raid10 raid456 "'
       #echo 'early_microcode="no"'
       echo 'hostonly="no"'
       echo 'hostonly_cmdline="no"'
@@ -98,6 +98,10 @@ generate_config_grub() {
     grub_cmdline_linux=${grub_cmdline_linux/nomodeset }
   fi
 
+  if [ "$SYSARCH" == "arm64" ]; then
+    grub_cmdline_linux+=' console=ttyAMA0 console=tty0'
+  fi
+
   sed -i "s/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"$grub_cmdline_linux\"/" "$FOLD/hdd/etc/default/grub"
 
   rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
@@ -137,6 +141,8 @@ write_grub() {
 # for purpose of e.g. debian-sys-maint mysql user password in debian/ubuntu LAMP
 #
 run_os_specific_functions() {
+  randomize_mdadm_array_check_time
+
   # selinux autorelabel if enabled
   egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux" &&
     touch "$FOLD/hdd/.autorelabel"

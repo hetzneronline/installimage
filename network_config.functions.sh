@@ -297,7 +297,7 @@ gen_ifcfg_script_centos() {
   # Without NetworkManager IPV6_DEFAULTDEV is required
   [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)) && ! is_cpanel_install && return
   [[ "$IAM" == 'rockylinux' ]] && return
-  [[ "$IAM" == 'almalinux' ]] && return
+  [[ "$IAM" == 'almalinux' ]] && ! is_cpanel_install && return
   echo "IPV6_DEFAULTDEV=$predicted_network_interface_name"
 }
 
@@ -920,6 +920,11 @@ v4_first() {
   has_no_public_ip || has_no_ipv6
 }
 
+ip_addr_last_octet() {
+  local ip_addr="$1"
+  [[ "$ip_addr" =~ [.:]([^.:]*)$ ]] && echo "${BASH_REMATCH[1]}"
+}
+
 randomized_nsaddrs() {
   local v6_nsaddrs=($(shuf -e "${DNSRESOLVER_V6[@]}"))
   local v4_nsaddrs=($(shuf -e "${DNSRESOLVER[@]}"))
@@ -932,10 +937,26 @@ randomized_nsaddrs() {
     second_pool=("${v6_nsaddrs[@]}")
   fi
 
+  local spread_by_last_octet=()
+  local nsaddr
+  local i=${#second_pool[@]}
+  for addr in "${first_pool[@]}"; do
+    ((i == 0)) && break
+
+    for ((j=0; j<${#second_pool[@]}; j++)); do
+      nsaddr="${second_pool[$j]}"
+      [[ "$(ip_addr_last_octet "$addr")" == "$(ip_addr_last_octet "$nsaddr")" ]] && continue
+
+      spread_by_last_octet+=("$nsaddr")
+      i=$((i - 1))
+    done
+  done
+  second_pool=("${spread_by_last_octet[@]}")
+
   local nsaddrs=()
   local maxns=4
   local i=-1
-  local nsaddr
+  nsaddr=
   until (( ${#nsaddrs[@]} == $maxns || (${#first_pool[@]} == 0 && ${#second_pool[@]} == 0) )); do
     i=$((i + 1))
 

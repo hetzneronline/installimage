@@ -261,7 +261,7 @@ generate_config_grub() {
 }
 
 run_os_specific_functions() {
-  :
+  randomize_mdadm_array_check_time
 }
 
 # vim: ai:ts=2:sw=2:et
