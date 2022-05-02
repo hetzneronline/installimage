@@ -2231,6 +2231,7 @@ make_swraid() {
         local array_raidlevel="$SWRAIDLEVEL"
         local can_assume_clean=''
         local array_layout=''
+        local array_chunks=''
 
         # GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
         if [ "$(echo "$line" | grep "/boot ")" ]; then
@@ -2243,6 +2244,8 @@ make_swraid() {
         elif [ "$(echo "$line" | grep "/boot/efi")" ]; then
           array_raidlevel="1"
           array_metadata="--metadata=1.0"
+        elif [ "$(echo "$line" | grep "/home ")" ] && [ "$SWRAIDLEVEL" = "10" ]; then
+          array_chunks="--chunk 2048"
         fi
 
         if [ "$RAID_ASSUME_CLEAN" = "1" ]; then
@@ -2258,7 +2261,7 @@ make_swraid() {
         debug "Array RAID Level is: '$array_raidlevel' - $can_assume_clean - $array_layout"
         debug "Array metadata is: '$array_metadata'"
 
-        yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $array_layout $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
+        yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $array_layout $array_chunks $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
 
         count="$[$count+1]"
         md_count="$[$md_count+1]"
