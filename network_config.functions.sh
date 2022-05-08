@@ -19,8 +19,8 @@ setup_etc_sysconfig_network() {
 
 # list network interfaces
 network_interfaces() {
-  for file in /sys/class/net/*; do
-    echo "${file##*/}"
+  for file in /sys/class/net/{e{th,n{o,p,s,x}},vmbr}*; do
+    [ -e "$file" ] && echo "${file##*/}"
   done
 }
 
