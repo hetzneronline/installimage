@@ -16,6 +16,7 @@ PARTS_SUM_SIZE=""
 HASROOT=""
 SWRAID=""
 SWRAIDLEVEL=""
+SWRAIDCHUNKS=""
 LVM=""
 LVM_VG_CHECK=""
 IMAGE_PATH=""
@@ -343,6 +344,16 @@ create_config() {
         echo ""
         echo "SWRAIDLEVEL $set_level"
       } >> "$CNF"
+	  
+	  echo '' >> "$CNF"
+	  	  
+	  {
+        echo "## Choose the RAID chunk size for the /home partition"
+        echo "## < 64 | 128 | 256 | 512 | 1024 | 2048 >"
+        echo ""
+        echo "$SWRAIDCHUNKS 512"
+      } >> "$CNF"
+	  
     else
       # automode always take over OPT_SWRAID and OPT_SWRAIDLEVEL
       if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
@@ -738,6 +749,9 @@ if [ -n "$1" ]; then
   # Software RAID Level
   SWRAIDLEVEL="$(grep -m1 -e ^SWRAIDLEVEL "$1" | awk '{ print $2 }')"
   [ "$SWRAIDLEVEL" = "" ] && SWRAIDLEVEL="1"
+  
+  SWRAIDCHUNKS="$(grep -m1 -e ^SWRAIDCHUNKS "$1" | awk '{ print $2 }')"
+  [ "$SWRAIDCHUNKS" = "" ] && SWRAIDCHUNKS="512"
 
   PARTS_SUM_SIZE="0"
   PART_COUNT="$(grep -c -e '^PART' "$1")"
@@ -1017,6 +1031,15 @@ validate_vars() {
     [ "$SWRAIDLEVEL" != "1" ] && [ "$SWRAIDLEVEL" != "5" ] &&
     [ "$SWRAIDLEVEL" != "6" ] && [ "$SWRAIDLEVEL" != "10" ]; then
       graph_error "ERROR: Value for SWRAIDLEVEL is not correct"
+      return 1
+  fi
+  
+  # test if $SWRAIDCHUNKS is either 64, 128, 256, 512, 1024, 2048
+  if [ "$SWRAID" = "1" ] && [ "$SWRAIDLEVEL" != "1" ] &&
+    [ "$SWRAIDCHUNKS" != "64" ] && [ "$SWRAIDCHUNKS" != "128" ] &&
+    [ "$SWRAIDCHUNKS" != "256" ] && [ "$SWRAIDCHUNKS" != "512" ] && 
+    [ "$SWRAIDCHUNKS" != "1024" ] && [ "$SWRAIDCHUNKS" != "2048" ]; then
+      graph_error "ERROR: Value for SWRAIDCHUNKS is not correct"
       return 1
   fi
 
@@ -2231,6 +2254,7 @@ make_swraid() {
         local array_raidlevel="$SWRAIDLEVEL"
         local can_assume_clean=''
         local array_layout=''
+        local array_chunks=''
 
         # GRUB can't boot from a RAID0/5/6 or 10 partition, so make /boot always RAID1
         if [ "$(echo "$line" | grep "/boot ")" ]; then
@@ -2243,6 +2267,8 @@ make_swraid() {
         elif [ "$(echo "$line" | grep "/boot/efi")" ]; then
           array_raidlevel="1"
           array_metadata="--metadata=1.0"
+		elif [ "$(echo "$line" | grep "/home")" ] && [ "$SWRAIDLEVEL" != "1" ]; then
+          array_chunks="--chunk $SWRAIDCHUNKS"
         fi
 
         if [ "$RAID_ASSUME_CLEAN" = "1" ]; then
@@ -2258,7 +2284,7 @@ make_swraid() {
         debug "Array RAID Level is: '$array_raidlevel' - $can_assume_clean - $array_layout"
         debug "Array metadata is: '$array_metadata'"
 
-        yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $array_layout $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
+        yes | mdadm -q -C $raid_device -l$array_raidlevel -n$n $array_metadata $array_layout $array_chunks $can_assume_clean $components 2>&1 | debugoutput ; EXITCODE=$?
 
         count="$[$count+1]"
         md_count="$[$md_count+1]"
