@@ -345,9 +345,9 @@ create_config() {
         echo "SWRAIDLEVEL $set_level"
       } >> "$CNF"
 	  
-	  echo '' >> "$CNF"
+      echo '' >> "$CNF"
 	  	  
-	  {
+      {
         echo "## Choose the RAID chunk size for the /home partition"
         echo "## < 64 | 128 | 256 | 512 | 1024 | 2048 >"
         echo ""
@@ -2267,7 +2267,7 @@ make_swraid() {
         elif [ "$(echo "$line" | grep "/boot/efi")" ]; then
           array_raidlevel="1"
           array_metadata="--metadata=1.0"
-		elif [ "$(echo "$line" | grep "/home")" ] && [ "$SWRAIDLEVEL" != "1" ]; then
+        elif [ "$(echo "$line" | grep "/home")" ] && [ "$SWRAIDLEVEL" != "1" ]; then
           array_chunks="--chunk $SWRAIDCHUNKS"
         fi
 
