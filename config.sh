@@ -3,7 +3,7 @@
 #
 # set all necessary vars and functions
 #
-# (c) 2007-2021, Hetzner Online GmbH
+# (c) 2007-2022, Hetzner Online GmbH
 #
 
 
@@ -52,8 +52,8 @@ export AUTH_DNS3="robotns3.second-ns.com"
 export DEFAULTPARTS="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 all"
 export DEFAULTPARTS_BIG="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 1024G\nPART /home ext4 all"
 export DEFAULTPARTS_LARGE="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 2014G\nPART /home ext4 all"
-export DEFAULTPARTS_VSERVER="PART / ext3 all"
-export DEFAULTPARTS_CLOUDSERVER="PART / ext4 all"
+export DEFAULTPARTS_VSERVER="UEFI##PART / ext3 all"
+export DEFAULTPARTS_CLOUDSERVER="UEFI##PART / ext4 all"
 export DEFAULTSWRAID="1"
 export DEFAULTTWODRIVESWRAIDLEVEL="1"
 export DEFAULTTHREEDRIVESWRAIDLEVEL="5"
@@ -85,12 +85,12 @@ fi
 export OSMENULIST+=(
   "Other"         "(!!NO SUPPORT!!)"
   "Old images"    "(!!NO SUPPORT!!)"
-  "Custom image"  "(Blanco config for user images)"
+  "Custom image"  "(Config for custom images)"
 )
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
-export PROXMOX6_BASE_IMAGE="Debian-1010-buster-64-minimal"
+export PROXMOX6_BASE_IMAGE="Debian-1011-buster-64-minimal"
 export PROXMOX7_BASE_IMAGE="Debian-1101-bullseye-amd64-base"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
@@ -137,6 +137,25 @@ export CYAN="\033[1;36m"
 export GREY="\033[0;37m"
 export WHITE="\033[1;39m"
 export NOCOL="\033[00m"
+
+other_images() {
+  find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'
+  echo 'Proxmox-Virtualization-Environment-on-Debian-Bullseye'
+  echo 'Proxmox-Virtualization-Environment-on-Debian-Buster'
+  echo 'Proxmox-Virtualization-Environment-on-Debian-Stretch'
+  find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*beta*' -a -not -name '*.sig' -printf '%f\n'
+}
+
+other_image_warning() {
+  echo 'The image you have chosen is in a beta stage and we do not offer any support.'
+  echo 'There is no guarantee that the installation will work!'
+}
+
+old_image_warning() {
+  echo 'The image you have chosen is no longer supported by us as it has reached the end of its life.'
+  echo 'Updates and security patches are either no longer available or not applied by us anymore.'
+  echo 'There is no guarantee that the installation will work!'
+}
 
 # write log entries in debugfile - single line as second argument
 debug() {

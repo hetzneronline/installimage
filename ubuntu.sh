@@ -167,8 +167,9 @@ generate_config_grub() {
     declare -i EXITCODE=$?
     local shimdir="$FOLD/hdd/usr/lib/shim"
     if [ -d "$shimdir" ]; then
+      mkdir -p "$FOLD/hdd/boot/efi/EFI/ubuntu"
       for b in "$shimdir/"*; do
-        [[ -e "$b" ]] && cp "$b" "$FOLD/hdd/boot/efi/EFI/ubuntu/"
+        [[ -e "$b" ]] && cp -r "$b" "$FOLD/hdd/boot/efi/EFI/ubuntu/"
       done
     fi
   else

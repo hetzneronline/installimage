@@ -3,7 +3,7 @@
 #
 # mainmenu - choose which image should be installed
 #
-# (c) 2007-2018, Hetzner Online GmbH
+# (c) 2007-2022, Hetzner Online GmbH
 #
 
 
@@ -62,6 +62,20 @@ if [ "$OPT_AUTOMODE" ] ; then
   grep -v "^#" "$FOLD/install.conf" | grep -v "^$"
   echo ""
   echo ""
+
+  # warn about unsupported image
+  warn=""
+  if other_image "$IMAGE" || [[ "$PROXMOX" == true ]]; then
+    warn="$(other_image_warning)"
+  elif old_image "$IMAGE"; then
+    warn="$(old_image_warning)"
+  fi
+  if [[ -n "$warn" ]]; then
+    debug "WARNING: $(tr "\n" ' ' <<< "$warn")"
+    echo -e "\e[1;31mWARNING:"
+    echo -e "\e[1;33m$(sed 's/^/  /' <<< "$warn")\e[0m\n"
+  fi
+  warn=""
 
   # print warning
   echo -e "\033[01;31mWARNING:"
@@ -130,10 +144,6 @@ else
       exit 1
     fi
 
-    if [ "$PROXMOX" = "true" ]; then
-        graph_notice "\nPlease note: This image isn't supported by us.";
-    fi
-
     text='\n    An editor will now show you the config for the image.\n
     You can edit the parameters for your needs.\n
     To accept all changes and continue the installation\n
@@ -168,6 +178,23 @@ else
         fi
       fi
     done
+
+    # warn about unsupported image
+    warn=""
+    if other_image "$IMAGE" || [[ "$PROXMOX" == true ]]; then
+      warn="$(other_image_warning)"
+    elif old_image "$IMAGE"; then
+      warn="$(old_image_warning)"
+    fi
+    if [[ -n "$warn" ]]; then
+      debug "WARNING: $(tr "\n" ' ' <<< "$warn")"
+      dialog --backtitle "$DIATITLE" --title "Confirmation" --colors --defaultno --yesno "\n\Z1WARNING!: $(sed 's/$/\\n\\n/' <<< "$warn")Do you want to continue?\Zn\n" 0 0
+      if (($? != 0)); then
+        echo "Cancelled."
+        exit 1
+      fi
+    fi
+    warn=""
 
     if [ "$LVM" = "1" ]; then
         graph_notice "Please note that ALL existing LVs and VGs will be removed during the installation!"

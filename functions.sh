@@ -3,7 +3,7 @@
 #
 # functions
 #
-# (c) 2007-2021, Hetzner Online GmbH
+# (c) 2007-2022, Hetzner Online GmbH
 #
 
 
@@ -87,7 +87,6 @@ echo_bold() {
   echo -e "\033[0;1m$*\033[00m"
 }
 
-
 # generate submenus to choose which image to install
 # generate_menu "SUBMENU"
 generate_menu() {
@@ -99,12 +98,7 @@ generate_menu() {
   # find image-files and generate raw list
   FINALIMAGEPATH="$IMAGESPATH"
   if [ "$1" = "Other" ]; then
-    RAWLIST=""
-    RAWLIST=$(find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n')
-    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Bullseye"
-    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Buster"
-    RAWLIST="$RAWLIST Proxmox-Virtualization-Environment-on-Debian-Stretch"
-    RAWLIST="$RAWLIST $(find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*beta*' -a -not -name '*.sig' -printf '%f\n')"
+    RAWLIST="$(other_images)"
   elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
     RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n')
@@ -942,11 +936,7 @@ validate_vars() {
   # test if PATHTYPE is a supported type
   CHECK="$(echo $IMAGE_PATH_TYPE |grep -i -e "^http$\|^nfs$\|^local$")"
   if [ -z "$CHECK" ]; then
-    if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
-      echo "ERROR: $IMAGE_PATH_TYPE is no valid PATHTYPE for images" | debugoutput
-    else
-      graph_error "ERROR: $IMAGE_PATH_TYPE is no valid PATHTYPE for images"
-    fi
+    graph_error "ERROR: $IMAGE_PATH_TYPE is no valid PATHTYPE for images"
     return 1
   fi
 
@@ -971,11 +961,7 @@ validate_vars() {
   # test if FILETYPE is a supported type
   CHECK="$(echo $IMAGE_FILE_TYPE |grep -i -e "^tar$\|^tgz$\|^tbz$\|^txz$\|^bin$\|^bbz$")"
   if [ -z "$CHECK" ]; then
-    if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
-      echo "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images" | debugoutput
-    else
-      graph_error "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images"
-    fi
+    graph_error "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images"
     return 1
   fi
 
@@ -983,12 +969,7 @@ validate_vars() {
 
   # validate image supported
   if [[ "$IAM" == centos ]] && (((IMG_VERSION >= 60 && IMG_VERSION < 70)) || ((IMG_VERSION == 610))); then
-    local e="ERROR: CentOS 6 is EOL since Nov 2020 and installimage does not support CentOS 6 anymore"
-    if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
-      debug "$e"
-    else
-      graph_error "$e"
-    fi
+    graph_error "ERROR: CentOS 6 is EOL since Nov 2020 and installimage does not support CentOS 6 anymore"
     return 1
   fi
 
@@ -1297,12 +1278,8 @@ validate_vars() {
     done
 
     if [ "$UEFI" -eq 1 ] && [ "$espcount" -ne 1 ]; then
-      if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
-        echo "ERROR: ESP missing or multiple ESP found" | debugoutput
-        return 1
-      else
-        graph_error "ERROR: ESP missing or multiple ESP found"
-      fi
+      graph_error "ERROR: ESP missing or multiple ESP found"
+      return 1
     fi
 
   else
@@ -1542,19 +1519,11 @@ validate_vars() {
 
   if [ "$SWRAID" -eq 1 ]; then
     if [ "$(getHDDsNotInToleranceRange)" ]; then
-      if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
-        {
-          echo 'WARNING: You are going to use hard disks with different disk space.'
-          echo "We set the maximum of your allocable disc space based on the smallest hard disk at $SMALLEST_HDD_SIZE MB."
-          echo 'You can change this by customizing the drive settings.'
-        } | debugoutput
-      else
-        graph_notice "
+      graph_notice "
                \nNOTICE: You are going to use hard disks with different disk space.
                \nWe set the maximum of your allocable disc space based on the smallest hard disk at $SMALLEST_HDD_SIZE MB
                \nYou can change this by customizing the drive settings.
                "
-      fi
     fi
   fi
 
@@ -1600,11 +1569,7 @@ validate_vars() {
         graph_error "The \"all\" partition would be starting above 2TiB. CentOS only supports booting from hard disks with MS-DOS partition tables which requires partitions to start below 2TiB."
         return 1
       elif [ "$result" == "PART_CHANGED_ALL" ]; then
-        if [ "$OPT_AUTOMODE" = 1 ] || [ -e /autosetup ]; then
-          echo -e 'CentOS only supports MS-DOS partition tables when using grub. We changed the space of your \"all\" partition to match the 2TiB limit.' | debugoutput
-        else
-          graph_notice "CentOS only supports MS-DOS partition tables when using grub. We changed the space of your \"all\" partition to match the 2TiB limit."
-        fi
+        graph_notice "CentOS only supports MS-DOS partition tables when using grub. We changed the space of your \"all\" partition to match the 2TiB limit."
       fi
     fi
   fi
@@ -1625,18 +1590,24 @@ validate_vars() {
 # Show graphical error when a validation error occurs.
 #
 graph_error() {
-  if [ $# -gt 0 ]; then
-    dialog --backtitle "$DIATITLE" --title "ERROR" --yes-label "OK" \
-        --no-label "Cancel" --yesno \
-        "$*\n\nYou will be dropped back to the editor to fix the problem." 0 0
-    EXITCODE=$?
+  local error_msg;
+  if [ "$1" ]; then
+    error_msg=$1
+  else
+    error_msg="An unknown error occured."
+  fi
+
+  if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
+    echo "$error_msg" | debugoutput
+    EXITCODE=1
   else
     dialog --backtitle "$DIATITLE" --title "ERROR" --yes-label "OK" \
-        --no-label "Cancel" --yesno "An unknown error occured..." 0 0
+        --no-label "Cancel" --yesno \
+        "$error_msg\n\nYou will be dropped back to the editor to fix the problem." 0 0
     EXITCODE=$?
   fi
 
-  # set var if user hit "Cancel"
+  # set var if user hit "Cancel" or if in automode
   if [ "$EXITCODE" -eq "1" ]; then
     export CANCELLED="true"
   fi
@@ -1648,9 +1619,18 @@ graph_error() {
 # Show graphical notice to user.
 #
 graph_notice() {
-  if [ $# -gt 0 ]; then
+  local notice_msg;
+  if [ "$1" ]; then
+    notice_msg=$1
+  else
+    notice_msg="Unknown notice"
+  fi
+
+  if [[ "$OPT_AUTOMODE" == 1 ]] || [[ -e /autosetup ]]; then
+    echo "$notice_msg" | debugoutput
+  else
     dialog --backtitle "$DIATITLE" --title "NOTICE" --msgbox \
-        "$*\n\n" 0 0
+        "$notice_msg\n\n" 0 0
   fi
 }
 
@@ -2110,6 +2090,10 @@ make_fstab_entry() {
   if [ "$5" = "crypt" ]; then
     if [ "$3" = "lvm" ] ; then
       ENTRY="# $1$p$2  belongs to crypted LVM volume group '$4'"
+    elif [ "$4" = "none" ] ; then
+      ENTRY="# $1$p$2 crypted but has no filesystem defined"
+    elif [[ "$3" =~ ^btrfs\.[0-9A-Za-z]+ ]] ; then
+      ENTRY="# $1$p$2  belongs to crypted btrfs volume '$3'"
     else
       if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
         ENTRY="$1$p$2 $3 $4 defaults,discard 0 0 # crypted"
@@ -2480,7 +2464,7 @@ encrypt_partitions() {
 
     while read line; do
       if echo "$line" | grep -q "crypted"; then
-        if [ -n "$(echo "$line" | grep "crypted" | grep "LVM")" ]; then
+        if [ -n "$(echo "$line" | grep "crypted" | grep -P "LVM|btrfs|no")" ]; then
           dev="$(echo "$line" | grep "crypted" | awk '{print $2}')"
         else
           dev="$(echo "$line" | grep "crypted" | awk '{print $1}')"
@@ -2656,7 +2640,7 @@ get_image_info() {
         mkdir "$FOLD/keys/" 2>&1
         cd "$FOLD/keys/"
         # no exitcode, because if not found hetzner-pubkey will be used
-        wget -q --no-check-certificate "${1}public-key.asc" 2>&1 | debugoutput ; >/dev/null
+        wget -q --no-check-certificate --content-disposition "${1}public-key.asc" 2>&1 | debugoutput ; >/dev/null
         if [ "$EXITCODE" -eq "0" ]; then
           IMAGE_PUBKEY="$FOLD/keys/public-key.asc"
         fi
@@ -2694,11 +2678,11 @@ get_image_info() {
 # download image via http/ftp
 get_image_url() {
   # load image to mounted hdd
-  cd "$FOLD/hdd/" ; wget -q --no-check-certificate "$1$2" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
+  cd "$FOLD/hdd/" ; wget -q --no-check-certificate --content-disposition "$1$2" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
   if [ "$EXITCODE" -eq "0" ]; then
     EXTRACTFROM="$FOLD/hdd/$2"
     # search for sign file and download
-    cd "$FOLD/keys/" ; wget -q --no-check-certificate "$1$2.sig" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
+    cd "$FOLD/keys/" ; wget -q --no-check-certificate --content-disposition "$1$2.sig" 2>&1 | debugoutput ; EXITCODE=$?; cd - >/dev/null
     if [ "$EXITCODE" -eq "0" ]; then
       IMAGE_SIGN="$FOLD/keys/$2.sig"
     fi

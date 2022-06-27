@@ -3,7 +3,7 @@
 #
 # skip menu - use "autosetup" file
 #
-# (c) 2008-2018, Hetzner Online GmbH
+# (c) 2008-2022, Hetzner Online GmbH
 #
 
 # read global variables and functions
@@ -62,6 +62,19 @@ if [ "$OPT_CONFIGFILE" ] && [ -z "$OPT_AUTOMODE" ] ; then
   esac
 fi
 
+# warn about unsupported image
+warn=""
+if other_image "$IMAGE" || [[ "$PROXMOX" == true ]]; then
+  warn="$(other_image_warning)"
+elif old_image "$IMAGE"; then
+  warn="$(old_image_warning)"
+fi
+if [[ -n "$warn" ]]; then
+  debug "WARNING: $(tr "\n" ' ' <<< "$warn")"
+  echo -e "\e[1;31mWARNING:"
+  echo -e "\e[1;33m$(sed 's/^/  /' <<< "$warn")\e[0m\n"
+fi
+warn=""
 
 # execute installfile
 echo -e "\033[01;31mWARNING:"

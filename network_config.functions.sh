@@ -575,6 +575,15 @@ setup_persistent_net_rules() {
   gen_persistent_net_rules > "$FOLD/hdd/$persistent_net_rules_file"
 }
 
+netplan_version() {
+  execute_chroot_command_wo_debug $'dpkg-query \'--showformat=${Version}\' --show \'netplan.io\'' | cut -d '-' -f 1
+}
+
+netplan_version_ge() {
+  local other="$1"
+  [[ "$(echo -e "$(netplan_version)\n$other" | sort -V | head -n 1)" == "$other" ]]
+}
+
 # gen /etc/netplan/01-netcfg.yaml entry
 # $1 <network_interface>
 gen_etc_netplan_01_netcfg_yaml_entry() {
@@ -636,7 +645,23 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
   # ! pointtopoint
   if [[ -n "$gateway4" ]] && [[ "$gateway4" != false ]]; then
     if ipv4_addr_is_private "$gateway4" || is_virtual_machine; then
-      echo "      gateway4: $gateway4"
+      if netplan_version > /dev/null && [[ -n "$(netplan_version)" ]]; then
+        local force_pre_103_style=0
+        [[ "$IAM" == ubuntu ]] && ((IMG_VERSION < 2204)) && force_pre_103_style=1
+        (( force_pre_103_style == 1 )) && debug 'netplan config: forcing the use of gateway4'
+        if netplan_version_ge '0.103' && (( force_pre_103_style == 0 )); then
+          debug 'netplan config: using default route instead of gateway4'
+          echo '      routes:'
+          echo '        - to: default'
+          echo "          via: $gateway4"
+        else
+          debug 'netplan config: using gateway4 instead of default route'
+          echo "      gateway4: $gateway4"
+        fi
+      else
+        debug 'fatal: can not query netplan version'
+        return 1
+      fi
     else
       echo '      routes:'
       echo '        - on-link: true'
@@ -668,7 +693,7 @@ setup_etc_netplan_01_netcfg_yaml() {
     echo '  renderer: networkd'
     echo '  ethernets:'
     while read network_interface; do
-      gen_etc_netplan_01_netcfg_yaml_entry "$network_interface"
+      gen_etc_netplan_01_netcfg_yaml_entry "$network_interface" || return 1
     done < <(physical_network_interfaces)
   } > "$FOLD/hdd/etc/netplan/01-netcfg.yaml" 2> >(debugoutput)
 }
@@ -746,7 +771,7 @@ setup_network_config() {
     debian) setup_etc_network_interfaces;;
     ubuntu)
      if ((IMG_VERSION >= 1710)); then
-       setup_etc_netplan_01_netcfg_yaml
+       setup_etc_netplan_01_netcfg_yaml || return 1
        execute_chroot_command 'netplan generate' || return 1
      else
        setup_etc_network_interfaces
