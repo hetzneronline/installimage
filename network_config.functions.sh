@@ -664,15 +664,17 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
       fi
     else
       echo '      routes:'
-      echo '        - on-link: true'
-      echo '          to: 0.0.0.0/0'
+      echo '        - to: 0.0.0.0/0'
       echo "          via: $gateway4"
+      echo '          on-link: true'
     fi
   fi
   local gateway6="$(network_interface_ipv6_gateway "$network_interface")"
   if [[ -n "$gateway6" ]]; then
     echo "configuring ipv6 gateway $gateway6 for $predicted_network_interface_name" >&2
-    echo "      gateway6: $gateway6"
+    echo "        - to: ::/0"
+    echo "          via: $gateway6"
+    echo "          on-link: true"
   fi
   if [[ "$gateway4" != false ]]; then
     echo '      nameservers:'
