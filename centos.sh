@@ -158,7 +158,7 @@ run_os_specific_functions() {
   fi
 
   # selinux autorelabel if enabled
-  egrep -q "SELINUX=enforcing" "$FOLD/hdd/etc/sysconfig/selinux" &&
+  egrep -q "SELINUX=(enforcing|permissive)" "$FOLD/hdd/etc/sysconfig/selinux" &&
     touch "$FOLD/hdd/.autorelabel"
 
   ((IMG_VERSION >= 69)) && mkdir -p "$FOLD/hdd/var/run/netreport"
