@@ -2206,8 +2206,11 @@ make_swraid() {
         local n=0
         for n in $(seq 1 $COUNT_DRIVES) ; do
           TARGETDISK="$(eval echo \$DRIVE${n})"
-          local p="$(echo $TARGETDISK | grep nvme)"
-          [ -n "$p" ] && p='p'
+          local p=""
+          local nvme="$(echo $TARGETDISK | grep nvme)"
+          [ -n "$nvme" ] && p='p'
+          local disk_by_id="$(echo $TARGETDISK | grep 'disk/by-id')"
+          [ -n "$disk_by_id" ] && p='-part'
           components="$components $TARGETDISK$p$PARTNUM"
         done
 
