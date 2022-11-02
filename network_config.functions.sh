@@ -643,36 +643,50 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
   esac
   [[ "$dhcp4" == true ]] && echo '      dhcp4: true'
   # ! pointtopoint
-  if [[ -n "$gateway4" ]] && [[ "$gateway4" != false ]]; then
-    if ipv4_addr_is_private "$gateway4" || is_virtual_machine; then
-      if netplan_version > /dev/null && [[ -n "$(netplan_version)" ]]; then
-        local force_pre_103_style=0
-        [[ "$IAM" == ubuntu ]] && ((IMG_VERSION < 2204)) && force_pre_103_style=1
-        (( force_pre_103_style == 1 )) && debug 'netplan config: forcing the use of gateway4'
-        if netplan_version_ge '0.103' && (( force_pre_103_style == 0 )); then
-          debug 'netplan config: using default route instead of gateway4'
-          echo '      routes:'
+  if netplan_version > /dev/null && [[ -n "$(netplan_version)" ]]; then
+    local force_pre_103_style=0
+    [[ "$IAM" == ubuntu ]] && ((IMG_VERSION < 2110)) && force_pre_103_style=1
+    (( force_pre_103_style == 1 )) && debug 'netplan config: forcing the use of gateway4 and gateway6'
+    if netplan_version_ge '0.103' && (( force_pre_103_style == 0 )); then
+      debug 'netplan config: using default routes instead of gateway4 and gateway6'
+      local gateway6="$(network_interface_ipv6_gateway "$network_interface")"
+      { { [[ -n "$gateway4" ]] && [[ "$gateway4" != false ]]; } || [[ -n "$gateway6" ]]; } && echo '      routes:'
+      if [[ -n "$gateway4" ]] && [[ "$gateway4" != false ]]; then
+        if ipv4_addr_is_private "$gateway4" || is_virtual_machine; then
           echo '        - to: default'
           echo "          via: $gateway4"
         else
-          debug 'netplan config: using gateway4 instead of default route'
-          echo "      gateway4: $gateway4"
+          echo '        - on-link: true'
+          echo '          to: 0.0.0.0/0'
+          echo "          via: $gateway4"
         fi
-      else
-        debug 'fatal: can not query netplan version'
-        return 1
+      fi
+      if [[ -n "$gateway6" ]]; then
+        echo "configuring ipv6 gateway $gateway6 for $predicted_network_interface_name" >&2
+        echo '        - to: default'
+        echo "          via: $gateway6"
       fi
     else
-      echo '      routes:'
-      echo '        - on-link: true'
-      echo '          to: 0.0.0.0/0'
-      echo "          via: $gateway4"
+      debug 'netplan config: using gateway4 and gateway6 instead of default route'
+      if [[ -n "$gateway4" ]] && [[ "$gateway4" != false ]]; then
+        if ipv4_addr_is_private "$gateway4" || is_virtual_machine; then
+          echo "      gateway4: $gateway4"
+        else
+          echo '      routes:'
+          echo '        - on-link: true'
+          echo '          to: 0.0.0.0/0'
+          echo "          via: $gateway4"
+        fi
+      fi
+      local gateway6="$(network_interface_ipv6_gateway "$network_interface")"
+      if [[ -n "$gateway6" ]]; then
+        echo "configuring ipv6 gateway $gateway6 for $predicted_network_interface_name" >&2
+        echo "      gateway6: $gateway6"
+      fi
     fi
-  fi
-  local gateway6="$(network_interface_ipv6_gateway "$network_interface")"
-  if [[ -n "$gateway6" ]]; then
-    echo "configuring ipv6 gateway $gateway6 for $predicted_network_interface_name" >&2
-    echo "      gateway6: $gateway6"
+  else
+    debug 'fatal: can not query netplan version'
+    return 1
   fi
   if [[ "$gateway4" != false ]]; then
     echo '      nameservers:'
@@ -772,7 +786,17 @@ setup_network_config() {
     ubuntu)
      if ((IMG_VERSION >= 1710)); then
        setup_etc_netplan_01_netcfg_yaml || return 1
-       execute_chroot_command 'netplan generate' || return 1
+       local stderr_file="$FOLD/netplan_generate.stderr"
+       if ! execute_chroot_command_wo_debug 'netplan generate' 2> "$stderr_file"; then
+         debug 'fatal: netplan generate failed:'
+         cat "$stderr_file" | debugoutput
+         return 1
+       fi
+       if [[ -s "$stderr_file" ]]; then
+         debug 'fatal: netplan generate stderr not empty:'
+         cat "$stderr_file" | debugoutput
+         return 1
+       fi
      else
        setup_etc_network_interfaces
      fi
