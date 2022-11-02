@@ -29,6 +29,21 @@ install_plesk() {
   fi
   [[ "${IAM}" == debian ]] && (( IMG_VERSION >= 70 )) && mkdir --parents "${FOLD}/hdd/run/lock"
 
+  if debian_bullseye_image; then
+    debug '# plesk does not support debian bullseye backports:'
+    cp "$FOLD/hdd/etc/apt/sources.list" "$FOLD/sources.list"
+    local i=0
+    while read line; do
+      ((i=i+1))
+      egrep -q '(^\s*#|^\s*$)' <<< "$line" && continue
+      local dist
+      read _ _ dist _ <<< "$line"
+      [[ "$dist" == 'bullseye-backports' ]] || continue
+      echo -e "# Plesk does not support Debian Bullseye Backports\n# $line" | sed -e "$i{/.*/{r /dev/stdin" -e 'd;}}' -i "$FOLD/hdd/etc/apt/sources.list"
+    done < "$FOLD/sources.list"
+    diff -Naur "$FOLD/sources.list" "$FOLD/hdd/etc/apt/sources.list" | debugoutput
+  fi
+
   # enable ip_nonlocal_bind for natted plesk installations
   while read network_interface; do
     local ipv4_addrs=($(network_interface_ipv4_addrs "$network_interface"))
