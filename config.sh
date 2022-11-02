@@ -97,7 +97,7 @@ export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.com/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.com/plesk
-export PLESK_STD_VERSION=PLESK_18_0_40
+export PLESK_STD_VERSION=PLESK_18_0_46
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats
