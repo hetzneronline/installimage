@@ -3843,7 +3843,7 @@ function hdinfo() {
       echo "# Onboard: $name"
       ;;
     *)
-      echo "# unkown"
+      echo "# unknown"
       ;;
   esac
 }
