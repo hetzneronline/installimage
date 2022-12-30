@@ -1653,7 +1653,10 @@ whoami() {
  fi
 
  IMG_VERSION="$(echo "$1" | cut -d "-" -f 2)"
- [ -z "$IMG_VERSION" -o "$IMG_VERSION" = "" -o "$IMG_VERSION" = "h.net.tar.gz" -o "$IMG_VERSION" = 'latest' ] && IMG_VERSION="0"
+ if [[ ("$IMG_VERSION" == *"tar"*) || ("$IMG_VERSION" == "") || ("$IMG_VERSION" = "latest") ]]; then
+   IMG_VERSION=0
+ fi
+ 
  IMG_ARCH="$(echo "$1" | sed 's/.*-\(32\|64\)-.*/\1/')"
 
  IMG_FULLNAME="$(find "$IMAGESPATH" -maxdepth 1 -type f -name "$1*" -a -not -regex '.*\.sig$' -printf '%f\n')"
@@ -3438,7 +3441,12 @@ generate_ntp_config() {
   local debian_version=0
   local ubuntu_version=0
   local suse_version=0
-  [ "$IAM" == debian ] && debian_version=$(cut -c 1 "$FOLD/hdd/etc/debian_version")
+  
+  local debfile="$FOLD/hdd/etc/debian_version"
+  if [ "$IAM" = 'debian' ] && [ -f "$debfile" ]; then
+    debian_version=$(cut -c 1 "$debfile")
+  fi
+  
   [ "$IAM" = 'ubuntu' ] && ubuntu_version="$IMG_VERSION"
   [ "$IAM" = 'suse' ] && suse_version="$IMG_VERSION"
 
