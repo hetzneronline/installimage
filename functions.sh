@@ -2746,20 +2746,25 @@ validate_image() {
 
 # extract image file to hdd
 extract_image() {
-  local COMPRESSION=""
+  local tarCOMPRESSION=""
+  local bsdCOMPRESSION=""
   if [ "$1" -a "$2" ]; then
     case "$2" in
       tar)
-        COMPRESSION=""
+        tarCOMPRESSION=""
+        bsdCOMPRESSION=""
        ;;
       tgz)
-        COMPRESSION="-z"
+        tarCOMPRESSION="-z"
+        bsdCOMPRESSION="-z"
        ;;
       tbz)
-        COMPRESSION="-j"
+        tarCOMPRESSION="-j"
+        bsdCOMPRESSION="-j"
        ;;
       txz)
-        COMPRESSION="-J"
+        tarCOMPRESSION="-I \"xz -T0\" "
+        bsdCOMPRESSION="-J"
        ;;
       *)return 1;;
     esac
@@ -2779,16 +2784,16 @@ extract_image() {
         local boot=./boot
       fi
 
-      tar "${tar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" "$boot/efi" 2>&1 | debugoutput ; EXITCODE=$?
+      tar "${tar_options[@]}" $tarCOMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" "$boot/efi" 2>&1 | debugoutput ; EXITCODE=$?
       tar_options+=(--exclude 'boot/efi')
       bsdtar_options+=(--exclude '^boot/efi')
     fi
 
     # extract image with given compression
     if [ "$TAR" = "tar" ] || [ ! -x /usr/bin/bsdtar ]; then
-      tar "${tar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
+      tar "${tar_options[@]}" $tarCOMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
     else
-      bsdtar "${bsdtar_options[@]}" $COMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
+      bsdtar "${bsdtar_options[@]}" $bsdCOMPRESSION -f "$EXTRACTFROM" -C "$FOLD/hdd/" 2>&1 | debugoutput ; EXITCODE=$?
     fi
 
     # remove image after extraction if we got it via wget (http(s)/ftp)
