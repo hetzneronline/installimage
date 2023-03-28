@@ -74,15 +74,7 @@ generate_ntp_config() {
 }
 
 set_hostname() {
-  if [ -f "$CLOUDINIT" ]; then
-    {
-      echo "hostname: $1"
-      echo ""
-    } >>"$CLOUDINIT"
-    return 0
-  else
-    return 1
-  fi
+  export COREOS_CONFIG_HOSTNAME="$1"
 }
 
 setup_cpufreq() {
@@ -102,27 +94,14 @@ generate_sysctlconf() {
 }
 
 set_rootpassword() {
-  if [ -n "$1" ] && [ -n "$2" ]; then
-    if [ "$2" != '*' ]; then
-      {
-        echo "users:"
-        echo "  - name: core"
-        echo "    passwd: $2"
-        echo "  - name: root"
-        echo "    passwd: $2"
-      } >>"$CLOUDINIT"
-    fi
-    return 0
-  else
-    return 1
-  fi
+  export COREOS_CONFIG_PASSWORD="$2"
+  return 0
 }
 
 # set sshd PermitRootLogin
 set_ssh_rootlogin() {
   if [ -n "$1" ]; then
-    local permit="$1"
-    export COREOS_SSH_PERMIT_ROOT_LOGIN="$permit"
+    export COREOS_SSH_PERMIT_ROOT_LOGIN="$1"
   else
     return 1
   fi
@@ -146,32 +125,6 @@ add_coreos_oem_scripts() {
   return 0
 }
 
-#
-# os specific functions
-# for purpose of e.g. debian-sys-maint mysql user password in debian/ubuntu LAMP
-#
-#  local ROOT_DEV; ROOT_DEV=$(blkid -t "LABEL=ROOT" -o device "${DRIVE1}"*)
-#  local OEM_DEV; OEM_DEV=$(blkid -t "LABEL=OEM" -o device "${DRIVE1}"*)
-#  local is_ext4; is_ext4=$(blkid -o value "$ROOT_DEV" | grep ext4)
-#  if [ -n "$is_ext4" ]; then
-#    mount "${ROOT_DEV}" "$FOLD/hdd" 2>&1 | debugoutput ; EXITCODE=$?
-#  else
-#    mount -t btrfs -o subvol=root "${ROOT_DEV}" "$FOLD/hdd" 2>&1 | debugoutput ; EXITCODE=$?
-#  fi
-#  [ "$EXITCODE" -ne "0" ] && return 1
-#
-#  # mount OEM partition as well
-#  mount "${OEM_DEV}" "$FOLD/hdd/usr" 2>&1 | debugoutput ; EXITCODE=$?
-#  [ "$EXITCODE" -ne "0" ] && return 1
-#
-#  if ! isVServer; then
-#    add_coreos_oem_scripts "$FOLD/hdd/usr"
-#  fi
-#  add_coreos_oem_cloudconfig "$FOLD/hdd/usr"
-#
-#  mkdir -p "$FOLD/hdd/var/lib/coreos-install"
-#  debugoutput < "$CLOUDINIT"
-#  cp "$CLOUDINIT" "$FOLD/hdd/var/lib/coreos-install/user_data"
 run_os_specific_functions() {
   #  apt-get update -y && apt-get install gcc g++ pkg-config libssl-dev libzstd-dev -y
 
@@ -223,68 +176,110 @@ run_os_specific_functions() {
         echo "  luks:"
         echo "    tpm2: true"
       fi
-      echo "storage:"
-      echo "  disks:"
-      echo "    - device: $DRIVE1"
-      echo "      partitions:"
-      if [ "$SWRAID" = "1" ]; then
-        echo "        - label: root-1"
-        echo "          size_mib: ${PART_SIZE[$ROOT_INDEX]}"
-        for ((i = 1; i <= PART_COUNT; i++)); do
-          if [ "$i" != "$ROOT_INDEX" ]; then
-            echo "        - label: ${PART_LABEL[$i]}-1"
-            echo "          size_mib: ${PART_SIZE[$i]}"
-          fi
-        done
-      else
-        echo "        - label: root"
-        echo "          number: 4"
-        echo "          resize: true"
-        echo "          size_mib: ${PART_SIZE[$ROOT_INDEX]}"
-        for ((i = 1; i <= PART_COUNT; i++)); do
-          if [ "$i" != "$ROOT_INDEX" ]; then
-            echo "        - label: ${PART_LABEL[$i]}"
-            echo "          size_mib: ${PART_SIZE[$i]}"
-          fi
-        done
-      fi
-      echo "    - device: $DRIVE2"
-      echo "      partitions:"
-      if [ "$SWRAID" = "1" ]; then
-        echo "        - label: root-2"
-        echo "          size_mib: ${PART_SIZE[$ROOT_INDEX]}"
-        for ((i = 1; i <= PART_COUNT; i++)); do
-          if [ "$i" != "$ROOT_INDEX" ]; then
-            echo "        - label: ${PART_LABEL[$i]}-2"
-            echo "          size_mib: ${PART_SIZE[$i]}"
-          fi
-        done
-      fi
-      if [ "$SWRAID" = "1" ]; then
-        echo "  raid:"
-        for ((i = 1; i <= PART_COUNT; i++)); do
-          if [ "$i" != "$ROOT_INDEX" ]; then
-            echo "    - name: ${PART_LABEL[$i]}"
-            echo "      level: raid1"
-            echo "      devices:"
-            echo "        - /dev/disk/by-partlabel/${PART_LABEL[$i]}-1"
-            echo "        - /dev/disk/by-partlabel/${PART_LABEL[$i]}-2"
-          fi
-        done
-      fi
-      if [ "$CRYPT_OTHER_PARTS" = "1" ]; then
-        echo "  luks:"
-        for ((i = 1; i <= PART_COUNT; i++)); do
-          if [ "${PART_CRYPT[$i]}" = "1" ] && [ "$i" != "$ROOT_INDEX" ]; then
-            echo "    - name: ${PART_LABEL[$i]}"
-            echo "      label: ${PART_LABEL[$i]}"
-            echo "      wipe_volume: true"
-            echo "      device: /dev/disk/by-partlabel/${PART_LABEL[$i]}"
-          fi
-        done
-      fi
     fi
-  } >"$BUTANE_CONFIG"
+    echo "storage:"
+    echo "  disks:"
+    echo "    - device: $DRIVE1"
+    echo "      partitions:"
+    if [ "$SWRAID" = "1" ]; then
+      echo "        - label: root-1"
+      echo "          size_mib: ${PART_SIZE[$ROOT_INDEX]}"
+      for ((i = 1; i <= PART_COUNT; i++)); do
+        if [ "$i" != "$ROOT_INDEX" ]; then
+          echo "        - label: ${PART_LABEL[$i]}-1"
+          echo "          size_mib: ${PART_SIZE[$i]}"
+        fi
+      done
+    else
+      echo "        - label: root"
+      echo "          number: 4"
+      echo "          resize: true"
+      echo "          size_mib: ${PART_SIZE[$ROOT_INDEX]}"
+      for ((i = 1; i <= PART_COUNT; i++)); do
+        if [ "$i" != "$ROOT_INDEX" ]; then
+          echo "        - label: ${PART_LABEL[$i]}"
+          echo "          size_mib: ${PART_SIZE[$i]}"
+        fi
+      done
+    fi
+    echo "    - device: $DRIVE2"
+    echo "      partitions:"
+    if [ "$SWRAID" = "1" ]; then
+      echo "        - label: root-2"
+      echo "          size_mib: ${PART_SIZE[$ROOT_INDEX]}"
+      for ((i = 1; i <= PART_COUNT; i++)); do
+        if [ "$i" != "$ROOT_INDEX" ]; then
+          echo "        - label: ${PART_LABEL[$i]}-2"
+          echo "          size_mib: ${PART_SIZE[$i]}"
+        fi
+      done
+    fi
+    if [ "$SWRAID" = "1" ]; then
+      echo "  raid:"
+      for ((i = 1; i <= PART_COUNT; i++)); do
+        if [ "$i" != "$ROOT_INDEX" ]; then
+          echo "    - name: ${PART_LABEL[$i]}"
+          echo "      level: raid1"
+          echo "      devices:"
+          echo "        - /dev/disk/by-partlabel/${PART_LABEL[$i]}-1"
+          echo "        - /dev/disk/by-partlabel/${PART_LABEL[$i]}-2"
+        fi
+      done
+    fi
+    if [ "$CRYPT_OTHER_PARTS" = "1" ]; then
+      echo "  luks:"
+      for ((i = 1; i <= PART_COUNT; i++)); do
+        if [ "${PART_CRYPT[$i]}" = "1" ] && [ "$i" != "$ROOT_INDEX" ]; then
+          echo "    - name: ${PART_LABEL[$i]}"
+          echo "      label: ${PART_LABEL[$i]}"
+          echo "      wipe_volume: true"
+          echo "      device: /dev/disk/by-partlabel/${PART_LABEL[$i]}"
+        fi
+      done
+    fi
+    echo "  filesystems:"
+    for ((i = 1; i <= PART_COUNT; i++)); do
+      if [ "$i" != "$ROOT_INDEX" ]; then
+        if [ "${PART_CRYPT[$i]}" = "1" ]; then
+          echo "    - device: /dev/mapper/${PART_LABEL[$i]}"
+        elif [ "$SWRAID" = "1" ]; then
+          echo "    - device: /dev/md/${PART_LABEL[$i]}"
+        else
+          echo "    - device: /dev/disk/by-partlabel/${PART_LABEL[$i]}"
+        fi
+        echo "      format: ${PART_FS[$i]}"
+        echo "      label: ${PART_LABEL[$i]}"
+        echo "      wipe_filesystem: true"
+        echo "      path: ${PART_MOUNT[$i]}"
+        echo "      with_mount_unit: true"
+      fi
+    done
+    cat <<EOF
+  files:
+  - path: /etc/hostname"
+    mode: 0644"
+    contents:"
+      inline: $COREOS_CONFIG_HOSTNAME"
+systemd:
+  units:
+    - name: rpm-ostree-countme.timer
+      enabled: false
+      mask: true
+EOF
+  } \
+    >"$BUTANE_CONFIG"
+  curl --request GET -sL \
+       --url "https://github.com/coreos/butane/releases/download/v0.17.0/butane-$(uname -m)-unknown-linux-gnu"\
+       --output "/usr/local/bin/butane"
+  chmod +x /usr/local/bin/butane
+
+  butane --strict --pretty "$BUTANE_CONFIG" >"/tmp/installimage.ign"
+
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+  cargo install coreos-installer
+
+  coreos-installer "$DRIVE1" -i "/tmp/installimage.ign" -s stable
 
   return 0
 }
