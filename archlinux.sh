@@ -51,8 +51,8 @@ extract_image() {
 
   # pacstrap
   local newroot='/mnt'
-  debug "# archlinux-bootstrap: run $arch_chroot_script $chroot_dir pacstrap -d -G -M $newroot $archlinux_packages"
-  "$arch_chroot_script" "$chroot_dir" pacstrap -d -G -M "$newroot" $archlinux_packages |& debugoutput || return 1
+  debug "# archlinux-bootstrap: run $arch_chroot_script $chroot_dir pacstrap -G -M $newroot $archlinux_packages"
+  "$arch_chroot_script" "$chroot_dir" pacstrap -G -M "$newroot" $archlinux_packages |& debugoutput || return 1
 
   # move newroot
   debug '# move /mnt to /'
@@ -60,16 +60,31 @@ extract_image() {
   debug "# run rsync -a --remove-source-files $chroot_dir/$newroot/ $hdd_dir/"
   rsync -a --remove-source-files "$chroot_dir/$newroot/" "$hdd_dir/" |& debugoutput || return 1
 
+  # wait_for_udev before generating fstab
+  wait_for_udev
+
   # genfstab
   debug '# setup /etc/fstab'
   local fstab="$hdd_dir/etc/fstab"
   local fstab_bak="$fstab.bak"
   cp "$fstab" "$fstab_bak"
+  # fstab convert dev to disk by uuid paths
   {
-    echo
-    # "$chroot_dir/usr/bin/genfstab" -U "$hdd_dir"
-    cat "$FOLD/fstab"
-  } >> "$fstab" || return 1
+    while read line; do
+      if [[ "$line" =~ ^[\ ]*(/dev/[^\ ]+) ]]; then
+        i=0
+        for l in /dev/disk/by-uuid/*; do
+          [[ "$(readlink -f "$l")" == "$(readlink -f "${BASH_REMATCH[1]}")" ]] || continue
+          sed "s\\${BASH_REMATCH[1]}\\UUID=${l##*/}\\g" <<< "$line"
+          i=1
+          break
+        done
+        ((i == 1)) || echo "$line"
+        continue
+      fi
+      echo "$line"
+    done < "$FOLD/fstab"
+  } >> "$fstab"
   diff -Naur "$fstab_bak" "$fstab" | debugoutput
 
   # remove archlinux-bootstrap
@@ -164,7 +179,7 @@ extract_image() {
   # enable services
   debug '# enable services'
   for opt in cronie haveged sshd systemd-timesyncd; do
-    execute_chroot_command "systemctl enable $opt" || return 1
+    systemd_nspawn "systemctl enable $opt" || return 1
   done
 
   # sshdgenkeys.service will generate keys on first boot but we need them now
@@ -196,17 +211,9 @@ generate_config_mdadm() {
 
 generate_new_ramdisk() {
   [[ -z "$1" ]] && return
-  debug "# create /etc/modprobe.d/blacklist.conf"
   local hdd_dir="$FOLD/hdd"
-  local blacklist_conf="$hdd_dir/etc/modprobe.d/blacklist.conf"
-  {
-    echo "### $COMPANY installimage"
-    echo
-    for module in i915 mei mei-me pcspkr snd_pcsp sm750fb; do
-      echo "blacklist $module"
-    done
-  } > "$blacklist_conf" || return 1
-  diff -Naur /dev/null "$blacklist_conf" | debugoutput
+  blacklist_unwanted_and_buggy_kernel_modules
+  configure_kernel_modules
   debug "# setup /etc/mkinitcpio.conf"
   local mkinitcpio_conf="$hdd_dir/etc/mkinitcpio.conf"
   local mkinitcpio_conf_bak="$mkinitcpio_conf.bak"
@@ -230,9 +237,9 @@ generate_config_grub() {
   local grub_file="$FOLD/hdd/etc/default/grub"
   local grub_file_bak="$grub_file.bak"
   cp "$grub_file" "$grub_file_bak"
-  local grub_linux_default="consoleblank=0 nomodeset"
+  local grub_linux_default="consoleblank=0"
+  (( USE_KERNEL_MODE_SETTING == 0 )) && grub_linux_default+=' nomodeset'
   has_threadripper_cpu && grub_linux_default+=' pci=nommconf'
-  is_dell_r6415 && grub_linux_default=${grub_linux_default/nomodeset }
   sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"${grub_linux_default}\"/g" "$grub_file" |& debugoutput || return 1
   diff -Naur "$grub_file_bak" "$grub_file" | debugoutput
 
