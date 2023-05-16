@@ -153,6 +153,7 @@ use_predictable_network_interface_names() {
   [[ "$IAM" == 'archlinux' ]] && return
   [[ "$IAM" == 'rockylinux' ]] && return
   [[ "$IAM" == 'almalinux' ]] && return
+  [[ "$IAM" == 'rhel' ]] && return
   return 1
 }
 
@@ -278,6 +279,17 @@ gen_ifcfg_script_centos() {
 
   echo 'DEFROUTE=yes'
 
+  # almalinux,centos,rockylinux >= 9 let NetworkManager handle DNS
+  if rhel_9_based_image && uses_network_manager; then
+    local i=0
+    local max_i=2
+    while read nsaddr; do
+      ((i+=1))
+      echo "DNS$i=$nsaddr"
+      ((i >= max_i)) && break
+    done < <(randomized_nsaddrs)
+  fi
+
   local ipv6_addrs=($(network_interface_ipv6_addrs "$network_interface"))
   ((${#ipv6_addrs[@]} == 0)) && return
 
@@ -295,10 +307,7 @@ gen_ifcfg_script_centos() {
   echo 'IPV6_DEFROUTE=yes'
 
   # Without NetworkManager IPV6_DEFAULTDEV is required
-  [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)) && ! is_cpanel_install && return
-  [[ "$IAM" == 'rockylinux' ]] && return
-  [[ "$IAM" == 'almalinux' ]] && ! is_cpanel_install && return
-  echo "IPV6_DEFAULTDEV=$predicted_network_interface_name"
+  uses_network_manager || echo "IPV6_DEFAULTDEV=$predicted_network_interface_name"
 }
 
 # gen route script
@@ -803,7 +812,7 @@ setup_network_config() {
     ;;
     archlinux)
       setup_etc_systemd_network_files
-      execute_chroot_command 'systemctl enable systemd-networkd' || return 1
+      systemd_nspawn 'systemctl enable systemd-networkd' || return 1
     ;;
     *) return 1;;
   esac
