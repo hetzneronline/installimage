@@ -53,9 +53,20 @@ debconf_set_grub_install_devices() {
   done
   # set install_devices for grub-efi and run dpkg-reconfigure to install grub on all ESPs listed
   if [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -ge 2004 ] && [ "$UEFI" -eq 1 ] && [ -n "$(echo $part)" ]; then
-    debconf_set "grub-efi-amd64 grub-efi/install_devices string ${value::-2}"
-    execute_chroot_command "dpkg-reconfigure -f noninteractive grub-efi-amd64"
+    debconf_set "grub-efi-$SYSARCH grub-efi/install_devices string ${value::-2}"
+    execute_chroot_command "dpkg-reconfigure -f noninteractive grub-efi-$SYSARCH"
   else
     debconf_set "grub-pc grub-pc/install_devices multiselect ${value::-2}"
   fi
+}
+
+debconf_reset_grub_install_devices() {
+  for p in grub-common grub-efi-amd64 grub-efi-arm64 grub-pc; do
+    debug "# debconf RESET $p grub-efi/install_devices"
+    echo 'RESET grub-efi/install_devices' | execute_chroot_command_wo_debug debconf-communicate "$p" | debugoutput
+    if execute_chroot_command_wo_debug "dpkg -s $p &> /dev/null"; then
+      debug "# dpkg-reconfigure $p"
+      execute_chroot_command_wo_debug "dpkg-reconfigure -f noninteractive $p 2>&1" | debugoutput
+    fi
+  done
 }
