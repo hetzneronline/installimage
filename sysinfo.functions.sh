@@ -42,4 +42,12 @@ drive_disk_by_id_path() {
   done
 }
 
+board_vendor() { cat /sys/class/dmi/id/board_vendor; }
+
+board_name() { cat /sys/class/dmi/id/board_name; }
+
+has_fujitsu_board() {
+  [[ "$(board_vendor)" == FUJITSU ]]
+}
+
 # vim: ai:ts=2:sw=2:et
