@@ -52,8 +52,7 @@ export AUTH_DNS3="robotns3.second-ns.com"
 export DEFAULTPARTS="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 all"
 export DEFAULTPARTS_BIG="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 1024G\nPART /home ext4 all"
 export DEFAULTPARTS_LARGE="UEFI##PART swap swap SWAPSIZE##G\nPART /boot ext3 1024M\nPART / ext4 2014G\nPART /home ext4 all"
-export DEFAULTPARTS_VSERVER="UEFI##PART / ext3 all"
-export DEFAULTPARTS_CLOUDSERVER="UEFI##PART / ext4 all"
+export DEFAULTPARTS_VSERVER="UEFI##PART / ext4 all"
 export DEFAULTSWRAID="1"
 export DEFAULTTWODRIVESWRAIDLEVEL="1"
 export DEFAULTTHREEDRIVESWRAIDLEVEL="5"
@@ -90,8 +89,8 @@ export OSMENULIST+=(
 
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
-export PROXMOX6_BASE_IMAGE="Debian-1011-buster-64-minimal"
-export PROXMOX7_BASE_IMAGE="Debian-1101-bullseye-amd64-base"
+export PROXMOX6_BASE_IMAGE="Debian-1013-buster-64-minimal"
+export PROXMOX7_BASE_IMAGE="Debian-1106-bullseye-amd64-base"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 

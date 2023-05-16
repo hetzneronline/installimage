@@ -32,6 +32,7 @@ GOVERNOR=""
 CRYPT=""
 CRYPTPASSWORD=""
 IPV4_ONLY=0
+USE_KERNEL_MODE_SETTING=1
 declare -i BTRFS_VOL_COUNT=0
 declare -a BTRFS_VOL_NAME
 declare -a BTRFS_VOL_SIZE
@@ -101,7 +102,7 @@ generate_menu() {
     RAWLIST="$(other_images)"
   elif [ "$1" = "Old images" ]; then
     # skip CPANEL images and signatures files from list
-    RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -printf '%f\n')
+    RAWLIST=$(find "$OLDIMAGESPATH"/ -maxdepth 1 -type f -not -name "*.sig" -a -not -name "*cpanel*" -a -not -name 'README.txt' -printf '%f\n')
     FINALIMAGEPATH="$OLDIMAGESPATH"
   elif [[ "$1" == 'Arch Linux' ]]; then
     RAWLIST="$IMAGESPATH/archlinux-latest-64-minimal.tar.gz"
@@ -155,8 +156,7 @@ generate_menu() {
   # generate formatted list for usage with "dialog"
   for i in $RAWLIST; do
     TEMPVAR="$i"
-    TEMPVAR=$(basename "$TEMPVAR" .bin)
-    TEMPVAR=$(basename "$TEMPVAR" .bin.bz2)
+    TEMPVAR=$(basename "$TEMPVAR" .tar.zst)
     TEMPVAR=$(basename "$TEMPVAR" .txz)
     TEMPVAR=$(basename "$TEMPVAR" .tar.xz)
     TEMPVAR=$(basename "$TEMPVAR" .tgz)
@@ -382,6 +382,16 @@ create_config() {
       echo
     } >> "$CNF"
 
+    # kernel config
+    {
+      echo
+      echo "## ============="
+      echo "##  MISC CONFIG:"
+      echo "## ============="
+      echo
+      echo "USE_KERNEL_MODE_SETTING yes"
+    } >> "$CNF"
+
     ## Calculate how much hardisk space at raid level 0,1,5,6,10
     RAID0=0
     local small_hdd; small_hdd="$(smallest_hd)"
@@ -414,6 +424,7 @@ create_config() {
       echo "##            btrfs subvolumes. X can be replaced with a unique"
       echo "##            alphanumeric keyword"
       echo "##            NOTE: no support btrfs multi-device volumes"
+      echo "##            NOTE: reiserfs support is deprecated and will be removed in a future version"
       echo "## * <filesystem/VG>"
       if [ "$UEFI" -eq 1 ]; then
         echo "##            can be ext2, ext3, ext4, btrfs, reiserfs, xfs, swap, esp *OR*  name"
@@ -470,7 +481,6 @@ create_config() {
       echo "#"
       echo "#LV vg0   root   /        ext4         10G"
       echo "#LV vg0   swap   swap     swap          4G"
-      echo "#LV vg0   tmp    /tmp     reiserfs      5G"
       echo "#LV vg0   home   /home    xfs          20G"
       echo "#"
       echo "##"
@@ -552,6 +562,7 @@ create_config() {
       DEFAULTPARTS=${DEFAULTPARTS/UEFI##/$ESPPART}
       DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/UEFI##/$ESPPART}
       DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/UEFI##/$ESPPART}
+      DEFAULTPARTS_VSERVER=${DEFAULTPARTS_VSERVER/UEFI##/$ESPPART}
       # replace SWAPSIZE## placeholder
       DEFAULTPARTS=${DEFAULTPARTS/SWAPSIZE##/$SWAPSIZE}
       DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/SWAPSIZE##/$SWAPSIZE}
@@ -561,23 +572,23 @@ create_config() {
       DEFAULTPARTS=${DEFAULTPARTS/UEFI##/}
       DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/UEFI##/}
       DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/UEFI##/}
+      DEFAULTPARTS_VSERVER=${DEFAULTPARTS_VSERVER/UEFI##/}
       # replace SWAPSIZE## placeholder
       DEFAULTPARTS=${DEFAULTPARTS/SWAPSIZE##/$SWAPSIZE}
       DEFAULTPARTS_BIG=${DEFAULTPARTS_BIG/SWAPSIZE##/$SWAPSIZE}
       DEFAULTPARTS_LARGE=${DEFAULTPARTS_LARGE/SWAPSIZE##/$SWAPSIZE}
     fi
 
-    # use ext3 for vservers, because ext4 is too trigger happy of device timeouts
+    # use single partition for virtual servers
     if is_virtual_machine; then
-      if [ "$SYSTYPE" = "vServer" ]; then
-        DEFAULTPARTS=$DEFAULTPARTS_CLOUDSERVER
-      else
         DEFAULTPARTS=$DEFAULTPARTS_VSERVER
-      fi
     fi
 
     # use /var instead of /home for all partition when installing plesk
-    is_plesk_install && DEFAULTPARTS_BIG="${DEFAULTPARTS_BIG//home/var}"
+    if is_plesk_install; then
+      DEFAULTPARTS_BIG="${DEFAULTPARTS_BIG//home/var}"
+      DEFAULTPARTS_LARGE="${DEFAULTPARTS_LARGE//home/var}"
+    fi
 
     if [ "$DRIVE_SIZE" -gt "$LIMIT" ]; then
       if [ "$DRIVE_SIZE" -gt "$THREE_TB" ]; then
@@ -876,8 +887,7 @@ if [ -n "$1" ]; then
     *.tar.gz|*.tgz) IMAGE_FILE_TYPE="tgz" ;;
     *.tar.bz|*.tbz|*.tbz2|*.tar.bz2) IMAGE_FILE_TYPE="tbz" ;;
     *.tar.xz|*.txz) IMAGE_FILE_TYPE="txz" ;;
-    *.bin) IMAGE_FILE_TYPE="bin" ;;
-    *.bin.bz2|*.bin.bz) IMAGE_FILE_TYPE="bbz" ;;
+    *.tar.zst) IMAGE_FILE_TYPE="zst" ;;
   esac
 
   BOOTLOADER="$(grep -m1 -e ^BOOTLOADER "$1" |awk '{print $2}')"
@@ -916,7 +926,16 @@ if [ -n "$1" ]; then
   if [[ "$(tac "$1" | grep -m1 ^IPV4_ONLY | awk '{print $2}')" =~ ^y ]]; then
     export IPV4_ONLY=1
   fi
+  local use_kernel_mode_setting_given=0
+  if [[ "$(tac "$1" | grep -m1 ^USE_KERNEL_MODE_SETTING | awk '{print $2}')" =~ ^y ]]; then
+    export USE_KERNEL_MODE_SETTING=1
+    use_kernel_mode_setting_given=1
+  fi
+  # keep dell_r6415 default
+  (( use_kernel_mode_setting_given == 0 )) && is_dell_r6415 && USE_KERNEL_MODE_SETTING=1
 fi
+
+  :
 }
 
 
@@ -959,7 +978,7 @@ validate_vars() {
   fi
 
   # test if FILETYPE is a supported type
-  CHECK="$(echo $IMAGE_FILE_TYPE |grep -i -e "^tar$\|^tgz$\|^tbz$\|^txz$\|^bin$\|^bbz$")"
+  CHECK="$(echo $IMAGE_FILE_TYPE |grep -i -e "^tar$\|^tgz$\|^tbz$\|^txz$\|^zst$")"
   if [ -z "$CHECK" ]; then
     graph_error "ERROR: $IMAGE_FILE_TYPE is no valid FILETYPE for images"
     return 1
@@ -970,6 +989,10 @@ validate_vars() {
   # validate image supported
   if [[ "$IAM" == centos ]] && (((IMG_VERSION >= 60 && IMG_VERSION < 70)) || ((IMG_VERSION == 610))); then
     graph_error "ERROR: CentOS 6 is EOL since Nov 2020 and installimage does not support CentOS 6 anymore"
+    return 1
+  fi
+  if (( UEFI == 1 )) && rhel_9_based_image; then
+    graph_error "ERROR: we do not yet support $IAM $IMG_VERSION on EFI systems"
     return 1
   fi
 
@@ -1195,9 +1218,13 @@ validate_vars() {
         return 1
       fi
 
-      if [ "${PART_FS[$i]}" = "reiserfs" -a "$IAM" = "centos" ]; then
-        graph_error "ERROR: reiserfs is not supported for CentOS"
-        return 1
+      if [ "${PART_FS[$i]}" = "reiserfs" ]; then
+        if [[ "$IAM" == 'almalinux' ]] || [[ "$IAM" == 'centos' ]] || [[ "$IAM" == 'rockylinux' ]]; then
+          graph_error "ERROR: reiserfs is not supported for $IAM"
+          return 1
+        else
+          graph_notice "reiserfs support is deprecated and will be removed in a future version!"
+        fi
       fi
 
       # count ESP
@@ -1649,6 +1676,7 @@ whoami() {
     *arch*)IAM="archlinux";;
     *rocky*)IAM="rockylinux";;
     *alma*)IAM="almalinux";;
+    *rhel*)IAM="rhel";;
   esac
  fi
 
@@ -1700,21 +1728,54 @@ unmount_all() {
   return $unmount_errors
 }
 
+stop_bcache() {
+  for f in /sys/fs/bcache/*/stop; do
+    [[ -e "$f" ]] || continue
+    echo 1 > "$f" || return 1
+  done
+}
+
+deactivate_lvm() {
+  while read lv; do
+    debug "deactivating lv $lv"
+    lvchange -an "$lv" |& debugoutput || return 1
+  done < <(lvs --reportformat json | jq -r '.report[].lv[]|select(.lv_attr[4:5]=="a")|"\(.vg_name)/\(.lv_name)"')
+
+  while read vg; do
+    debug "deactivating vg $vg"
+    vgchange -an "$vg" |& debugoutput || return 1
+  done < <(vgs --reportformat json | jq -r '.report[].vg[].vg_name')
+}
+
+stop_md_arrays() {
+  while read _ array _; do
+    debug "stopping md array $array"
+    mdadm -S "$array" |& debugoutput || return 1
+  done < <(mdadm -D -s)
+}
+
 #
 # stop_lvm_raid
 #
 # Stop the Logical Volume Manager and all software RAID arrays.
 #
 stop_lvm_raid() {
-  [ -x "$(command -v vgchange)" ] && vgchange -an >> /dev/null 2>&1
+  debug 'running swapoff -a'
+  swapoff -a |& debugoutput || return 1
 
-  [ -x "$(command -v dmsetup)" ] && dmsetup remove_all > /dev/null 2>&1
-
-  if [ -x "$(command -v mdadm)" ] && [ -f /proc/mdstat ]; then
-    while read -r i; do
-      [ -e "/dev/$i" ] && mdadm -S "/dev/$i" >> /dev/null 2>&1
-    done < <(grep md /proc/mdstat | cut -d ' ' -f1)
+  if ! stop_bcache; then
+    debug 'stopping bcache devices failed'
   fi
+
+  if ! deactivate_lvm; then
+    debug 'deactivating lvm failed'
+    return 1
+  fi
+
+  debug 'running dmsetup remove_all'
+  [ -x "$(command -v dmsetup)" ] && dmsetup remove_all |& debugoutput
+
+  stop_md_arrays
 }
 
 
@@ -2761,6 +2822,9 @@ extract_image() {
       txz)
         COMPRESSION="-J"
        ;;
+      zst)
+        COMPRESSION="--zstd"
+       ;;
       *)return 1;;
     esac
 
@@ -3704,14 +3768,14 @@ exit_function() {
   echo
   echo "Please check our wiki for a description of the error:"
   echo
-  echo "http://wiki.hetzner.de/index.php/Installimage"
+  echo "https://docs.hetzner.com/robot/dedicated-server/operating-systems/installimage/"
   echo
   echo "If your problem is not described there, try booting into a fresh"
   echo "rescue system and restart the installation. If the installation"
   echo "fails again, please contact our support via Hetzner Robot, providing"
   echo "the IP address of the server and a copy of the debug file."
   echo
-  echo "  https://robot.your-server.de"
+  echo "  https://robot.hetzner.com/"
   echo
 
   report_install
