@@ -14,4 +14,4 @@ PART swap swap 8G
 PART /boot ext3 512M
 PART /    ext4 all
 
-IMAGE /root/images/Debian-1101-bullseye-amd64-base.tar.gz
+IMAGE /root/images/Debian-1106-bullseye-amd64-base.tar.gz

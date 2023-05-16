@@ -63,6 +63,13 @@ if [ -f /etc/apt/sources.list.d/pve-enterprise.list ]; then
   rm /etc/apt/sources.list.d/pve-enterprise.list
 fi
 
+FQDN="$(cat /etc/hostname)"
+HOSTNAME="$(echo "$FQDN" | cut -f1 -d '.')"
+if [ "${FQDN}" != "${HOSTNAME}" ]; then
+  echo -e "\n----- fqdn and hostname missmatch; appending to /etc/hosts -----\n"
+  sed -i "/.*${FQDN}.*/ s/$/ ${HOSTNAME}/g" /etc/hosts
+fi
+
 echo -e "\n----- Upgrading remaining packages -----\n"
 /usr/bin/env DEBIAN_FRONTEND=noninteractive apt -y -o Dpkg::Options::='--force-confdef' upgrade
 update-grub
