@@ -411,6 +411,8 @@ if [ "$OPT_USE_SSHKEYS" = "1" -a -z "$FORCE_PASSWORD" ]; then
   status_donefailed $?
 else
   status_busy_nostep "  Setting root password"
+  check_rescue_password_hashing_algo_supported_by_installed_os
+  status_donefailed $?
   get_rootpassword "/etc/shadow" || status_failed
   set_rootpassword "$FOLD/hdd/etc/shadow" "$ROOTHASH"
   status_donefailed $?
@@ -540,7 +542,7 @@ report_install
   echo "# More information about the installimage script and"
   echo "# automatic installations can be found in our wiki:"
   echo "#"
-  echo "# http://wiki.hetzner.de/index.php/Installimage"
+  echo "# https://docs.hetzner.com/robot/dedicated-server/operating-systems/installimage/"
   echo "#"
   echo
   cat $FOLD/install.conf | grep -v "^#" | grep -v "^$"

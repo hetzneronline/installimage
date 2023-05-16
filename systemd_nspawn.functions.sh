@@ -3,7 +3,7 @@
 #
 # systemd_nspawn functions
 #
-# (c) 2015-2021, Hetzner Online GmbH
+# (c) 2015-2023, Hetzner Online GmbH
 #
 
 # protect files from systemd
@@ -76,8 +76,19 @@ boot_systemd_nspawn() {
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/return.fifo:/var/lib/systemd_nspawn/return.fifo" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/runner:/usr/local/bin/systemd_nspawn-runner" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/systemd_nspawn-runner.service:/etc/systemd/system/systemd_nspawn-runner.service" \
-    -D "$FOLD/hdd" &> /dev/null &
-  until systemd_nspawn_booted && systemd_nspawn_wo_debug : &> /dev/null; do
+    -D "$FOLD/hdd" \
+    -M newroot &> /dev/null &
+
+  until systemd_nspawn_booted; do sleep 1; done
+
+  # systemd-nspawn may overlay our runner service
+  if ! [[ -e "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/systemd_nspawn-runner.service" ]]; then
+    # relink and reboot
+    ln -s ../systemd_nspawn-runner.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants"
+    machinectl reboot newroot
+  fi
+
+  until systemd_nspawn_wo_debug : &> /dev/null; do
     sleep 1;
   done
 }
@@ -126,6 +137,64 @@ poweroff_systemd_nspawn() {
   while systemd_nspawn_booted; do sleep 1; done
   rm -fr "$FOLD/hdd/"{var/lib/systemd_nspawn,usr/local/bin/systemd_nspawn-runner,etc/systemd/system/systemd_nspawn-runner.service}
   unlink "$FOLD/hdd/etc/systemd/system/multi-user.target.wants/systemd_nspawn-runner.service"
+}
+
+verify_machinectl_login_works() {
+  local password="$1"
+
+  debug '# verify machinectl login works'
+
+  local securetty_file="$FOLD/hdd/etc/securetty"
+  if [[ -e "$securetty_file" ]]; then
+    local tmp_securetty="$FOLD/tmp_securetty"
+
+    debug 'adjusting /etc/securetty to allow login from /dev/pts/*'
+
+    cp "$securetty_file" "$tmp_securetty"
+    for i in {0..255}; do echo "pts/$i" >> "$tmp_securetty"; done
+    mount --bind "$tmp_securetty" "$securetty_file"
+  fi
+
+  boot_systemd_nspawn
+
+  local session="$$.tmp_installimage_test_machinectl_login"
+  screen -d -m -S "$session" machinectl login newroot
+
+  until last_nonempty_line_of_screen_output_matches "$session" ' login:$'; do sleep 1; done
+  screen -S "$session" -X stuff "root^M"
+  while last_nonempty_line_of_screen_output_matches "$session" ' login: root$'; do sleep 1; done
+  if ! last_nonempty_line_of_screen_output_matches "$session" '^Password:$'; then
+    debug 'login failed. did not get a password prompt:'
+    get_screen_output "$session" | debugoutput
+
+    poweroff_systemd_nspawn
+    [[ -e "$securetty_file" ]] && umount "$securetty_file"
+    return 1
+  fi
+
+  until last_nonempty_line_of_screen_output_matches "$session" '^Password:$'; do sleep 1; done
+  screen -S "$session" -X stuff "$password^M"
+  while last_nonempty_line_of_screen_output_matches "$session" '^Password:$'; do sleep 1; done
+  if last_nonempty_line_of_screen_output_matches "$session" ' login:$'; then
+    debug 'login failed. password not accepted'
+    get_screen_output "$session" | debugoutput
+
+    poweroff_systemd_nspawn
+    [[ -e "$securetty_file" ]] && umount "$securetty_file"
+    return 1
+  fi
+
+  screen -S "$session" -X stuff "PS1=it_works^M"
+  last_nonempty_line_of_screen_output_matches "$session" '^it_works$'; result=$?
+  if ((result != 0)); then
+    debug 'setting prompt to verify login success failed:'
+    get_screen_output "$session" | debugoutput
+  fi
+
+  poweroff_systemd_nspawn
+  [[ -e "$securetty_file" ]] && umount "$securetty_file"
+
+  return $result
 }
 
 # vim: ai:ts=2:sw=2:et
