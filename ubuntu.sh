@@ -39,25 +39,8 @@ generate_new_ramdisk() {
     local kvers; kvers=$(echo "$outfile" |cut -d "-" -f2-)
     debug "# Kernel Version found: $kvers"
 
-    if [ "$IMG_VERSION" -ge 1204 ]; then
-      # blacklist various driver due to bugs and stability issues
-      # required for Ubuntu 12.10 because of a kernel bug
-      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
-      {
-        echo "### $COMPANY - installimage"
-        echo "### silence any onboard speaker"
-        echo "blacklist pcspkr"
-        echo "blacklist snd_pcsp"
-        echo "### i915 driver blacklisted due to various bugs"
-        echo "### especially in combination with nomodeset"
-        echo "blacklist i915"
-        echo "blacklist i915_bdw"
-        echo "### mei driver blacklisted due to serious bugs"
-        echo "blacklist mei"
-        echo "blacklist mei-me"
-        echo "blacklist sm750fb"
-      } > "$blacklist_conf"
-    fi
+    blacklist_unwanted_and_buggy_kernel_modules
+    configure_kernel_modules
 
     if [ "$CRYPT" = 1 ]; then
       debug "# Enabling dm-crypt on chroot system"
@@ -99,7 +82,11 @@ generate_config_grub() {
 #  execute_chroot_command "cd /boot; [ -e boot ] && rm -rf boot; ln -s . boot >> /dev/null 2>&1"
 
   # set linux_default in grub
-  local grub_linux_default="nomodeset consoleblank=0"
+
+  local grub_linux_default=''
+  (( USE_KERNEL_MODE_SETTING == 0 )) && grub_linux_default+='nomodeset '
+  grub_linux_default+='consoleblank=0'
+
   if is_virtual_machine; then
     grub_linux_default="${grub_linux_default} elevator=noop"
   else
@@ -119,10 +106,6 @@ generate_config_grub() {
 
   if has_threadripper_cpu; then
     grub_linux_default+=' pci=nommconf'
-  fi
-
-  if is_dell_r6415; then
-    grub_linux_default=${grub_linux_default/nomodeset }
   fi
 
   if [ "$SYSARCH" == "arm64" ]; then
@@ -181,6 +164,8 @@ generate_config_grub() {
       fi
     done
   fi
+
+  ((IMG_VERSION >= 2204)) && debconf_reset_grub_install_devices
 
   if ((IMG_VERSION >= 1604)); then
     debconf_set_grub_install_devices #|| return 1

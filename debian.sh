@@ -36,23 +36,8 @@ generate_new_ramdisk() {
     local kvers; kvers=$(echo "$outfile" |cut -d "-" -f2-)
     debug "# Kernel Version found: $kvers"
 
-    if [ "$IMG_VERSION" -ge 60 ]; then
-      local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
-      # blacklist various driver due to bugs and stability issues
-      {
-        echo "### $COMPANY - installimage"
-        echo "### silence any onboard speaker"
-        echo "blacklist pcspkr"
-        echo "blacklist snd_pcsp"
-        echo "### i915 driver blacklisted due to various bugs"
-        echo "### especially in combination with nomodeset"
-        echo "blacklist i915"
-        echo "### mei driver blacklisted due to serious bugs"
-        echo "blacklist mei"
-        echo "blacklist mei-me"
-        echo "blacklist sm750fb"
-      } > "$blacklist_conf"
-    fi
+    blacklist_unwanted_and_buggy_kernel_modules
+    configure_kernel_modules
 
     # apparently sometimes the mdadm assembly bugfix introduced with the recent mdadm release does not work
     # however, the problem is limited to H8SGL boards
@@ -86,17 +71,15 @@ generate_config_grub() {
   local grubdefconf="$FOLD/hdd/etc/default/grub"
 
   # set linux_default in grub
-  local grub_linux_default="nomodeset consoleblank=0"
+  local grub_linux_default=''
+  (( USE_KERNEL_MODE_SETTING == 0 )) && grub_linux_default+='nomodeset '
+  grub_linux_default+="consoleblank=0"
   if is_virtual_machine; then
      grub_linux_default="${grub_linux_default} elevator=noop"
   fi
 
   if has_threadripper_cpu; then
     grub_linux_default+=' pci=nommconf'
-  fi
-
-  if is_dell_r6415; then
-    grub_linux_default=${grub_linux_default/nomodeset }
   fi
 
   if [ "$SYSARCH" == "arm64" ]; then

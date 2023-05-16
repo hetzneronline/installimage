@@ -27,17 +27,8 @@ generate_new_ramdisk() {
     # pick the latest kernel
     VERSION="$(find "$FOLD/hdd/boot/" -name "vmlinuz-*" | cut -d '-' -f 2- | sort -V | tail -1)"
 
-    # blacklist some kernel modules due to bugs and/or stability issues or annoyance
-    local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
-    {
-      echo "### $COMPANY - installimage"
-      echo "### silence any onboard speaker"
-      echo "blacklist pcspkr"
-      echo "### i915 driver blacklisted due to various bugs"
-      echo "### especially in combination with nomodeset"
-      echo "blacklist i915"
-      echo "blacklist sm750fb"
-    } > "$blacklist_conf"
+    blacklist_unwanted_and_buggy_kernel_modules
+    configure_kernel_modules
 
     local dracutfile="$FOLD/hdd/etc/dracut.conf.d/99-$C_SHORT.conf"
     {
@@ -88,14 +79,11 @@ generate_config_grub() {
 
   local grub_cmdline_linux='biosdevname=0 crashkernel=auto'
   is_virtual_machine && grub_cmdline_linux+=' elevator=noop'
-  grub_cmdline_linux+=' nomodeset rd.auto=1 consoleblank=0'
+  (( USE_KERNEL_MODE_SETTING == 0 )) && grub_linux_default+=' nomodeset'
+  grub_cmdline_linux+=' rd.auto=1 consoleblank=0'
 
   if has_threadripper_cpu; then
     grub_cmdline_linux+=' pci=nommconf'
-  fi
-
-  if is_dell_r6415; then
-    grub_cmdline_linux=${grub_cmdline_linux/nomodeset }
   fi
 
   if [ "$SYSARCH" == "arm64" ]; then

@@ -24,15 +24,8 @@ generate_config_mdadm() {
 generate_new_ramdisk() {
   [ "$1" ] || return 0
 
-  # blacklist i915
-  local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
-  {
-    echo "### $COMPANY - installimage"
-    echo '### i915 driver blacklisted due to various bugs'
-    echo '### especially in combination with nomodeset'
-    echo 'blacklist i915'
-    echo "blacklist sm750fb"
-  } > "$blacklist_conf"
+  blacklist_unwanted_and_buggy_kernel_modules
+    configure_kernel_modules
 
   if [ "$IMG_VERSION" -lt 132 ]; then
     local f="$FOLD/hdd/etc/sysconfig/kernel"
@@ -100,11 +93,9 @@ generate_config_grub() {
   debug '# device map:'
   cat "$DMAPFILE" | debugoutput
 
-  local grub_linux_default="nomodeset consoleblank=0"
-
-  if is_dell_r6415; then
-    grub_linux_default=${grub_linux_default/nomodeset }
-  fi
+  local grub_linux_default=''
+  (( USE_KERNEL_MODE_SETTING == 0 )) && grub_linux_default+='nomodeset '
+  grub_linux_default+='consoleblank=0'
 
   if has_threadripper_cpu; then
     grub_linux_default+=' pci=nommconf'
