@@ -191,7 +191,7 @@ generate_menu() {
       if [ "$UEFI" -eq 1 ]; then
         DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot/efi  esp  256M"
       fi
-      DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot  ext3  512M"
+      DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot  ext3  1024M"
       DEFAULTPARTS="$DEFAULTPARTS\nPART  lvm    vg0    all\n"
       DEFAULTPARTS="$DEFAULTPARTS\nLV  vg0  root  /     ext3  15G"
       DEFAULTPARTS="$DEFAULTPARTS\nLV  vg0  swap  swap  swap   6G"
@@ -389,7 +389,11 @@ create_config() {
       echo "##  MISC CONFIG:"
       echo "## ============="
       echo
-      echo "USE_KERNEL_MODE_SETTING yes"
+      if board_requires_drm_blacklisting; then
+        echo "USE_KERNEL_MODE_SETTING no"
+      else
+        echo "USE_KERNEL_MODE_SETTING yes"
+      fi
     } >> "$CNF"
 
     ## Calculate how much hardisk space at raid level 0,1,5,6,10
@@ -449,7 +453,7 @@ create_config() {
       echo "##"
       echo "## example without LVM (default):"
       echo "## -> 4GB   swapspace"
-      echo "## -> 512MB /boot"
+      echo "## -> 1024MB /boot"
       if [ "$UEFI" -eq 1 ]; then
         echo "## -> 256MB /boot/efi"
       fi
@@ -457,7 +461,7 @@ create_config() {
       echo "## -> 5GB   /tmp"
       echo "## -> all the rest to /home"
       echo "#PART swap   swap        4G"
-      echo "#PART /boot  ext2      512M"
+      echo "#PART /boot  ext2      1024M"
       if [ "$UEFI" -eq 1 ]; then
         echo "#PART /boot/efi  esp          256M"
       fi
@@ -471,9 +475,9 @@ create_config() {
       echo "## example with LVM:"
       echo "#"
       echo "## normal filesystems and volume group definitions:"
-      echo "## -> 512MB boot  (not on lvm)"
+      echo "## -> 1024MB boot  (not on lvm)"
       echo "## -> all the rest for LVM VG 'vg0'"
-      echo "#PART /boot  ext3     512M"
+      echo "#PART /boot  ext3     1024M"
       echo "#PART lvm    vg0       all"
       echo "#"
       echo "## logical volume definitions:"
@@ -501,14 +505,25 @@ create_config() {
 
     } >> "$CNF"
 
-    if [ -x "/usr/local/bin/hwdata" ]; then
-      {
-        echo "#"
-        echo "## your system has the following devices:"
-        echo "#"
-        /usr/local/bin/hwdata | grep "Disk /"  | sed "s/^  /#/"
-      } >> "$CNF"
-    fi
+    {
+      echo "#"
+      echo "## your system has the following devices:"
+      echo "#"
+      for link in /sys/block/*/; do
+        [[ -e "$link" ]] || continue
+        local target="$(readlink -f "$link")"
+        if [[ "$target" =~ ^/sys/devices/virtual/ ]]; then continue; fi
+
+        local dev="/dev/${target##*/}"
+        # do not list unreadable disks
+        dd bs=1 count=1 "if=$dev" of=/dev/null status=none &> /dev/null || continue
+
+        local size="$(blockdev --getsize64 "$dev")"
+        local si_size="$(numfmt --to=si --format="%.2f" "$size")"
+        local iec_i_size="$(numfmt --to=iec-i --format="%.2f" "$size")"
+        echo "# Disk $dev: ${si_size::-1} ${si_size: -1}B (=> ${iec_i_size::-2} ${iec_i_size: -2}B)"
+      done
+    } >> "$CNF"
 
     if [ "$RAID1" ] && [ "$RAID0" ] ; then
       {
@@ -1227,6 +1242,21 @@ validate_vars() {
         fi
       fi
 
+      if [ "${PART_FS[$i]}" = "xfs" ]; then
+        if [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION <= 2004)); then
+          if ! [[ "$(mkfs.xfs -V)" =~ ^mkfs\.xfs\ version\ (.*)$ ]]; then
+            graph_error "ERROR: can not query mkfs.xfs version"
+            return 1
+          fi
+          local mkfs_xfs_version="${BASH_REMATCH[1]}"
+          local max_mkfs_xfs_version=5
+          if [[ "$(echo -e "$mkfs_xfs_version\n$max_mkfs_xfs_version" | sort -V | head -n 1)" == "$max_mkfs_xfs_version" ]]; then
+            graph_error "ERROR: xfs for $IAM $IMG_VERSION is not supported"
+            return 1
+          fi
+        fi
+      fi
+
       # count ESP
       if [ "${PART_FS[$i]}" = "esp" ]; then
         espcount+=1
@@ -1239,11 +1269,12 @@ validate_vars() {
             return 1
           fi
           if [ "${PART_SIZE[$i]}" -lt "256" ]; then
-            graph_error "ERROR: EFI System Partition (ESP) partition has to be at least 256M (current size: ${PART_SIZE[$i]})"
+            graph_error "ERROR: EFI System Partition (ESP) has to be at least 256M (current size: ${PART_SIZE[$i]})"
             return 1
           fi
         fi
-     fi
+        ((UEFI == 0)) && graph_notice "Warning: Creating an EFI System Partition (ESP) on a non UEFI system!"
+      fi
 
       # We can't use bsdtar on non ext2/3/4 partitions because xfs/btrfs can't handle
       # secondary ext-only flags and we can't just extract the xattrs we want with bsdtar.
@@ -1783,13 +1814,6 @@ stop_lvm_raid() {
 # delete_partitions "DRIVE"
 delete_partitions() {
  if [ "$1" ]; then
-  # clean RAID information for every partition not only for the blockdevice
-  for raidmember in $(sfdisk -l "$1" | grep -o "${1}p\?[0-9]\+"); do
-    mdadm -q --zero-superblock "$raidmember" |& debugoutput
-  done
-  # clean RAID information in superblock of blockdevice
-  mdadm -q --zero-superblock "$1" |& debugoutput
-
   # delete GPT and MBR
   sgdisk -Z "$1" |& debugoutput
 
@@ -3907,7 +3931,7 @@ function hdinfo() {
       echo "# Onboard: $name"
       ;;
     *)
-      echo "# unknown"
+      echo "# unkown"
       ;;
   esac
 }
