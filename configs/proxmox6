@@ -12,7 +12,7 @@ BOOTLOADER grub
 
 HOSTNAME Proxmox-VE.localdomain
 
-PART  /boot  ext3  512M
+PART  /boot  ext3  1024M
 PART  lvm    vg0    all
 LV  vg0  root  /     ext4  15G
 LV  vg0  swap  swap  swap   6G
