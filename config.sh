@@ -31,6 +31,7 @@ export COMPANY_PUBKEY="$SCRIPTPATH/gpg/public-key.asc"
 export COMPANY_PUBKEYS=(
   "$COMPANY_PUBKEY"
   "$SCRIPTPATH/gpg/public-key-2018.asc"
+  "$SCRIPTPATH/gpg/public-key-2023.asc"
 )
 export COMPANY="Hetzner Online GmbH"
 export C_SHORT="hetzner"
@@ -90,13 +91,13 @@ export OSMENULIST+=(
 export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
 export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
 export PROXMOX6_BASE_IMAGE="Debian-1013-buster-64-minimal"
-export PROXMOX7_BASE_IMAGE="Debian-1106-bullseye-amd64-base"
+export PROXMOX7_BASE_IMAGE="Debian-1107-bullseye-amd64-base"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.com/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.com/plesk
-export PLESK_STD_VERSION=PLESK_18_0_46
+export PLESK_STD_VERSION=PLESK_18_0_53
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats
