@@ -434,6 +434,10 @@ fi
 inc_step
 status_busy "Installing bootloader $BOOTLOADER"
 
+if rhel_based_image; then
+  blsconfig_fix_paths || status_failed
+fi
+
 debug "# Generating config for $BOOTLOADER"
 if [ "$BOOTLOADER" = "grub" -o "$BOOTLOADER" = "GRUB" ]; then
   generate_config_grub "$VERSION" || status_failed
