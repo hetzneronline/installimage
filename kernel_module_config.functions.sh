@@ -14,11 +14,19 @@ unwanted_kernel_modules() {
 board_requires_drm_blacklisting() {
   has_fujitsu_board &&
     {
-      [[ "$board_name" == D3417-B1 ]] ||
-      [[ "$board_name" == D3417-B2 ]] ||
-      [[ "$board_name" == D3401-H1 ]] ||
-      [[ "$board_name" == D3401-H2 ]]
-    }
+      [[ "$(board_name)" == D3417-B1 ]] ||
+      [[ "$(board_name)" == D3417-B2 ]] ||
+      [[ "$(board_name)" == D3401-H1 ]] ||
+      [[ "$(board_name)" == D3401-H2 ]]
+    } &&
+    return
+  [[ "$IAM" == ubuntu ]] &&
+    ((IMG_VERSION >= 2204)) &&
+    ! hwe_image &&
+    [[ "$(board_vendor)" == 'ASUSTeK COMPUTER INC.' ]] &&
+    [[ "$(board_name)" == 'PRIME B760M-A D4' ]] &&
+    return 0
+  return 1
 }
 
 buggy_kernel_modules() {
