@@ -297,6 +297,7 @@ gen_ifcfg_script_centos() {
   echo
   echo 'IPV6INIT=yes'
   echo "IPV6ADDR=${ipv6_addrs[0]}"
+  echo 'IPV6_AUTOCONF=no'
 
   local gatewayv6="$(network_interface_ipv6_gateway "$network_interface")"
   [[ -z "$gatewayv6" ]] && return
@@ -786,7 +787,7 @@ setup_network_config() {
   debug '# setup network config'
 
   case "$IAM" in
-    centos|rockylinux|almalinux)
+    centos|rockylinux|almalinux|rhel)
       setup_etc_sysconfig_network
       setup_etc_sysconfig_network_scripts_centos
     ;;
