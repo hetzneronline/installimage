@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get tag
+        id: tag
+        run: |
+          if [ ${{ github.ref }} == "refs/heads/main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: create a .tgz file 
+        run: |
+          tar  --exclude .git -C .. -czf /tmp/hetzner-installimage-${{ steps.tag.outputs.tag }}.tgz hetzner-installimage
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          path: /tmp/hetzner-installimage-${{ steps.tag.outputs.tag }}.tgz
+
+
+      - name: upload release assets 
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.tag.outputs.tag }} -t ${{ steps.tag.outputs.tag }} -n ""
+          gh release upload ${{ steps.tag.outputs.tag }}  /tmp/hetzner-installimage-${{ steps.tag.outputs.tag }}.tgz 
