@@ -206,7 +206,10 @@ else
         ask_format="$(eval echo "\$FORMAT_DRIVE$i")"
         ask_drive="$(eval echo "\$DRIVE$i")"
         if [ "$SWRAID" = "1" ] || [ "$ask_format" = "1" ] || [ "$i" -eq 1 ]; then
-          dialog --backtitle "$DIATITLE" --title "Confirmation" --colors --yesno "\n\Z1WARNING!: DATA ON THE FOLLOWING DRIVE WILL BE DELETED:\n\n $ask_drive\n\nDo you want to continue?\Zn\n" 0 0
+          disk_info=''
+          disk_serial="$(disk_serial "$ask_drive")" || :
+          [[ -z "$disk_serial" ]] || disk_info+=", Serial Number: $disk_serial"
+          dialog --backtitle "$DIATITLE" --title "Confirmation" --colors --yesno "\n\Z1WARNING!: DATA ON THE FOLLOWING DRIVE WILL BE DELETED:\n\n ${ask_drive}$disk_info\n\nDo you want to continue?\Zn\n" 0 0
           if [ $? -ne 0 ]; then
             debug "# Confirmation for drive $ask_drive NOT accepted"
             ACCEPTED=""
