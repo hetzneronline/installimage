@@ -6,7 +6,15 @@
 # (c) 2013-2021, Hetzner Online GmbH
 #
 
-validate_image() { return 2; }
+validate_image() {
+  [[ -e "$ARCHLINUX_RELEASE_KEY" ]] || return 3
+  debug "# importing archlinux release key $(readlink -f "$ARCHLINUX_RELEASE_KEY")"
+  gpg --batch --import "$ARCHLINUX_RELEASE_KEY" |& debugoutput
+  local sig_file="$ARCHLINUX_BOOTSTRAP.sig"
+  [[ -e "$sig_file" ]] || return 2
+  debug "# verifying archlinux bootstrap $(readlink -f "$ARCHLINUX_BOOTSTRAP") using sig file $(readlink -f "$sig_file")"
+  gpg --batch --verify "$sig_file" "$ARCHLINUX_BOOTSTRAP" |& debugoutput
+}
 
 extract_image() {
   # only extract images with content, pacstrap otherwise
@@ -18,15 +26,14 @@ extract_image() {
   debug '# empty image provided. run pacstrap install'
 
   # symlink to latest archlinux-bootstrap
-  local archlinux_bootstrap_archive="$SCRIPTPATH/../archlinux/archlinux-bootstrap-latest-x86_64.tar.gz"
   local archlinux_mirror='https://mirror.hetzner.com/archlinux'
   local archlinux_packages='base btrfs-progs cronie cryptsetup gptfdisk grub haveged linux linux-firmware lvm2 mdadm net-tools openssh python rsync vim wget xfsprogs inetutils'
 
   # dont extract archlinux-bootstrap to system memory but the target disk
   local hdd_dir="$FOLD/hdd"
   debug '# extract archlinux-bootstrap to disk'
-  debug "# run tar xzf $archlinux_bootstrap_archive -C $hdd_dir"
-  tar xzf "$archlinux_bootstrap_archive" -C "$hdd_dir" |& debugoutput || return 1
+  debug "# run tar xzf $ARCHLINUX_BOOTSTRAP -C $hdd_dir"
+  tar xzf "$ARCHLINUX_BOOTSTRAP" -C "$hdd_dir" |& debugoutput || return 1
 
   # pacman CheckSpace requires a mount to verify free space
   local chroot_dir="$hdd_dir/root.x86_64"
