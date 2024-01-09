@@ -106,8 +106,31 @@ setup_cpanel() {
   debug 'set up cpanel'
 }
 
+workaround_alma_linux_cpanel_missing_ea4_repo_issue() {
+  debug '# workarounding cpanel EA4.repo missing issue'
+  execute_chroot_command 'yum -y clean all' || return 1
+  debug '# downloading https://securedownloads.cpanel.net/EA4/EA4.repo file'
+  curl -L -o "$FOLD/hdd/etc/yum.repos.d/EA4.repo" -s https://securedownloads.cpanel.net/EA4/EA4.repo || return 1
+  execute_chroot_command 'yum -y update' || return 1
+  execute_chroot_command 'yum makecache'
+}
+
+prevent_outdated_keyring_issues() {
+  execute_chroot_command 'yum -y clean all' || return 1
+  execute_chroot_command 'yum -y update' || return 1
+  execute_chroot_command 'yum makecache'
+}
+
 # install_cpanel()
 install_cpanel() {
+  if [[ "$IAM" == 'almalinux' ]]; then
+    if ((IMG_VERSION >= 80)); then
+      workaround_alma_linux_cpanel_missing_ea4_repo_issue || return 1
+    else
+      prevent_outdated_keyring_issues || return 1
+    fi
+  fi
+
   local temp_file="/cpanel-installer"
 
   debug "# downloading cpanel installer ${CPANEL_INSTALLER_SRC}/${IMAGENAME}"

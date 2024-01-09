@@ -138,6 +138,10 @@ export GREY="\033[0;37m"
 export WHITE="\033[1;39m"
 export NOCOL="\033[00m"
 
+export ARCHLINUX_DIR="$SCRIPTPATH/../archlinux"
+export ARCHLINUX_RELEASE_KEY="$ARCHLINUX_DIR/release-key.pgp"
+export ARCHLINUX_BOOTSTRAP="$ARCHLINUX_DIR/archlinux-bootstrap-latest-x86_64.tar.gz"
+
 other_images() {
   find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'
   echo 'Proxmox-Virtualization-Environment-on-Debian-Bullseye'

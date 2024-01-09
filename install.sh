@@ -100,122 +100,135 @@ else
   status_failed
 fi
 
-test "$SWRAID" = "1" && TOTALSTEPS=$(($TOTALSTEPS + 1))
-test "$LVM" = "1" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$OPT_INSTALL" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$IMAGE_PATH_TYPE" = "http" && TOTALSTEPS=$(($TOTALSTEPS + 1))
 test "$CRYPT" = "1" && TOTALSTEPS=$(($TOTALSTEPS +1))
 [ "$BTRFS" -eq 1 ] && TOTALSTEPS=$((TOTALSTEPS + 1))
 
-#
-# Remove partitions
-#
-inc_step
-status_busy "Deleting partitions"
-
-# Unmount all partitions and print an error message if it fails
-output=$(unmount_all) ; EXITCODE=$?
-if [ $EXITCODE -ne 0 ] ; then
-  echo ""
-  echo -e "${RED}ERROR unmounting device(s):$NOCOL"
-  echo "$output"
-  echo ""
-  echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
-  echo "Please unmount used devices manually or reboot the rescuesystem and retry."
-  echo ""
-  exit 1
-fi
-
-stop_lvm_raid ; EXITCODE=$?
-if [ $EXITCODE -ne 0 ] ; then
-  echo ""
-  echo -e "${RED}ERROR stopping LVM and/or RAID device(s):$NOCOL"
-  echo ""
-  echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
-  echo "Please stop used lvm/raid manually or reboot the rescuesystem and retry."
-  echo ""
-  exit 1
-fi
-
-for part_inc in $(seq 1 $COUNT_DRIVES) ; do
-  if [ "$(eval echo \$FORMAT_DRIVE${part_inc})" = "1" -o "$SWRAID" = "1" -o $part_inc -eq 1 ] ; then
-    TARGETDISK="$(eval echo \$DRIVE${part_inc})"
-    debug "# Deleting partitions on $TARGETDISK"
-    delete_partitions "$TARGETDISK" || status_failed
-  fi
-done
-
-status_done
-
-wait_for_udev
-
-#
-# Test partition size
-#
-inc_step
-status_busy "Test partition size"
-part_test_size
-check_dos_partitions "no_output"
-status_done
-
-
-#
-# Create partitions
-#
-inc_step
-status_busy "Creating partitions and /etc/fstab"
-
-for part_inc in $(seq 1 $COUNT_DRIVES) ; do
-  if [ "$SWRAID" = "1" -o $part_inc -eq 1 ] ; then
-    TARGETDISK="$(eval echo \$DRIVE${part_inc})"
-    debug "# Creating partitions on $TARGETDISK"
-    create_partitions $TARGETDISK || status_failed
-  fi
-done
-
-status_done
-
-wait_for_udev
-
-#
-# Software RAID
-#
-if [ "$SWRAID" = "1" ]; then
+# skipp all deleting process when reusing partioning
+if [ -z "$REUSE_FSTAB" ] ; then
+  test "$SWRAID" = "1" && TOTALSTEPS=$(($TOTALSTEPS + 1))
+  test "$LVM" = "1" && TOTALSTEPS=$(($TOTALSTEPS + 1))
+  #
+  # Remove partitions
+  #
   inc_step
-  status_busy "Creating software RAID level $SWRAIDLEVEL"
-  set_raid0_default_layout
-  make_swraid "$FOLD/fstab"
-  suspend_swraid_resync
-  status_donefailed $?
-fi
+  status_busy "Deleting partitions"
 
-wait_for_udev
+  # Unmount all partitions and print an error message if it fails
+  output=$(unmount_all) ; EXITCODE=$?
+  if [ $EXITCODE -ne 0 ] ; then
+    echo ""
+    echo -e "${RED}ERROR unmounting device(s):$NOCOL"
+    echo "$output"
+    echo ""
+    echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
+    echo "Please unmount used devices manually or reboot the rescuesystem and retry."
+    echo ""
+    exit 1
+  fi
 
-if [ "$CRYPT" = "1" ]; then
-  inc_step
-  status_busy "Encrypt partitions and create /etc/crypttab"
-  encrypt_partitions "$FOLD/fstab" "$CRYPTPASSWORD"
+  stop_lvm_raid ; EXITCODE=$?
+  if [ $EXITCODE -ne 0 ] ; then
+    echo ""
+    echo -e "${RED}ERROR stopping LVM and/or RAID device(s):$NOCOL"
+    echo ""
+    echo -e "${RED}Cannot continue, device(s) seem to be in use.$NOCOL"
+    echo "Please stop used lvm/raid manually or reboot the rescuesystem and retry."
+    echo ""
+    exit 1
+  fi
+
+  for part_inc in $(seq 1 $COUNT_DRIVES) ; do
+    if [ "$(eval echo \$FORMAT_DRIVE${part_inc})" = "1" -o "$SWRAID" = "1" -o $part_inc -eq 1 ] ; then
+      TARGETDISK="$(eval echo \$DRIVE${part_inc})"
+      debug "# Deleting partitions on $TARGETDISK"
+      delete_partitions "$TARGETDISK" || status_failed
+    fi
+  done
+
   status_done
-fi
 
-wait_for_udev
+  wait_for_udev
 
-#
-# LVM
-#
-if [ "$LVM" = "1" ]; then
+  #
+  # Test partition size
+  #
   inc_step
-  status_busy "Creating LVM volumes"
-  make_lvm "$FOLD/fstab"
-  LVM_EXIT=$?
-  if [ $LVM_EXIT -eq 2 ] ; then
-    status_failed "LVM thin-pool detected! Can't remove automatically!"
-  else
-    status_donefailed $LVM_EXIT
+  status_busy "Test partition size"
+  part_test_size
+  check_dos_partitions "no_output"
+  status_done
+
+
+  #
+  # Create partitions
+  #
+  inc_step
+  status_busy "Creating partitions and /etc/fstab"
+
+  for part_inc in $(seq 1 $COUNT_DRIVES) ; do
+    if [ "$SWRAID" = "1" -o $part_inc -eq 1 ] ; then
+      TARGETDISK="$(eval echo \$DRIVE${part_inc})"
+      debug "# Creating partitions on $TARGETDISK"
+      create_partitions $TARGETDISK || status_failed
+    fi
+  done
+
+  status_done
+
+  wait_for_udev
+
+  #
+  # Software RAID
+  #
+  if [ "$SWRAID" = "1" ]; then
+    inc_step
+    status_busy "Creating software RAID level $SWRAIDLEVEL"
+    set_raid0_default_layout
+    make_swraid "$FOLD/fstab"
+    suspend_swraid_resync
+    status_donefailed $?
   fi
+
+  wait_for_udev
+
+  if [ "$CRYPT" = "1" ]; then
+    inc_step
+    status_busy "Encrypt partitions and create /etc/crypttab"
+    encrypt_partitions "$FOLD/fstab" "$CRYPTPASSWORD"
+    status_done
+  fi
+
+  wait_for_udev
+
+  #
+  # LVM
+  #
+  if [ "$LVM" = "1" ]; then
+    inc_step
+    status_busy "Creating LVM volumes"
+    make_lvm "$FOLD/fstab"
+    LVM_EXIT=$?
+    if [ $LVM_EXIT -eq 2 ] ; then
+      status_failed "LVM thin-pool detected! Can't remove automatically!"
+    else
+      status_donefailed $LVM_EXIT
+    fi
+  fi
+
+  wait_for_udev
 fi
 
-wait_for_udev
+if [ -n "$REUSE_FSTAB" ] ; then
+  # copy existing fstab to installimage path
+  cp $REUSE_FSTAB $FOLD/fstab
+  TOTALSTEPS=$(($TOTALSTEPS - 3))
+
+  # reassable raid and lvm
+  mdadm --assemble --scan 2>&1 | debugoutput
+  lvscan 2>&1 | debugoutput
+fi
 
 #
 # Format partitions
@@ -226,9 +239,23 @@ cat $FOLD/fstab | grep "^/dev/" > /tmp/fstab.tmp
 while read line ; do
   DEV="$(echo $line |cut -d " " -f 1)"
   FS="$(echo $line |cut -d " " -f 3)"
-  status_busy_nostep "  formatting $DEV with $FS"
-  format_partitions "$DEV" "$FS"
-  status_donefailed $?
+
+  # check if filesystem on devices needs to be preserved
+  SKIP=0
+  for preserve_fs in "${PRESERVE_FS[@]}" ; do
+    if [ "$preserve_fs" == "$DEV" ] ; then
+      SKIP=1
+      break
+    fi
+  done
+
+  if [ "$SKIP" -eq 1 ] ; then
+    status_none_nostep "  ${YELLOW}NOT${NOCOL} formatting $DEV with $FS"
+  else
+    status_busy_nostep "  formatting $DEV with $FS"
+    format_partitions "$DEV" "$FS"
+    status_donefailed $?
+  fi
 done < /tmp/fstab.tmp
 
 if [ "$BTRFS" -eq 1 ]; then

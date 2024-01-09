@@ -3,7 +3,7 @@
 #
 # chroot functions
 #
-# (c) 2007-2018, Hetzner Online GmbH
+# (c) 2007-2023, Hetzner Online GmbH
 #
 
 execute_chroot_command_wo_debug() {
@@ -12,7 +12,7 @@ execute_chroot_command_wo_debug() {
     mkdir -p "$FOLD/hdd/$dir"
     mount --bind "$dir" "$FOLD/hdd/$dir"
   done
-  unshare -f -p chroot "$FOLD/hdd" /usr/bin/env bash -c "$@"
+  TMPDIR= unshare -f -p chroot "$FOLD/hdd" /usr/bin/env bash -c "$@"
   local r=$?
   for ((i=${#dirs[@]}-1; i>=0; i--)); do
     until umount "$FOLD/hdd/${dirs[i]}"; do :; done

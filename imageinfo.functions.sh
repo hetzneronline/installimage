@@ -16,6 +16,11 @@ debian_bullseye_image() {
   ((IMG_VERSION >= 1100)) && ((IMG_VERSION <= 1200))
 }
 
+debian_bookworm_image() {
+  [[ "${IAM,,}" == 'debian' ]] || return 1
+  ((IMG_VERSION >= 1200)) && ((IMG_VERSION <= 1300))
+}
+
 other_image() {
   local image="$1"
   while read other_image; do
@@ -58,6 +63,12 @@ debian_based_image() {
 
 hwe_image() {
   [[ "$IMAGE_FILE" =~ -hwe\. ]]
+}
+
+image_requires_xfs_version_check() {
+  [[ "$IAM" == 'ubuntu' ]] && ((IMG_VERSION <= 2004)) && return 0
+  [[ "$IAM" == 'debian' ]] && ((IMG_VERSION < 1100)) && return 0
+  return 1
 }
 
 # vim: ai:ts=2:sw=2:et
