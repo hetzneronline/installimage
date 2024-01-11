@@ -709,6 +709,8 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
 
 # setup /etc/netplan/01-netcfg.yaml
 setup_etc_netplan_01_netcfg_yaml() {
+  OLD_UMASK=`umask`
+  umask 7177
   debug '# setting up /etc/netplan/01-netcfg.yaml'
   {
     echo "### $COMPANY installimage"
@@ -720,6 +722,7 @@ setup_etc_netplan_01_netcfg_yaml() {
       gen_etc_netplan_01_netcfg_yaml_entry "$network_interface" || return 1
     done < <(physical_network_interfaces)
   } > "$FOLD/hdd/etc/netplan/01-netcfg.yaml" 2> >(debugoutput)
+  umask $OLD_UMASK
 }
 
 # gen network file

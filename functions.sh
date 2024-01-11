@@ -783,6 +783,15 @@ if [ -n "$1" ]; then
     PART_SIZE[$i]="$(translate_unit "$(echo "$PART_LINE" | awk '{ print $4 }')")"
     PART_CRYPT[$i]="$(echo "$PART_LINE" | awk '{print $5}')"
     MOUNT_POINT_SIZE[$i]=${PART_SIZE[$i]}
+
+    # Print in awk columns from 6 until the end.
+    EXTRAS="$(echo "$PART_LINE" | awk '{for(i=6;i<=NF;++i)print $i}')"
+
+    for extra in $EXTRAS; do
+      eval "$extra"
+      PART_EXTRAS[$i]="${PART_EXTRAS[$i]} $extra"
+    done
+
     #calculate new partition size if software raid is enabled and it is not /boot or swap
     if [ "$SWRAID" = "1" ]; then
       if [ "${PART_MOUNT[$i]}" != "/boot" ] && [ "${PART_MOUNT[$i]}" != "/boot/efi" ] && [ "${PART_SIZE[$i]}" != "all" ] && [ "${PART_MOUNT[$i]}" != "swap" ]; then
@@ -807,7 +816,9 @@ if [ -n "$1" ]; then
     if [ "${PART_MOUNT[$i]}" = "/" ]; then
       HASROOT="true"
     fi
-    test -n "${PART_CRYPT[$i]}"; CRYPT=$((1 - $?))
+    if [ "${PART_CRYPT[$i]}" = "yes" ]; then
+      CRYPT="1"
+    fi
   done < /tmp/part_lines.tmp
 
   # get encryption password
@@ -2034,7 +2045,7 @@ create_partitions() {
    else
      crypt_part=$(grep "${PART_MOUNT[$i]}" /tmp/part_lines.tmp | grep "crypt" | awk '{print $3}')
    fi
-   [ -n "$crypt_part" ] && is_crypted='crypt' || is_crypted=''
+   [ -n "$crypt_part" ] && is_crypted='crypt' || is_crypted='no'
 
    #create GPT partitions
    if [ $GPT -eq 1 ]; then
@@ -2067,7 +2078,7 @@ create_partitions() {
        fi
      fi
 
-     make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted"
+     make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted" "${PART_EXTRAS[$i]}"
 
    else
      # part without GPT
@@ -2136,9 +2147,9 @@ create_partitions() {
      fi
 
      if [ "$PART_COUNT" -ge "4" -a "$i" -ge "4" ]; then
-       make_fstab_entry "$1" "$[$i+1]" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted"
+       make_fstab_entry "$1" "$[$i+1]" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted" "${PART_EXTRAS[$i]}"
      else
-       make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted"
+       make_fstab_entry "$1" "$i" "${PART_MOUNT[$i]}" "${PART_FS[$i]}" "$is_crypted" "${PART_EXTRAS[$i]}"
      fi
    fi
   done
@@ -2188,7 +2199,7 @@ create_partitions() {
 }
 
 # create fstab entries
-# make_fstab_entry "DRIVE" "NUMBER" "MOUNTPOINT" "FILESYSTEM" ("crypt")
+# make_fstab_entry "DRIVE" "NUMBER" "MOUNTPOINT" "FILESYSTEM" ("crypt") ("extras")
 make_fstab_entry() {
  if [ "$1" -a "$2" -a "$3" -a "$4" ]; then
   ENTRY=""
@@ -2232,6 +2243,10 @@ make_fstab_entry() {
         ENTRY="$1$p$2 $3 $4 defaults 0 0 # crypted"
       fi
     fi
+  fi
+
+  if [ -n "$6" ]; then
+    ENTRY="$ENTRY  # HZ-CFG:$6"
   fi
 
   echo $ENTRY >> "$FOLD/fstab"
@@ -2311,6 +2326,16 @@ make_swraid() {
     while read line ; do
       PARTNUM="$(next_partnum $count)"
       echo "Line is: \"$line\"" | debugoutput
+
+      local array_raidlevel="$SWRAIDLEVEL"
+
+      OVERRIDES=$(echo $line | sed -n "/HZ-CFG/s/.*# HZ-CFG:\(.*\)$/\1/p")
+      if [ -n "$OVERRIDES" ]; then
+        for override in $OVERRIDES; do
+          eval "$override"
+        done
+      fi
+
       # If multiple ESPs are supported by grub-efi-amd64, a workaround for the fstab is necessary in order to create the RAID array correctly
       if [ -n "$(echo "$line" | grep "/boot/efi")" ] && [ "$IAM" == "ubuntu" -a "$IMG_VERSION" -ge 2004 ] && [ "$UEFI" -eq 1 ]; then
         if [ "$EFIPART" -eq 0 ] && [ -n "$(echo $line | grep $LASTDRIVE)" ]; then
@@ -2343,7 +2368,6 @@ make_swraid() {
         done
 
         local array_metadata="$metadata"
-        local array_raidlevel="$SWRAIDLEVEL"
         local can_assume_clean=''
         local array_layout=''
 
