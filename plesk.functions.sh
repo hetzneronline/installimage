@@ -19,15 +19,18 @@ install_plesk() {
   local temp_file="/plesk-installer"
 
   debug '# preparing plesk installation'
+
   if [[ "${IAM}" == centos ]]; then
-    # debug '# installing mysql'
-    # execute_chroot_command 'yum -y install mysql mysql-server' || return 1
-    # debug 'installed mysql'
     debug '# installing openssl'
     execute_chroot_command 'yum -y install openssl' # || return 1
-    debug 'installed openssl'
   fi
+
   [[ "${IAM}" == debian ]] && (( IMG_VERSION >= 70 )) && mkdir --parents "${FOLD}/hdd/run/lock"
+
+  if [[ "$IAM" == 'almalinux' ]]; then
+    debug '# installing chkconfig'
+    execute_chroot_command 'yum -y install chkconfig'
+  fi
 
   if debian_bullseye_image; then
     debug '# plesk does not support debian bullseye backports:'
