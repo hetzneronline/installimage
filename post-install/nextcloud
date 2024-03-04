@@ -1,0 +1,251 @@
+#!/bin/bash
+
+set -x           # print commands and their arguments as they are executed
+set -o errexit   # abort on nonzero exitstatus
+set -o nounset   # abort on unbound variable
+set -o pipefail  # don't hide errors within pipes
+trap 'echo "Error on line ${LINENO} of ${0}."' ERR
+
+NEXTCLOUD_ARCHIVE_URL="https://download.nextcloud.com/server/releases/nextcloud-27.1.1.zip"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update && apt-get upgrade -y
+
+# Install necessary packages
+apt-get install -y \
+  nginx \
+  postgresql \
+  postgresql-contrib \
+  libmagickcore-6.q16-6-extra \
+  redis-server \
+  php-fpm \
+  php-pgsql \
+  php-mbstring \
+  php-gd \
+  php-xml \
+  php-zip \
+  php-curl \
+  php-intl \
+  php-imagick \
+  php-redis \
+  php-gmp \
+  php-bcmath \
+  unzip \
+  wget \
+  uuid-runtime \
+  sudo
+
+systemctl stop redis-server.service nginx.service postgresql.service || true
+
+DATABASE_PASSWORD="$(uuidgen)"
+ADMIN_PASSWORD="$(uuidgen)"
+PHP_FPM_VERSION="$(basename "$(find /etc/php -maxdepth 1 -type d -name '*.*' | sort -r | head -n 1)")"
+
+PG_DATA_DIR="$(pg_lsclusters | awk '/postgresql/{print $6}')"
+PG_VERSION="$(basename "$(find /var/lib/postgresql -maxdepth 1 -type d -name '[0-9]?')")"
+
+[ -d "$PG_DATA_DIR" ] || exit 1
+
+sudo -u postgres pg_ctlcluster "${PG_VERSION}" main start || true
+pg_lsclusters
+
+# Create PostgreSQL database and user
+sudo -u postgres psql -c "CREATE USER nextcloud WITH PASSWORD '${DATABASE_PASSWORD}';"
+sudo -u postgres psql -c "CREATE DATABASE nextcloud WITH OWNER nextcloud;"
+
+# Download and extract Nextcloud
+cd /tmp
+wget "${NEXTCLOUD_ARCHIVE_URL}" -O nextcloud.zip
+unzip -qq nextcloud.zip
+mv nextcloud /var/www/
+chown -R www-data:www-data /var/www/nextcloud
+
+
+# Configure Nginx
+cat > /etc/nginx/sites-available/nextcloud <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name _;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name _;
+
+    ssl_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;
+    ssl_certificate_key /etc/ssl/private/ssl-cert-snakeoil.key;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    access_log /var/log/nginx/nextcloud.access.log;
+    error_log /var/log/nginx/nextcloud.error.log;
+
+    root /var/www/nextcloud;
+    location / {
+        rewrite ^ /index.php;
+    }
+
+    location ^~ /.well-known {
+        # The rules in this block are an adaptation of the rules
+        # in '.htaccess' that concern '/.well-known'.
+
+        location = /.well-known/carddav { return 301 /remote.php/dav/; }
+        location = /.well-known/caldav  { return 301 /remote.php/dav/; }
+
+        location /.well-known/acme-challenge    { try_files \$uri \$uri/ =404; }
+        location /.well-known/pki-validation    { try_files \$uri \$uri/ =404; }
+
+        # Let Nextcloud's API for '/.well-known' URIs handle all other
+        # requests by passing them to the front-end controller.
+        return 301 /index.php\$request_uri;
+    }
+
+    location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)/ {
+        deny all;
+    }
+    location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) {
+        deny all;
+    }
+
+    location ~ ^/(?:index|remote|public|cron|core/ajax/update|status|ocs/v[12]|updater/.+|oc[ms]-provider/.+)\.php(?:$|/) {
+        fastcgi_split_path_info ^(.+\.php)(/.*)$;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param PATH_INFO \$fastcgi_path_info;
+        fastcgi_param HTTPS on;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+    }
+
+    location ~ ^/(?:updater|oc[ms]-provider)(?:$|/) {
+        try_files \$uri/ =404;
+        index index.php;
+    }
+
+    location ~ \.(?:css|js|woff2?|svg|gif)$ {
+        try_files \$uri /index.php\$request_uri;
+        add_header Cache-Control "public, max-age=15778463";
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        access_log off;
+    }
+
+    location ~ \.(?:png|html|ttf|ico|jpg|jpeg)$ {
+        try_files \$uri /index.php\$request_uri;
+        access_log off;
+    }
+}
+EOF
+
+# Create the symbolic link to enable the Nextcloud Nginx site configuration
+ln -s /etc/nginx/sites-available/nextcloud /etc/nginx/sites-enabled/
+
+# Remove the default Nginx site configuration
+rm /etc/nginx/sites-enabled/default
+
+# Test the Nginx configuration
+nginx -t
+
+# Create a self-signed SSL certificate (snakeoil)
+apt-get install -y ssl-cert
+mkdir -p /etc/nginx/ssl
+make-ssl-cert generate-default-snakeoil --force-overwrite
+
+# Set up the Nextcloud cron job for www-data user
+echo "*/5  *  *  *  * php -f /var/www/nextcloud/cron.php" | sudo -u www-data crontab -
+
+# Install Nextcloud
+sudo -u www-data php /var/www/nextcloud/occ maintenance:install \
+  --database "pgsql" \
+  --database-name "nextcloud" \
+  --database-user "nextcloud" \
+  --database-pass "${DATABASE_PASSWORD}" \
+  --admin-user "admin" \
+  --admin-pass "${ADMIN_PASSWORD}"
+sudo -u www-data php /var/www/nextcloud/occ config:system:set trusted_domains 1 --value="*"
+
+# Configure Redis
+mkdir -p '/var/run/redis' && chown redis:redis '/var/run/redis'
+sed -i 's/.*unixsocket .*/unixsocket \/var\/run\/redis\/redis.sock/' /etc/redis/redis.conf
+sed -i 's/.*unixsocketperm .*/unixsocketperm 770/' /etc/redis/redis.conf
+#sed -i 's/^port .*/port 0/' /etc/redis/redis.conf
+usermod -a -G redis www-data
+cat > /var/www/nextcloud/config/redis.config.php <<EOF
+<?php
+\$CONFIG = array(
+  'memcache.locking' => '\OC\Memcache\Redis',
+  'memcache.distributed' => '\OC\Memcache\Redis',
+  'memcache.local' =>'\OC\Memcache\Redis',
+  'redis' => array(
+     'host' => '/var/run/redis/redis.sock',
+     'port' => 0,
+  ),
+);
+EOF
+
+# Configure PHP
+PHP_INI_FILE="/etc/php/${PHP_FPM_VERSION}/fpm/php.ini"
+sed -i 's/^memory_limit = .*/memory_limit = 512M/' "$PHP_INI_FILE"
+sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 100M/' "$PHP_INI_FILE"
+sed -i 's/^post_max_size = .*/post_max_size = 100M/' "$PHP_INI_FILE"
+sed -i 's/^max_execution_time = .*/max_execution_time = 300/' "$PHP_INI_FILE"
+sed -i 's/^max_input_time = .*/max_input_time = 300/' "$PHP_INI_FILE"
+
+# Configure PHP-FPM
+sed -i 's/^;env\[PATH\] = .*/env[PATH] = \/usr\/local\/bin:\/usr\/bin:\/bin/' "/etc/php/${PHP_FPM_VERSION}/fpm/pool.d/www.conf"
+
+sudo -u redis redis-server --daemonize no --unixsocket /var/run/redis/redis.sock &
+sleep 5
+
+# Preparing permissions and ownerships
+sudo chown -R www-data:www-data /var/www/nextcloud/
+sudo chown redis:redis /var/run/redis/redis.sock
+sudo chmod 660 /var/run/redis/redis.sock
+
+# Run the Nextcloud cron job for the first time
+sudo -u www-data php -f /var/www/nextcloud/cron.php
+
+# Stop PostgreSQL and Redis services
+sudo -u postgres pg_ctlcluster "${PG_VERSION}" main stop || true
+pg_lsclusters
+killall redis-server || true
+
+# Restart Nginx, Redis and PHP-FPM services
+systemctl restart nginx.service "php${PHP_FPM_VERSION}-fpm.service" redis-server.service postgresql.service || true
+
+LOGIN_INFO_FILE='/root/nextcloud-login.txt'
+NEXTCLOUD_HINT_FILE='/etc/profile.d/99-nextcloud.sh'
+REMOVE_HINT_SCRIPT_FILE='/usr/local/bin/remove_nextcloud_hint'
+
+# write login info to file
+cat > "${LOGIN_INFO_FILE}" <<EOF
+Nextcloud login information:
+  URL:      https://$(hostname -I | awk '{print $1}')
+  Username: admin
+  Password: ${ADMIN_PASSWORD}
+
+Database login information:
+  Username: nextcloud
+  Database: nextcloud
+  Password: ${DATABASE_PASSWORD}
+EOF
+
+# install login hint
+cat > "${NEXTCLOUD_HINT_FILE}" <<EOF
+#!/usr/bin/env bash
+echo ''
+echo '--- This server is running Nextcloud ---'
+echo 'Passwords are stored in ${LOGIN_INFO_FILE}.'
+echo 'See the following information to log in:'
+echo ''
+test -f ${LOGIN_INFO_FILE} && sed 's/^/>  /' ${LOGIN_INFO_FILE} || echo '>  No login information available! Please contact support via ticket'
+echo ''
+echo 'To remove this hint, please run $(basename "${REMOVE_HINT_SCRIPT_FILE}")'
+EOF
+
+# install script to remove login hint
+cat > "${REMOVE_HINT_SCRIPT_FILE}" <<EOF && chmod +x "${REMOVE_HINT_SCRIPT_FILE}"
+#!/usr/bin/env bash
+rm ${NEXTCLOUD_HINT_FILE} \$0
+EOF

@@ -88,16 +88,14 @@ export OSMENULIST+=(
   "Custom image"  "(Config for custom images)"
 )
 
-export PROXMOX4_BASE_IMAGE="Debian-811-jessie-64-minimal"
-export PROXMOX5_BASE_IMAGE="Debian-913-stretch-64-minimal"
-export PROXMOX6_BASE_IMAGE="Debian-1013-buster-64-minimal"
-export PROXMOX7_BASE_IMAGE="Debian-1107-bullseye-amd64-base"
+export PROXMOX7_BASE_IMAGE="Debian-bullseye-latest-amd64-base"
+export PROXMOX8_BASE_IMAGE="Debian-bookworm-latest-amd64-base"
 
 export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.com/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.com/plesk
-export PLESK_STD_VERSION=PLESK_18_0_53
+export PLESK_STD_VERSION=PLESK_18_0_57
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats
@@ -144,9 +142,8 @@ export ARCHLINUX_BOOTSTRAP="$ARCHLINUX_DIR/archlinux-bootstrap-latest-x86_64.tar
 
 other_images() {
   find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'
+  echo 'Proxmox-Virtualization-Environment-on-Debian-Bookworm'
   echo 'Proxmox-Virtualization-Environment-on-Debian-Bullseye'
-  echo 'Proxmox-Virtualization-Environment-on-Debian-Buster'
-  echo 'Proxmox-Virtualization-Environment-on-Debian-Stretch'
   find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*beta*' -a -not -name '*.sig' -printf '%f\n'
 }
 
