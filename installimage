@@ -10,10 +10,8 @@
 
 # simple params - restart with other params
 case $1 in
-  proxmox4)             exec "$0" -c proxmox4 -x proxmox4 ;;
-  proxmox5)             exec "$0" -c proxmox5 -x proxmox5 ;;
-  proxmox6)             exec "$0" -c proxmox6 -x proxmox6 ;;
   proxmox7)             exec "$0" -c proxmox7 -x proxmox7 ;;
+  proxmox8)             exec "$0" -c proxmox8 -x proxmox8 ;;
   hsa-baculadir)        exec "$0" -c hsa-baculadir -x hsa-baculadir ;;
   hsa-minimal64)        exec "$0" -c hsa-minimal64 -x hsa-minimal64 ;;
   hsa-managed)          exec "$0" -c hsa-managed -x hsa-managed ;;
@@ -113,6 +111,7 @@ if [ $EXITCODE -ne 0 ] ; then
   exit 1
 fi
 
+free_port_53
 
 # check if we have a autosetup-file, else we start the menu
 if [ -e "$AUTOSETUPCONFIG" ] ; then
