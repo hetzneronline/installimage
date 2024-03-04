@@ -7,10 +7,10 @@ SWRAIDLEVEL 1
 
 BOOTLOADER grub
 
-HOSTNAME Debian-1101-bullseye-amd64-base
+HOSTNAME Debian-stable-amd64-base
 
 PART swap swap 2G
 PART /boot ext3 1024M
 PART /     ext4 all
 
-IMAGE /root/images/Debian-1106-bullseye-amd64-base.tar.gz
+IMAGE /root/images/Debian-stable-amd64-base.tar.gz
