@@ -50,4 +50,10 @@ has_fujitsu_board() {
   [[ "$(board_vendor)" == FUJITSU ]]
 }
 
+has_b360hd3p_board() {
+  [[ "$(board_name)" == 'B360HD3P-CF' ]] ||
+    [[ "$(board_name)" == 'B360HD3PLM-CF' ]]
+}
+
+
 # vim: ai:ts=2:sw=2:et
