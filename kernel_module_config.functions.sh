@@ -26,6 +26,19 @@ board_requires_drm_blacklisting() {
     [[ "$(board_vendor)" == 'ASUSTeK COMPUTER INC.' ]] &&
     [[ "$(board_name)" == 'PRIME B760M-A D4' ]] &&
     return 0
+  [[ "$IAM" == ubuntu ]] &&
+    ((IMG_VERSION == 2004)) &&
+    hwe_image &&
+    [[ "$(board_vendor)" == 'ASUSTeK COMPUTER INC.' ]] &&
+    [[ "$(board_name)" == 'PRIME B760M-A D4' ]] &&
+    return 0
+  {
+    { [[ "$IAM" == debian ]] && ((IMG_VERSION < 1300)) } ||
+    { [[ "$IAM" == ubuntu ]] && ((IMG_VERSION < 2204)) }
+  } &&
+    [[ "$(board_vendor)" == 'Gigabyte Technology Co., Ltd.' ]] &&
+    has_b360hd3p_board &&
+    return 0
   return 1
 }
 
@@ -43,6 +56,10 @@ buggy_kernel_modules() {
 
 blacklist_unwanted_and_buggy_kernel_modules() {
   local blacklist_conf="$FOLD/hdd/etc/modprobe.d/blacklist-$C_SHORT.conf"
+
+  # skip if virtual machine
+  is_virtual_machine && return
+
   debug '# blacklisting unwanted and buggy kernel modules'
   {
     echo "### $COMPANY - installimage"
@@ -63,6 +80,8 @@ configure_kernel_modules() {
 
   # skip if drm is blacklisted
   board_requires_drm_blacklisting && return
+  # skip if virtual machine
+  is_virtual_machine && return
 
   debug '# configuring kernel modules'
   {
