@@ -3,13 +3,29 @@
 #
 # systemd_nspawn functions
 #
-# (c) 2015-2023, Hetzner Online GmbH
+# (c) 2015-2024, Hetzner Online GmbH
 #
 
 # protect files from systemd
 polite_nspawn() {
+  local ubuntu_gte_1804_args
+  if [[ "$IAM" == 'ubuntu' ]] && (( IMG_VERSION >= 1804 )); then
+    cp /etc/resolv.conf "$FOLD/nspawn_stub_resolv.conf"
+    ubuntu_gte_1804_args+="--bind=$(printf '%q' "$FOLD/nspawn_stub_resolv.conf"):/run/systemd/resolve/stub-resolv.conf"
+  fi
+
+  # no manual protection needed for systemd >= 239
+  if (( $(rescue_systemd_version) >= 239 )); then
+    # off means leave as is
+    systemd-nspawn $ubuntu_gte_1804_args --resolv-conf=off "$@"
+    return $?
+  fi
+
+  local lt_239_args='--bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf'
+  lt_239_args+=' --bind-ro=/etc/resolv.conf:/run/systemd/resolve/stub-resolv.conf'
+
   if ! [[ -L "$FOLD/hdd/etc/resolv.conf" ]] && ! [[ -e "$FOLD/hdd/etc/resolv.conf" ]]; then
-    systemd-nspawn "$@"
+    systemd-nspawn $ubuntu_gte_1804_args $lt_239_args "$@"
     return $?
   fi
 
@@ -28,7 +44,7 @@ polite_nspawn() {
     mount --bind "$FOLD/nspawn_resolv.conf" "$FOLD/hdd/etc/resolv.conf"
   fi
 
-  systemd-nspawn "$@"
+  systemd-nspawn $ubuntu_gte_1804_args $lt_239_args "$@"
 
   # restore
   if [[ -L "$FOLD/resolv.bak" ]]; then
@@ -67,9 +83,8 @@ boot_systemd_nspawn() {
     echo 'Type=forking'
   } > "$SYSTEMD_NSPAWN_TMP_DIR/systemd_nspawn-runner.service"
   ln -s ../systemd_nspawn-runner.service "$FOLD/hdd/etc/systemd/system/multi-user.target.wants"
+
   polite_nspawn -b \
-    --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
-    --bind-ro=/etc/resolv.conf:/run/systemd/resolve/stub-resolv.conf \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/command.fifo:/var/lib/systemd_nspawn/command.fifo" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/in.fifo:/var/lib/systemd_nspawn/in.fifo" \
     --bind-ro="$SYSTEMD_NSPAWN_TMP_DIR/out.fifo:/var/lib/systemd_nspawn/out.fifo" \
@@ -107,8 +122,7 @@ systemd_nspawn_wo_debug() {
     local gt_241_args=''
     (( $(rescue_systemd_version) > 241 )) && gt_241_args='--pipe'
 
-    polite_nspawn "${dev_bind_args[@]}" --bind-ro=/etc/resolv.conf:/run/resolvconf/resolv.conf \
-      --bind-ro=/etc/resolv.conf:/run/systemd/resolve/stub-resolv.conf \
+    polite_nspawn "${dev_bind_args[@]}" \
       -D "$FOLD/hdd" \
       '--property=DeviceAllow=block-* rwm' \
       '--property=DeviceAllow=/dev/mapper/control rwm' \
@@ -155,7 +169,7 @@ verify_machinectl_login_works() {
     mount --bind "$tmp_securetty" "$securetty_file"
   fi
 
-  boot_systemd_nspawn
+  boot_systemd_nspawn || return 1
 
   local session="$$.tmp_installimage_test_machinectl_login"
   screen -d -m -S "$session" machinectl login newroot
