@@ -2323,10 +2323,10 @@ make_swraid() {
         continue
       elif [ -n "$(echo "$line" | grep "/boot")" -a  "$metadata_boot" == "--metadata=0.90" ] || [ "$metadata" == "--metadata=0.90" ]; then
         # update fstab - replace /dev/sdaX with /dev/mdY
-        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md$md_count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\|-part\)\?[0-9]\+/\/dev\/md$md_count/g" >> $fstab
       else
         # update fstab - replace /dev/sdaX with /dev/md/Y
-        echo $line | sed "s/$SEDHDD\(p\)\?[0-9]\+/\/dev\/md\/$md_count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\|-part\)\?[0-9]\+/\/dev\/md\/$md_count/g" >> $fstab
       fi
 
       # create raid array
@@ -2337,8 +2337,11 @@ make_swraid() {
         local n=0
         for n in $(seq 1 $COUNT_DRIVES) ; do
           TARGETDISK="$(eval echo \$DRIVE${n})"
-          local p="$(echo $TARGETDISK | grep nvme)"
-          [ -n "$p" ] && p='p'
+          local p=""
+          local nvme="$(echo $TARGETDISK | grep nvme)"
+          [ -n "$nvme" ] && p='p'
+          local disk_by_id="$(echo $TARGETDISK | grep 'disk/by-id')"
+          [ -n "$disk_by_id" ] && p='-part'
           components="$components $TARGETDISK$p$PARTNUM"
         done
 
