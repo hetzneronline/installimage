@@ -3,7 +3,7 @@
 #
 # network config functions
 #
-# (c) 2017-2021, Hetzner Online GmbH
+# (c) 2017-2024, Hetzner Online GmbH
 #
 
 # setup /etc/sysconfig/network
@@ -183,12 +183,43 @@ predict_network_interface_name() {
   else
     local d="$(echo; systemd_nspawn_wo_debug "udevadm test-builtin net_id \"/sys/class/net/$network_interface\" 2>/dev/null")"
   fi
-  [[ "$d" =~ $'\n'ID_NET_NAME_ONBOARD=([^$'\n']+) ]] && echo "${BASH_REMATCH[1]}" && return
-  [[ "$d" =~ $'\n'ID_NET_NAME_SLOT=([^$'\n']+) ]] && echo "${BASH_REMATCH[1]}" && return
+
+  local predicted_name=''
+
+  [[ "$d" =~ $'\n'ID_NET_NAME_ONBOARD=([^$'\n']+) ]] \
+    && predicted_name="${BASH_REMATCH[1]}"
+
+  [[ -z "$predicted_name" ]] \
+    && [[ "$d" =~ $'\n'ID_NET_NAME_SLOT=([^$'\n']+) ]] \
+    && predicted_name="${BASH_REMATCH[1]}"
+
   # we need to convert ID_NET_NAME_PATH to ID_NET_NAME_SLOT for e1000 and 8139cp network interfaces
-  [[ "$network_interface_driver" =~ ^(e1000|8139cp)$ ]] && [[ "$d" =~ $'\n'ID_NET_NAME_PATH=([a-z]{2})p0([^$'\n']+) ]] && echo "${BASH_REMATCH[1]}${BASH_REMATCH[2]}" && return
-  [[ "$d" =~ $'\n'ID_NET_NAME_PATH=([^$'\n']+) ]] && echo "${BASH_REMATCH[1]}" && return
-  [[ "$d" =~ $'\n'ID_NET_NAME_MAC=([^$'\n']+) ]] && echo "${BASH_REMATCH[1]}" && return
+  [[ -z "$predicted_name" ]] \
+    && [[ "$network_interface_driver" =~ ^(e1000|8139cp)$ ]] \
+    && [[ "$d" =~ $'\n'ID_NET_NAME_PATH=([a-z]{2})p0([^$'\n']+) ]] \
+    && predicted_name="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+
+  [[ -z "$predicted_name" ]] \
+    && [[ "$d" =~ $'\n'ID_NET_NAME_PATH=([^$'\n']+) ]] \
+    && predicted_name="${BASH_REMATCH[1]}"
+
+  [[ -z "$predicted_name" ]] \
+    && [[ "$d" =~ $'\n'ID_NET_NAME_MAC=([^$'\n']+) ]] \
+    && predicted_name="${BASH_REMATCH[1]}"
+
+  [[ -n "$predicted_name" ]] || return 1
+
+  if [[ "$network_interface_driver" == 'i40e' ]] && ! image_i40e_driver_exposes_port_name && [[ -e "/sys/class/net/$network_interface/phys_port_name" ]]; then
+    local phys_port_name; phys_port_name="$(< "/sys/class/net/$network_interface/phys_port_name")"
+    local stripped_name="${predicted_name%n$phys_port_name}"
+    if [[ "$predicted_name" != "$stripped_name" ]]; then
+      debug "# image i40e driver does not expose port name. removed phys port suffix n$phys_port_name from predicted netif name $predicted_name"
+    fi
+    predicted_name="$stripped_name"
+  fi
+
+  echo "$predicted_name"
+
   return 1
 }
 
@@ -710,6 +741,7 @@ gen_etc_netplan_01_netcfg_yaml_entry() {
 # setup /etc/netplan/01-netcfg.yaml
 setup_etc_netplan_01_netcfg_yaml() {
   debug '# setting up /etc/netplan/01-netcfg.yaml'
+  local netplan_configuration_file="$FOLD/hdd/etc/netplan/01-netcfg.yaml"
   {
     echo "### $COMPANY installimage"
     echo 'network:'
@@ -719,7 +751,8 @@ setup_etc_netplan_01_netcfg_yaml() {
     while read network_interface; do
       gen_etc_netplan_01_netcfg_yaml_entry "$network_interface" || return 1
     done < <(physical_network_interfaces)
-  } > "$FOLD/hdd/etc/netplan/01-netcfg.yaml" 2> >(debugoutput)
+  } > "$netplan_configuration_file" 2> >(debugoutput)
+  chmod 600 "$netplan_configuration_file"
 }
 
 # gen network file

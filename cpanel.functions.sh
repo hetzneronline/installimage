@@ -3,7 +3,7 @@
 #
 # cpanel functions
 #
-# (c) 2008-2018, Hetzner Online GmbH
+# (c) 2008-2024, Hetzner Online GmbH
 #
 
 # is_cpanel_install()
@@ -121,6 +121,11 @@ prevent_outdated_keyring_issues() {
   execute_chroot_command 'yum makecache'
 }
 
+install_ubuntu_2004_cpanel_depenencies() {
+  execute_chroot_command 'apt-get update' || return 1
+  execute_chroot_command 'apt-get -y install dirmngr libfindbin-libs-perl' || return 1
+}
+
 # install_cpanel()
 install_cpanel() {
   if [[ "$IAM" == 'almalinux' ]]; then
@@ -139,8 +144,14 @@ install_cpanel() {
   chmod a+x "${FOLD}/hdd/${temp_file}"
   debug 'downloaded cpanel installer'
 
-  execute_chroot_command 'yum check-update' # || return 1
-  execute_chroot_command 'yum -y install yum-utils' || return 1
+  if rhel_based_image; then
+    execute_chroot_command 'yum check-update' # || return 1
+    execute_chroot_command 'yum -y install yum-utils' || return 1
+  fi
+
+  if [[ "$IAM" == 'ubuntu' ]] && (( IMG_VERSION == 2004 )); then
+    install_ubuntu_2004_cpanel_depenencies || return 1
+  fi
 
   if [[ -e "$FOLD/hdd/usr/bin/needs-restarting" ]]; then
     mv "$FOLD/hdd/usr/bin/needs-restarting" "$FOLD/hdd/usr/bin/needs-restarting.bak"
@@ -156,6 +167,7 @@ install_cpanel() {
   if installed_os_uses_systemd && ! systemd_nspawn_booted; then
     boot_systemd_nspawn || return 1
   fi
+
   execute_command "${command}" || return 1
   systemd_nspawn_booted && poweroff_systemd_nspawn
 
