@@ -2332,10 +2332,10 @@ make_swraid() {
         continue
       elif [ -n "$(echo "$line" | grep "/boot")" -a  "$metadata_boot" == "--metadata=0.90" ] || [ "$metadata" == "--metadata=0.90" ]; then
         # update fstab - replace /dev/sdaX with /dev/mdY
-        echo $line | sed "s/$SEDHDD\(p|-part\)\?[0-9]\+/\/dev\/md$md_count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\|-part\)\?[0-9]\+/\/dev\/md$md_count/g" >> $fstab
       else
         # update fstab - replace /dev/sdaX with /dev/md/Y
-        echo $line | sed "s/$SEDHDD\(p|-part\)\?[0-9]\+/\/dev\/md\/$md_count/g" >> $fstab
+        echo $line | sed "s/$SEDHDD\(p\|-part\)\?[0-9]\+/\/dev\/md\/$md_count/g" >> $fstab
       fi
 
       # create raid array
@@ -2437,7 +2437,7 @@ make_lvm() {
     # remove all Physical Volumes
     debug "# Removing all Physical Volumes"
     while read -r pv vg; do
-      if [[ "$vg" =~ $PRESERVE_VG ]]; then
+      if [[ -n "$PRESERVE_VG" ]] && [[ "$vg" =~ $PRESERVE_VG ]]; then
         debug "Not removing VG $vg"
       else
         pvremove -ff "$pv" 2>&1 | debugoutput
