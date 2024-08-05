@@ -43,7 +43,7 @@ while [ "$VALIDATED" = "false" ]; do
    VALIDATED="true"
  else
    debug "=> FAILED"
-   mcedit "$FOLD/install.conf"
+   editor "$FOLD/install.conf"
  fi
 done
 

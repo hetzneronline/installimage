@@ -50,7 +50,7 @@ if [ "$OPT_AUTOMODE" ] ; then
       debug "=> FAILED"
       # dont show editor in automode. print to stdout
       echo "Abort: invalid config or parameters. See $DEBUGFILE for details"
-      # mcedit "$FOLD/install.conf"
+      # editor "$FOLD/install.conf"
       exit 1
     fi
   done
@@ -156,9 +156,9 @@ else
     VALIDATED="false"
     CANCELLED="false"
     while [ "$VALIDATED" = "false" ]; do
-      debug "# starting mcedit..."
+      debug "# starting editor..."
       whoami "$IMAGENAME"
-      mcedit "$FOLD/install.conf"; EXITCODE=$?
+      editor "$FOLD/install.conf"; EXITCODE=$?
       [ $EXITCODE != 0 ] && debug "=> FAILED"
       debug "# validating vars..."
       validate_vars "$FOLD/install.conf"; EXITCODE=$?
