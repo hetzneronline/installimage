@@ -15,7 +15,7 @@ execute_chroot_command_wo_debug() {
   TMPDIR= unshare -f -p chroot "$FOLD/hdd" /usr/bin/env bash -c "$@"
   local r=$?
   for ((i=${#dirs[@]}-1; i>=0; i--)); do
-    until umount "$FOLD/hdd/${dirs[i]}"; do :; done
+    until umount -fl "$FOLD/hdd/${dirs[i]}"; do :; done
   done
   return $r
 }
