@@ -92,6 +92,12 @@ generate_config_grub() {
 
   sed -i "s/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"$grub_cmdline_linux\"/" "$FOLD/hdd/etc/default/grub"
 
+  if ((IMG_VERSION > 85)) && ((IMG_VERSION <= 92)) && [[ -z "$GRUB_DEFAULT_OVERRIDE" ]]; then
+    GRUB_DEFAULT_OVERRIDE='saved'
+  fi
+
+  if [[ -n "$GRUB_DEFAULT_OVERRIDE" ]]; then sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=$GRUB_DEFAULT_OVERRIDE/" "$FOLD/hdd/etc/default/grub"; fi
+
   rm -f "$FOLD/hdd/boot/grub2/grub.cfg"
   if [ "$UEFI" -eq 1 ]; then
     execute_chroot_command "grub2-mkconfig -o /boot/efi/EFI/rocky/grub.cfg 2>&1"; declare -i EXITCODE="$?"
