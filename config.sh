@@ -41,6 +41,7 @@ export SYSTEMD_NSPAWN_TMP_DIR="$FOLD/systemd_nspawn"
 export MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
 export STATSSERVER4="88.198.31.148"
 export STATSSERVER6="[2a01:4f8:0:a0a1::bad:1]"
+export INSTALLATION_REPORT_URL='https://dcs-staging.hetzner.company/apis/data_center_metrics/v1/installimage_installation_reports'
 export HDDMINSIZE="7000000"
 
 export DNSRESOLVER=("185.12.64.1" "185.12.64.2")
@@ -95,7 +96,7 @@ export CPANEL_INSTALLER_SRC=http://mirror.hetzner.com/tools/cpanelinc/cpanel
 
 export PLESK_INSTALLER_SRC=http://mirror.hetzner.com/tools/parallels/plesk
 export PLESK_MIRROR=http://mirror.hetzner.com/plesk
-export PLESK_STD_VERSION=PLESK_18_0_57
+export PLESK_STD_VERSION=PLESK_18_0_62
 export PLESK_DOWNLOAD_RETRY_COUNT=999
 export PLESK_COMPONENTS=(
   awstats
@@ -138,13 +139,19 @@ export NOCOL="\033[00m"
 
 export ARCHLINUX_DIR="$SCRIPTPATH/../archlinux"
 export ARCHLINUX_RELEASE_KEY="$ARCHLINUX_DIR/release-key.pgp"
-export ARCHLINUX_BOOTSTRAP="$ARCHLINUX_DIR/archlinux-bootstrap-latest-x86_64.tar.gz"
+export ARCHLINUX_BOOTSTRAP="$ARCHLINUX_DIR/archlinux-bootstrap-latest-x86_64.tar.zst"
+
+export IMAGE_STILL_BETA_OVERRIDES=()
 
 other_images() {
   find "$IMAGESPATH"/ -maxdepth 1 -type f -name "CoreOS*" -a -not -name "*.sig" -printf '%f\n'
   echo 'Proxmox-Virtualization-Environment-on-Debian-Bookworm'
   echo 'Proxmox-Virtualization-Environment-on-Debian-Bullseye'
   find "$IMAGESPATH/" -maxdepth 1 -type f -iname '*beta*' -a -not -name '*.sig' -printf '%f\n'
+  local beta_image
+  for beta_image in "${IMAGE_STILL_BETA_OVERRIDES[@]}"; do
+    find "$IMAGESPATH/" -maxdepth 1 -type f -name "$beta_image" -a -not -name '*.sig' -printf '%f\n'
+  done
 }
 
 other_image_warning() {

@@ -153,6 +153,20 @@ generate_menu() {
     ;;
   esac
 
+  # remove still beta images unless menu is Other
+  if [[ "$1" != 'Other' ]]; then
+    local image beta_image new_rawlist=()
+    while read image; do
+      for beta_image in "${IMAGE_STILL_BETA_OVERRIDES[@]}"; do
+        if [[ "$image" == "$beta_image" ]]; then
+          continue 2
+        fi
+      done
+      new_rawlist+=("$image")
+    done <<< "$RAWLIST"
+    RAWLIST="$(printf '%s\n' "${new_rawlist[@]}")"
+  fi
+
   # generate formatted list for usage with "dialog"
   for i in $RAWLIST; do
     TEMPVAR="$i"
@@ -1024,7 +1038,7 @@ validate_vars() {
     graph_error "ERROR: CentOS 6 is EOL since Nov 2020 and installimage does not support CentOS 6 anymore"
     return 1
   fi
-  if (( UEFI == 1 )) && rhel_9_based_image; then
+  if (( UEFI == 1 )) && rhel_9_based_image && test -z "$RHEL9_UEFI_OVERRIDE" ; then
     graph_error "ERROR: we do not yet support $IAM $IMG_VERSION on EFI systems"
     return 1
   fi
@@ -3866,7 +3880,8 @@ exit_function() {
   echo "  https://robot.hetzner.com/"
   echo
 
-  report_install
+  report_install_old
+  report_install_new
 }
 
 #function to check if it is a intel or amd cpu

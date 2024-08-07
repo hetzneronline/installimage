@@ -33,7 +33,7 @@ extract_image() {
   local hdd_dir="$FOLD/hdd"
   debug '# extract archlinux-bootstrap to disk'
   debug "# run tar xzf $ARCHLINUX_BOOTSTRAP -C $hdd_dir"
-  tar xzf "$ARCHLINUX_BOOTSTRAP" -C "$hdd_dir" |& debugoutput || return 1
+  tar --zstd -xf "$ARCHLINUX_BOOTSTRAP" -C "$hdd_dir" |& debugoutput || return 1
 
   # pacman CheckSpace requires a mount to verify free space
   local chroot_dir="$hdd_dir/root.x86_64"

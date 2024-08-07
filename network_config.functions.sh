@@ -835,6 +835,8 @@ setup_network_config() {
          cat "$stderr_file" | debugoutput
          return 1
        fi
+       # delete chroot related lines from $stderr_file
+       sed -i '/Running in chroot/d' "$stderr_file"
        if [[ -s "$stderr_file" ]]; then
          debug 'fatal: netplan generate stderr not empty:'
          cat "$stderr_file" | debugoutput

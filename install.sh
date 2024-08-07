@@ -558,7 +558,8 @@ fi
 #
 # Report install.conf and debug.txt to $STATSSERVER
 #
-report_install
+report_install_old
+report_install_new
 
 #
 # Save installimage configuration and debug file on the new system
