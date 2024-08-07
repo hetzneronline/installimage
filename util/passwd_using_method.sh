@@ -14,6 +14,6 @@ cp /etc/pam.d/common-passwor{d,d.bak}
 
 shift
 
-passwd "$@"
+"${PASSWD_CMD:-passwd}" "$@"
 
 # vim: ai:ts=2:sw=2:et
