@@ -41,7 +41,7 @@ export SYSTEMD_NSPAWN_TMP_DIR="$FOLD/systemd_nspawn"
 export MODULES="virtio_pci virtio_blk via82cxxx sata_via sata_sil sata_nv sd_mod ahci atiixp raid0 raid1 raid5 raid6 raid10 3w-xxxx 3w-9xxx aacraid powernow-k8"
 export STATSSERVER4="88.198.31.148"
 export STATSSERVER6="[2a01:4f8:0:a0a1::bad:1]"
-export INSTALLATION_REPORT_URL='https://dcs-staging.hetzner.company/apis/data_center_metrics/v1/installimage_installation_reports'
+export INSTALLATION_REPORT_URL='https://dcs.hetzner.company/apis/data_center_metrics/v1/installimage_installation_reports'
 export HDDMINSIZE="7000000"
 
 export DNSRESOLVER=("185.12.64.1" "185.12.64.2")
@@ -71,7 +71,6 @@ export DIATITLE="$COMPANY"
 export OSMENULIST=(
   "Debian"        "(Official)"
   "Ubuntu"        "(Official)"
-  "CentOS"        "(Official)"
   "Arch Linux"    "(Official)"
 )
 if (($(find "$IMAGESPATH" -type f -iname '*centos*stream*' -printf '.' | wc -c) > 0)); then

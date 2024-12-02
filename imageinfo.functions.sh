@@ -49,6 +49,15 @@ rhel_9_based_image() {
   return 1
 }
 
+rhel_8_based_image() {
+  if rhel_based_image; then
+    if ((IMG_VERSION >= 80 && IMG_VERSION < 90)) || ((IMG_VERSION >= 810 && IMG_VERSION < 900)); then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 uses_network_manager() {
   [[ "$IAM" == 'centos' ]] && ((IMG_VERSION >= 80)) && ((IMG_VERSION != 610)) && ! is_cpanel_install && return
   [[ "$IAM" == 'rockylinux' ]] && return

@@ -1033,12 +1033,7 @@ validate_vars() {
 
   whoami "$IMAGE_FILE"
 
-  # validate image supported
-  if [[ "$IAM" == centos ]] && (((IMG_VERSION >= 60 && IMG_VERSION < 70)) || ((IMG_VERSION == 610))); then
-    graph_error "ERROR: CentOS 6 is EOL since Nov 2020 and installimage does not support CentOS 6 anymore"
-    return 1
-  fi
-  if (( UEFI == 1 )) && rhel_9_based_image && test -z "$RHEL9_UEFI_OVERRIDE" ; then
+  if (( UEFI == 1 )) && rhel_8_based_image && test -z "$RHEL8_UEFI_OVERRIDE" ; then
     graph_error "ERROR: we do not yet support $IAM $IMG_VERSION on EFI systems"
     return 1
   fi
@@ -3880,8 +3875,7 @@ exit_function() {
   echo "  https://robot.hetzner.com/"
   echo
 
-  report_install_old
-  report_install_new
+  report_install
 }
 
 #function to check if it is a intel or amd cpu
@@ -3949,6 +3943,25 @@ function getHDDsNotInToleranceRange() {
   return 0
 }
 
+# build_device_map
+#
+# This function generates the GRUB Device Map file, which maps GRUB's internal disk
+# numbering (e.g., hd0, hd1) to the actual physical drives in the system (e.g., /dev/sda, /dev/sdb).
+#
+build_device_map() {
+  local dmapfile="${FOLD}/hdd/boot/${1}/device.map"
+  rm -f "$dmapfile"
+
+  for ((i = 1; i <= COUNT_DRIVES; i++)); do
+    local j=$((i - 1))
+    local disk=$(eval echo "\$DRIVE${i}")
+    echo "(hd${j}) ${disk}" >> "$dmapfile"
+  done
+
+  debug '# device map:'
+  debugoutput < "$dmapfile"
+}
+
 uuid_bugfix() {
     debug "# change all device names to uuid (e.g. for ide/pata transition)"
     TEMPFILE="$(mktemp)"
@@ -3974,6 +3987,34 @@ uuid_bugfix() {
     done < "$TEMPFILE"
     rm "$TEMPFILE"
     return 0
+}
+
+get_uuid_from_fstab() {
+  local mount_point="$1"
+  grep -E "[[:space:]]${mount_point}[[:space:]]" "${FOLD}/hdd/etc/fstab" | awk '{for(i=1;i<=NF;i++) if($i ~ /^UUID=/) {print $i; exit}}' | sed 's/UUID=//'
+}
+
+grub2_uuid_bugfix() {
+  uuid_bugfix
+
+  if [[ "$UEFI" -eq 1 ]]; then
+    local boot_uuid boot_prefix
+    debug "running grub2 efi specific tasks"
+
+    if grep -qE "[[:space:]]/boot[[:space:]]" "${FOLD}/hdd/etc/fstab"; then
+      # UUID for boot partition
+      boot_uuid=$(get_uuid_from_fstab /boot)
+      boot_prefix='grub2'
+    else
+      # UUID for root partition
+      boot_uuid=$(get_uuid_from_fstab /)
+      boot_prefix='boot/grub2'
+    fi
+
+    [ -e "${FOLD}/hdd/boot/efi/EFI/${1}/grub.cfg" ] && sed -i "s|set prefix=.*|set prefix=(\$dev)/${boot_prefix}|" "${FOLD}/hdd/boot/efi/EFI/${1}/grub.cfg"
+    [ -e "${FOLD}/hdd/boot/efi/EFI/${1}/grub.cfg" ] && sed -i "s|search --no-floppy --fs-uuid --set=.*|search --no-floppy --fs-uuid --set=dev ${boot_uuid}|" "${FOLD}/hdd/boot/efi/EFI/${1}/grub.cfg"
+  fi
+  return 0
 }
 
 disk_serial() {
