@@ -826,7 +826,9 @@ if [ -n "$1" ]; then
     if [ "${PART_MOUNT[$i]}" = "/" ]; then
       HASROOT="true"
     fi
-    test -n "${PART_CRYPT[$i]}"; CRYPT=$((1 - $?))
+    if [[ -n "${PART_CRYPT[$i]}" ]]; then
+      CRYPT=1
+    fi
   done < /tmp/part_lines.tmp
 
   # get encryption password
