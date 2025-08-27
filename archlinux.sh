@@ -128,15 +128,6 @@ extract_image() {
   } > "$bash_profile_file" || return 1
   diff -Naur /dev/null "$bash_profile_file" | debugoutput
 
-  # setup inputrc
-  debug "# setup $inputrc"
-  local inputrc="$hdd_dir/etc/inputrc"
-  local inputrc_bak="$inputrc.bak"
-  cp "$inputrc" "$inputrc.bak"
-  sed -i 's/"\\\e\[5~": beginning-of-history/#"\e[5~": beginning-of-history\n"\e[5~": history-search-backward/' "$inputrc" |& debugoutput || return 1
-  sed -i 's/"\\\e\[6~": end-of-history/#"\e[6~": end-of-history\n"\e[6~": history-search-forward/' "$inputrc" |& debugoutput || return 1
-  diff -Naur "$inputrc_bak" "$inputrc" | debugoutput
-
   # setup localtime
   local localtime_file="$hdd_dir/etc/localtime"
   debug "# point /etc/localtime to /usr/share/zoneinfo/Europe/Berlin"
