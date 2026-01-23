@@ -11,7 +11,7 @@ BOOTLOADER grub
 HOSTNAME Debian-stable-amd64-base
 
 PART swap swap 8G
-PART /boot ext3 1024M
+PART /boot ext4 1024M
 PART /    ext4 all
 
 IMAGE /root/images/Debian-stable-amd64-base.tar.gz

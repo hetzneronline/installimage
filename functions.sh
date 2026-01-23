@@ -206,9 +206,9 @@ generate_menu() {
       if [ "$UEFI" -eq 1 ]; then
         DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot/efi  esp  256M"
       fi
-      DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot  ext3  1024M"
+      DEFAULTPARTS="$DEFAULTPARTS\nPART  /boot  ext4  1024M"
       DEFAULTPARTS="$DEFAULTPARTS\nPART  lvm    vg0    all\n"
-      DEFAULTPARTS="$DEFAULTPARTS\nLV  vg0  root  /     ext3  15G"
+      DEFAULTPARTS="$DEFAULTPARTS\nLV  vg0  root  /     ext4  15G"
       DEFAULTPARTS="$DEFAULTPARTS\nLV  vg0  swap  swap  swap   6G"
   ;;
     CoreOS*)
@@ -482,7 +482,7 @@ create_config() {
       fi
       echo "#PART /      ext4       10G"
       echo "#PART /tmp   xfs         5G"
-      echo "#PART /home  ext3       all"
+      echo "#PART /home  ext4       all"
       echo "#"
       echo "##"
       echo "## to activate LVM, you have to define volume groups and logical volumes"
@@ -492,7 +492,7 @@ create_config() {
       echo "## normal filesystems and volume group definitions:"
       echo "## -> 1024MB boot  (not on lvm)"
       echo "## -> all the rest for LVM VG 'vg0'"
-      echo "#PART /boot  ext3     1024M"
+      echo "#PART /boot  ext4     1024M"
       echo "#PART lvm    vg0       all"
       echo "#"
       echo "## logical volume definitions:"
@@ -2131,8 +2131,8 @@ create_partitions() {
        START=$((START + (1048576 / sectorsize) ))
      fi
 
-     # create partitions as ext3 which results in type 83
-     local FSTYPE="ext3"
+     # create partitions as ext4 which results in type 83
+     local FSTYPE="ext4"
      if [ "${PART_FS[$i]}" = "swap" ]; then
        FSTYPE="linux-swap"
      fi

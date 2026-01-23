@@ -49,10 +49,10 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:G:" OPTION ; do
       echo "  -g                    Use this to force validation of the image file with detached GPG signature."
       echo "                        If the image is not valid, the installation will abort."
       echo "  -p <partitions>       define the PARTITIONS to create, example:"
-      echo "                        - regular partitions:  swap:swap:4G,/:ext3:all"
+      echo "                        - regular partitions:  swap:swap:4G,/:ext4:all"
       echo "                        - lvm setup example:   /boot:ext2:256M,lvm:vg0:all"
       echo "  -v <logical volumes>  define the logical VOLUMES you want to be created"
-      echo "                        - example: vg0:root:/:ext3:20G,vg0:swap:swap:swap:4G"
+      echo "                        - example: vg0:root:/:ext4:20G,vg0:swap:swap:swap:4G"
       echo "  -d <drives>           /dev names of DRIVES to use, e.g.: sda or sda,sdb"
       echo "  -f <yes|no>           FORMAT the second drive (if not used for raid)?"
       echo "  -s <de|en>            Language to use for different things (e.g.PLESK)"
@@ -154,7 +154,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:G:" OPTION ; do
     ;;
 
     # partitions
-    # e.g.: swap:swap:4G,/boot:ext2:256M,/:ext3:all | /boot:ext2:256M,lvm:vg0:all
+    # e.g.: swap:swap:4G,/boot:ext2:256M,/:ext4:all | /boot:ext2:256M,lvm:vg0:all
     p)
       OPT_PARTITIONS=$OPTARG
       OPT_PARTS=''
@@ -171,7 +171,7 @@ while getopts "han:b:r:l:i:p:v:d:f:c:R:s:z:x:gkK:t:u:G:" OPTION ; do
     ;;
 
     # logical volumes
-    # e.g.: vg0:swap:swap:swap:4G,vg0:root:/:ext3:20G,vg0:tmp:/tmp:ext3:5G
+    # e.g.: vg0:swap:swap:swap:4G,vg0:root:/:ext4:20G,vg0:tmp:/tmp:ext4:5G
     v)
       OPT_VOLUMES=$OPTARG
       OPT_LVS=''
