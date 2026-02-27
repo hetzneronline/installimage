@@ -441,7 +441,7 @@ create_config() {
       echo "##            keyword 'lvm' to use this PART as volume group (VG) for LVM *OR*"
       echo "##            identifier 'btrfs.X' to use this PART as volume for"
       echo "##            btrfs subvolumes. X can be replaced with a unique"
-      echo "##            alphanumeric keyword"
+      echo "##            alphanumeric keyword (hyphens and underscores allowed)"
       echo "##            NOTE: no support btrfs multi-device volumes"
       echo "##            NOTE: reiserfs support is deprecated and will be removed in a future version"
       echo "## * <filesystem/VG>"
@@ -882,8 +882,8 @@ if [ -n "$1" ]; then
   # get btrfs config
   local btrfs_vol_all btrfs_sv_all
 
-  BTRFS_VOL_COUNT=$(grep -P -c '^PART *btrfs\.\w+' "$1")
-  btrfs_vol_all=$(grep -P '^PART *btrfs\.\w+' "$1")
+  BTRFS_VOL_COUNT=$(grep -P -c '^PART *btrfs\.[\w-]+' "$1")
+  btrfs_vol_all=$(grep -P '^PART *btrfs\.[\w-]+' "$1")
 
   i=1
   while IFS= read -r line
@@ -1246,7 +1246,7 @@ validate_vars() {
     for ((i=1; i<=PART_COUNT; i++)); do
 
       # test if the mountpoint is valid (start with / or swap or lvm)
-      CHECK="$(echo "${PART_MOUNT[$i]}" | grep -P '^(/\w*|none$|swap$|lvm$|btrfs\.\w+)')"
+      CHECK="$(echo "${PART_MOUNT[$i]}" | grep -P '^(/\w*|none$|swap$|lvm$|btrfs\.[\w-]+)')"
       if [ -z "$CHECK" ]; then
         graph_error "ERROR: Mountpoint for partition $i is not correct: '${PART_MOUNT[$i]}' is not a valid mountpoint"
         return 1
@@ -1610,7 +1610,7 @@ validate_vars() {
   # check if there are identical mountpoints
   local identical_mount_points; identical_mount_points="$(echo -e "$mounts_as_string" | sort | uniq -d)"
   if [ "$identical_mount_points" ]; then
-     if [[ "$identical_mount_points" =~ ^btrfs\.[0-9A-Za-z]+ ]]; then
+     if [[ "$identical_mount_points" =~ ^btrfs\.[0-9A-Za-z_-]+ ]]; then
        graph_error "ERROR: Duplicate btrfs volumes in config ($(echo "$identical_mount_points" | tr " " ", ")). Multi-device volumes are not supported"
      else
        graph_error "ERROR: There are identical mountpoints in the config ($(echo "$identical_mount_points" | tr " " ", "))"
@@ -2229,7 +2229,7 @@ make_fstab_entry() {
     ENTRY="# $1$p$2  belongs to LVM volume group '$4'"
   elif [ "$4" = "none" ] ; then
     ENTRY="# $1$p$2  has no filesystem defined"
-  elif [[ "$3" =~ ^btrfs\.[0-9A-Za-z]+ ]] ; then
+  elif [[ "$3" =~ ^btrfs\.[0-9A-Za-z_-]+ ]] ; then
     ENTRY="# $1$p$2  belongs to btrfs volume '$3'"
   else
     ENTRY="$1$p$2 $3 $4 defaults 0 0"
@@ -2240,7 +2240,7 @@ make_fstab_entry() {
       ENTRY="# $1$p$2  belongs to crypted LVM volume group '$4'"
     elif [ "$4" = "none" ] ; then
       ENTRY="# $1$p$2 crypted but has no filesystem defined"
-    elif [[ "$3" =~ ^btrfs\.[0-9A-Za-z]+ ]] ; then
+    elif [[ "$3" =~ ^btrfs\.[0-9A-Za-z_-]+ ]] ; then
       ENTRY="# $1$p$2  belongs to crypted btrfs volume '$3'"
     else
       if [ "$SYSTYPE" = "vServer" -a "$4" = 'ext4' ]; then
