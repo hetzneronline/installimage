@@ -31,6 +31,20 @@ BOOTLOADER=""
 GOVERNOR=""
 CRYPT=""
 CRYPTPASSWORD=""
+CRYPTTYPE=""
+CRYPTTYPE_SET=0
+CRYPTCIPHER="aes-xts-plain64"
+CRYPTCIPHER_SET=0
+CRYPTKEYSIZE="256"
+CRYPTKEYSIZE_SET=0
+CRYPTPBKDF=""
+CRYPTPBKDF_SET=0
+CRYPTPBKDFMEMORY=""
+CRYPTPBKDFMEMORY_SET=0
+CRYPTITERTIME="6000"
+CRYPTITERTIME_SET=0
+CRYPTHASH="sha256"
+CRYPTHASH_SET=0
 IPV4_ONLY=0
 USE_KERNEL_MODE_SETTING=1
 declare -i BTRFS_VOL_COUNT=0
@@ -58,6 +72,25 @@ EXTRACTFROM=""
 ROOTHASH=""
 
 ERROREXIT="0"
+
+read_crypt_option() {
+  local configfile="$1"
+  local option="$2"
+  local default_value="$3"
+  local line
+  local value
+
+  printf -v "$option" '%s' "$default_value"
+  printf -v "${option}_SET" '%s' 0
+
+  line="$(grep -m1 -E "^${option}([[:space:]]|$)" "$configfile" || true)"
+  if [ -n "$line" ]; then
+    value="$(echo "$line" | awk '{print $2}')"
+    printf -v "$option" '%s' "$value"
+    printf -v "${option}_SET" '%s' 1
+  fi
+}
+
 FINALIMAGEPATH=""
 
 SYSMFC="$(dmidecode -s system-manufacturer 2>/dev/null | tail -n1)"
@@ -836,6 +869,15 @@ if [ -n "$1" ]; then
   # get encryption password
   CRYPTPASSWORD="$(grep -m 1 '^CRYPTPASSWORD ' "$1" | cut -d ' ' -f 2- | sed -z 's/\n$//')"
 
+  # hidden configure options: cryptsetup luksFormat parameters
+  read_crypt_option "$1" CRYPTTYPE ""
+  read_crypt_option "$1" CRYPTCIPHER "aes-xts-plain64"
+  read_crypt_option "$1" CRYPTKEYSIZE "256"
+  read_crypt_option "$1" CRYPTPBKDF ""
+  read_crypt_option "$1" CRYPTPBKDFMEMORY ""
+  read_crypt_option "$1" CRYPTITERTIME "6000"
+  read_crypt_option "$1" CRYPTHASH "sha256"
+
   # get LVM volume group config
   LVM_VG_COUNT="$(egrep -c '^PART *lvm ' "$1")"
   LVM_VG_ALL="$(egrep '^PART *lvm ' "$1")"
@@ -1000,6 +1042,56 @@ img_arch_matches_sysarch() {
     [[ "$img_arch" == 'i386' && "$sysarch" == 'x86_64' ]] ||
     [[ "$img_arch" == 'amd64' && "$sysarch" == 'x86_64' ]] ||
     return 1
+}
+
+validate_crypt_options() {
+  if [ "$CRYPT" != "1" ]; then
+    return 0
+  fi
+
+  local crypt_option
+  local crypt_option_set
+  for crypt_option in CRYPTTYPE CRYPTCIPHER CRYPTKEYSIZE CRYPTPBKDF CRYPTPBKDFMEMORY CRYPTITERTIME CRYPTHASH; do
+    crypt_option_set="${crypt_option}_SET"
+    if [ "${!crypt_option_set}" = "1" ] && [ -z "${!crypt_option}" ]; then
+      graph_error "ERROR: Value for $crypt_option is not defined"
+      return 1
+    fi
+  done
+
+  if [ -n "$CRYPTTYPE" ]; then
+    case "$CRYPTTYPE" in
+      luks1|luks2) ;;
+      *)
+        graph_error "ERROR: Value for CRYPTTYPE is not correct"
+        return 1
+      ;;
+    esac
+  fi
+
+  if [ -n "$CRYPTPBKDF" ]; then
+    case "$CRYPTPBKDF" in
+      pbkdf2|argon2i|argon2id) ;;
+      *)
+        graph_error "ERROR: Value for CRYPTPBKDF is not correct"
+        return 1
+      ;;
+    esac
+  fi
+
+  for crypt_option in CRYPTKEYSIZE CRYPTITERTIME; do
+    if ! [[ "${!crypt_option}" =~ ^[0-9]+$ ]]; then
+      graph_error "ERROR: Value for $crypt_option is not a valid number"
+      return 1
+    fi
+  done
+
+  if [ -n "$CRYPTPBKDFMEMORY" ] && ! [[ "$CRYPTPBKDFMEMORY" =~ ^[0-9]+$ ]]; then
+    graph_error "ERROR: Value for CRYPTPBKDFMEMORY is not a valid number"
+    return 1
+  fi
+
+  return 0
 }
 
 # validate all variables for correct values
@@ -1689,9 +1781,13 @@ validate_vars() {
   fi
   # TODO: add check for valid hostname (e.g. no underscores)
 
-  if [ "$CRYPT" = "1" ] && [ -z "$CRYPTPASSWORD" ]; then
-    graph_error "ERROR: Value for CRYPTPASSWORD is not defined"
-    return 1
+  if [ "$CRYPT" = "1" ]; then
+    if [ -z "$CRYPTPASSWORD" ]; then
+      graph_error "ERROR: Value for CRYPTPASSWORD is not defined"
+      return 1
+    fi
+
+    validate_crypt_options || return 1
   fi
 
   if [ "$CRYPT" = "1" ] && [ "$IAM" = "centos" ]; then
@@ -2623,7 +2719,16 @@ encrypt_partitions() {
         else
           dev="$(echo "$line" | grep "crypted" | awk '{print $1}')"
         fi
-        cryptsetup --cipher aes-xts-plain64 --key-size 256 --hash sha256 --iter-time 6000 --batch-mode luksFormat "$dev" <<< "$cryptpassword"
+        local cryptsetup_options=()
+        [ -n "$CRYPTTYPE" ] && cryptsetup_options+=(--type "$CRYPTTYPE")
+        cryptsetup_options+=(--cipher "$CRYPTCIPHER")
+        cryptsetup_options+=(--key-size "$CRYPTKEYSIZE")
+        [ -n "$CRYPTPBKDF" ] && cryptsetup_options+=(--pbkdf "$CRYPTPBKDF")
+        [ -n "$CRYPTPBKDFMEMORY" ] && cryptsetup_options+=(--pbkdf-memory "$CRYPTPBKDFMEMORY")
+        cryptsetup_options+=(--hash "$CRYPTHASH")
+        cryptsetup_options+=(--iter-time "$CRYPTITERTIME")
+        cryptsetup_options+=(--batch-mode luksFormat "$dev")
+        cryptsetup "${cryptsetup_options[@]}" <<< "$cryptpassword"
         dev_uuid=$(blkid $dev -o value -s UUID)
         cryptsetup --batch-mode luksOpen "$dev" "luks-${dev_uuid}" <<< "$cryptpassword"
         touch "$FOLD/crypttab"
