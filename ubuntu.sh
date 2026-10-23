@@ -53,7 +53,7 @@ generate_new_ramdisk() {
       sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
     fi
 
-    # well, we might just as well update all initramfs and stop findling around
+    # well, we might just as well update all initramfs and stop fiddling around
     # to find out which kernel version is the latest
     execute_chroot_command "update-initramfs -u -k $kvers"; EXITCODE=$?
 
@@ -77,7 +77,7 @@ generate_config_grub() {
   local grubdefconf="$FOLD/hdd/etc/default/grub"
   local grubconfdir="$FOLD/hdd/etc/default/grub.d"
 
-  # this shold not be necessary anymore
+  # this should not be necessary anymore
 #  ubuntu_grub_fix
 #  execute_chroot_command "cd /boot; [ -e boot ] && rm -rf boot; ln -s . boot >> /dev/null 2>&1"
 

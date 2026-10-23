@@ -54,7 +54,7 @@ generate_new_ramdisk() {
     # that needs to be confirmed
     sed -i "s/do_bootloader = yes/do_bootloader = no/" "$FOLD/hdd/etc/kernel-img.conf"
 
-    # well, we might just as well update all initramfs and stop findling around
+    # well, we might just as well update all initramfs and stop fiddling around
     # to find out which kernel version is the latest
     execute_chroot_command "update-initramfs -u -k $kvers"; EXITCODE=$?
 
