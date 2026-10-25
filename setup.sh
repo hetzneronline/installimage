@@ -10,7 +10,7 @@
 # read global variables and functions
 . /tmp/install.vars
 
-# check if the script is temporary disabled due some maintenance or something
+# check if the script is temporarily disabled due to some maintenance or something
 debug "# checking if the script is disabled"
 if [ -f "$DISABLEDFILE" ]; then
  debug "=> script is DISABLED"
@@ -233,7 +233,7 @@ else
      . "$INSTALLFILE" ; EXITCODE=$?
   else
     debug "=> FAILED"
-    echo -e "\n\033[01;31mERROR: Cant find files\033[00m"
+    echo -e "\n\033[01;31mERROR: Can't find files\033[00m"
   fi
 
 fi

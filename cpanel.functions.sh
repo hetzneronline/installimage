@@ -107,7 +107,7 @@ setup_cpanel() {
 }
 
 workaround_alma_linux_cpanel_missing_ea4_repo_issue() {
-  debug '# workarounding cpanel EA4.repo missing issue'
+  debug '# working around cpanel EA4.repo missing issue'
   execute_chroot_command 'yum -y clean all' || return 1
   debug '# downloading https://securedownloads.cpanel.net/EA4/EA4.repo file'
   curl -L -o "$FOLD/hdd/etc/yum.repos.d/EA4.repo" -s https://securedownloads.cpanel.net/EA4/EA4.repo || return 1

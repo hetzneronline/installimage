@@ -137,7 +137,7 @@ else
   else
     debug "=> FAILED, $SETUPFILE does not exist"
     echo ""
-    echo -e "${RED}ERROR: Cant find files${NOCOL}"
+    echo -e "${RED}ERROR: Can't find files${NOCOL}"
   fi
 fi
 
